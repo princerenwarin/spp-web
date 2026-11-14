@@ -1,13 +1,23 @@
 const STORAGE_KEY = 'spp-web-db-v1';
 
+const LEGACY_USER_ALIASES = {
+  admin: 'Admin',
+  adminkkms: 'Admin',
+  yayasan: 'Yayasan',
+  admintheresia: 'TK01',
+  adminmaria: 'M01',
+  adminmikael: 'K01',
+  adminyusup: 'Y01'
+};
+
 const DEFAULT_DB = {
   users: [
-    { idpemakai: 'adminkkms', password: 'admin123', jabatan: 'Admin KKMS', role: 'superadmin', unit: 'ALL' },
-    { idpemakai: 'yayasan', password: 'yayasan123', jabatan: 'Yayasan', role: 'yayasan', unit: 'ALL' },
-    { idpemakai: 'admintheresia', password: 'theresia123', jabatan: 'Admin Theresia', role: 'unit', unit: 'T' },
-    { idpemakai: 'adminmaria', password: 'maria123', jabatan: 'Admin Maria', role: 'unit', unit: 'M' },
-    { idpemakai: 'adminmikael', password: 'mikael123', jabatan: 'Admin Mikael', role: 'unit', unit: 'K' },
-    { idpemakai: 'adminyusup', password: 'yusup123', jabatan: 'Admin Yusup', role: 'unit', unit: 'Y' }
+    { idpemakai: 'Admin', password: 'admin123', jabatan: 'Administrator', role: 'superadmin', unit: 'ALL' },
+    { idpemakai: 'Yayasan', password: 'yayasan123', jabatan: 'Yayasan', role: 'yayasan', unit: 'ALL' },
+    { idpemakai: 'TK01', password: 'tk123', jabatan: 'Administrator', role: 'unit', unit: 'T' },
+    { idpemakai: 'M01', password: 'm123', jabatan: 'Administrator', role: 'unit', unit: 'M' },
+    { idpemakai: 'K01', password: 'k123', jabatan: 'Administrator', role: 'unit', unit: 'K' },
+    { idpemakai: 'Y01', password: 'y123', jabatan: 'Administrator', role: 'unit', unit: 'Y' }
   ],
   schools: [
     { kdsek: 'T', nmsek: 'TK ST. Theresia' },
@@ -94,12 +104,24 @@ function loadLocalData() {
       return clone(DEFAULT_DB);
     }
     const parsed = JSON.parse(raw);
-    return {
-      users: parsed.users || clone(DEFAULT_DB.users),
+    const users = (parsed.users || clone(DEFAULT_DB.users)).map((user) => {
+      const canonicalId = normalizeCanonicalUserId(user.idpemakai);
+      return {
+        ...user,
+        idpemakai: canonicalId,
+        password: user.password || DEFAULT_DB.users.find((item) => normalizeLoginValue(item.idpemakai) === normalizeLoginValue(canonicalId))?.password || user.password
+      };
+    });
+
+    const normalized = {
+      users,
       schools: parsed.schools || clone(DEFAULT_DB.schools),
       siswa: parsed.siswa || clone(DEFAULT_DB.siswa),
       transaksi: parsed.transaksi || clone(DEFAULT_DB.transaksi)
     };
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+    return normalized;
   } catch (error) {
     console.warn('Invalid local data, using defaults.', error);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_DB));
@@ -123,7 +145,7 @@ function normalizeSupabaseSchool(row) {
 
 function normalizeSupabaseStudent(row) {
   const nomor = row.id || row.id_siswa || row.id_anak || '';
-  const nospp = row.nospp || row.no_spp || String(row.id || '').padStart(5, '0');
+  const nospp = row.nospp || row.no_spp || row.no_spp || String(row.id || '').padStart(5, '0');
   const kdsek = row.kdsek || row.id_sekolah || '';
   return {
     nospp: String(nospp),
@@ -160,19 +182,47 @@ async function loadSupabaseData() {
   }
 
   try {
-    const [{ data: schoolsData = [] }, { data: siswaData = [] }, { data: transaksiData = [] }, { data: usersData = [] }] = await Promise.all([
+    const [schoolsRes, mastankRes, mastsppRes, pembayaranRes, usersRes] = await Promise.all([
       app.supabase.from('mastsek').select('*'),
       app.supabase.from('mastank').select('*'),
+      app.supabase.from('mastspp').select('*'),
       app.supabase.from('pembayaran').select('*'),
       app.supabase.from('mastusr').select('*')
     ]);
 
+    const schoolsData = schoolsRes.data || [];
+    const studentMaster = mastankRes.data || [];
+    const tagihanData = mastsppRes.data || [];
+    const transaksiData = pembayaranRes.data || [];
+    const usersData = usersRes.data || [];
+
+    const studentById = new Map();
+    studentMaster.forEach((student) => {
+      const key = String(student.id || student.id_siswa || '').trim();
+      if (key) studentById.set(key, student);
+    });
+
     const fallbackSchools = (schoolsData.length ? schoolsData : [{ kdsek: 'T', nmsek: 'TK ST. Theresia' }, { kdsek: 'M', nmsek: 'SD ST. Maria' }, { kdsek: 'K', nmsek: 'SMP ST. Mikael' }, { kdsek: 'Y', nmsek: 'SD ST. Yusuf' }])
-      .map(normalizeSupabaseSchool)
+      .map((row) => normalizeSupabaseSchool({
+        kdsek: row.kdsek || row.id_sekolah || row.kode_sekolah,
+        nmsek: row.nmsek || row.nama_sekolah || row.nama,
+        ...row
+      }))
       .filter((school) => school.kdsek);
 
-    const fallbackSiswa = (siswaData.length ? siswaData : DEFAULT_DB.siswa)
-      .map(normalizeSupabaseStudent)
+    const fallbackSiswa = (tagihanData.length ? tagihanData : DEFAULT_DB.siswa)
+      .map((row) => {
+        const master = studentById.get(String(row.id_siswa || row.id || '')) || {};
+        return normalizeSupabaseStudent({
+          ...master,
+          ...row,
+          nama: row.nama || master.nama || row.nama_siswa || master.nama_siswa || 'Siswa',
+          kdsek: row.kdsek || master.id_sekolah || row.id_sekolah || '',
+          kdkls: row.kdkls || master.kelas_aktif || row.kelas_aktif || '',
+          id: row.id || row.id_siswa || master.id || '',
+          nospp: row.nospp || row.no_spp || String(row.id || row.id_siswa || '').padStart(5, '0')
+        });
+      })
       .filter((siswa) => siswa.nospp);
 
     const fallbackUsers = (usersData.length ? usersData : DEFAULT_DB.users)
@@ -180,7 +230,7 @@ async function loadSupabaseData() {
         idpemakai: user.idpemakai || user.username || user.id_pengguna || 'admin',
         password: user.password || user.password_hash || 'admin123',
         jabatan: user.jabatan || user.nama_lengkap || 'Admin',
-        role: user.role || 'unit',
+        role: (user.role || 'unit').toLowerCase(),
         unit: user.unit || user.id_sekolah || 'ALL'
       }));
 
@@ -607,8 +657,78 @@ function handlePaymentSubmit(event) {
   alert('Pembayaran berhasil disimpan.');
 }
 
-function login(username, password) {
-  const localUser = app.state.users.find((item) => item.idpemakai.toLowerCase() === username.toLowerCase() && item.password === password);
+function normalizeLoginValue(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizeCanonicalUserId(value) {
+  const normalized = normalizeLoginValue(value);
+  return LEGACY_USER_ALIASES[normalized] || String(value || '').trim();
+}
+
+function matchLoginUser(record, username, allowLegacyAliases = false) {
+  const input = normalizeLoginValue(username);
+  const candidates = [
+    record.idpemakai,
+    record.username,
+    record.nama_lengkap,
+    record.jabatan,
+    record.id_pengguna,
+    record.id_sekolah
+  ];
+
+  const normalizedCandidates = candidates
+    .map((value) => normalizeLoginValue(String(value || '').trim()))
+    .filter(Boolean);
+
+  if (!allowLegacyAliases) {
+    return normalizedCandidates.includes(input);
+  }
+
+  const aliasMappings = Object.entries(LEGACY_USER_ALIASES).reduce((acc, [alias, canonical]) => {
+    acc[normalizeLoginValue(alias)] = normalizeLoginValue(canonical);
+    return acc;
+  }, {});
+
+  const normalizedCanonicalInput = aliasMappings[input] || input;
+  return normalizedCandidates.includes(input)
+    || normalizedCandidates.includes(normalizedCanonicalInput)
+    || Object.values(aliasMappings).includes(normalizedCanonicalInput);
+}
+
+async function login(username, password) {
+  if (app.useSupabase && app.supabase) {
+    const { data, error } = await app.supabase.from('mastusr').select('*');
+    if (error || !data) {
+      return false;
+    }
+
+    const matchedUser = data.find((item) => matchLoginUser(item, username, false));
+    if (!matchedUser) {
+      return false;
+    }
+
+    if (String(matchedUser.password || '').trim() !== String(password || '').trim()) {
+      return false;
+    }
+
+    const mappedUser = {
+      idpemakai: matchedUser.idpemakai || matchedUser.username || username,
+      password: matchedUser.password || password,
+      jabatan: matchedUser.jabatan || matchedUser.nama_lengkap || 'Admin',
+      role: String(matchedUser.role || 'unit').toLowerCase(),
+      unit: matchedUser.id_sekolah || 'ALL'
+    };
+
+    app.user = mappedUser;
+    ui.userName.textContent = mappedUser.jabatan || mappedUser.idpemakai;
+    ui.sidebar.hidden = false;
+    applyUserAccess();
+    ui.loginScreen.classList.add('hidden');
+    return true;
+  }
+
+  const localUser = app.state.users.find((item) => matchLoginUser(item, username, true) && item.password === password);
   if (localUser) {
     app.user = localUser;
     ui.userName.textContent = localUser.jabatan || localUser.idpemakai;
@@ -661,12 +781,12 @@ function setupEvents() {
     ui.loginForm.reset();
   });
 
-  ui.loginForm.addEventListener('submit', (event) => {
+  ui.loginForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const username = document.getElementById('loginUser').value.trim();
     const password = document.getElementById('loginPassword').value.trim();
 
-    if (!login(username, password)) {
+    if (!(await login(username, password))) {
       alert('Username atau password salah.');
       return;
     }
