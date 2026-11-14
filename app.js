@@ -1403,7 +1403,7 @@ function setupEvents() {
     }
 
     const list = card.querySelector('.school-class-list');
-    list.innerHTML = '';
+    list.querySelector('.empty-state')?.remove();
     const label = document.createElement('label');
     label.className = 'school-class-item';
     const checkbox = document.createElement('input');
@@ -1414,9 +1414,9 @@ function setupEvents() {
     const name = document.createElement('span');
     name.textContent = className;
     label.append(checkbox, name);
-    list.appendChild(label);
+    list.append(label);
     input.value = '';
-    setSettingsStatus(ui.schoolSettingsStatus, 'Kelas ditambahkan. Klik "Simpan Sekolah dan Kelas" untuk menerapkan perubahan.', 'success');
+    setSettingsStatus(ui.schoolSettingsStatus, 'Kelas ditambahkan. Klik "Simpan Sekolah dan Kelas" agar tersimpan dan bisa dipilih saat input siswa.', 'success');
   });
   ui.bankSettingsForm.addEventListener('click', (event) => {
     const button = event.target.closest('[data-remove-va]');
