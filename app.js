@@ -20,13 +20,20 @@ const DEFAULT_DB = {
     { idpemakai: 'Y01', password: 'y123', jabatan: 'Administrator', role: 'unit', unit: 'Y' }
   ],
   schools: [
-    { kdsek: 'T', nmsek: 'TK ST. Theresia' },
-    { kdsek: 'M', nmsek: 'SD ST. Maria' },
-    { kdsek: 'K', nmsek: 'SMP ST. Mikael' },
-    { kdsek: 'Y', nmsek: 'SD ST. Yusuf' },
-    { kdsek: 'P', nmsek: 'PG ST. Theresia' }
+    { kdsek: 'T', nmsek: 'TK ST. Theresia', vaCode: '01', active: true, isCustom: false },
+    { kdsek: 'M', nmsek: 'SD ST. Maria', vaCode: '02', active: true, isCustom: false },
+    { kdsek: 'K', nmsek: 'SMP ST. Mikael', vaCode: '03', active: true, isCustom: false },
+    { kdsek: 'Y', nmsek: 'SD ST. Yusuf', vaCode: '04', active: true, isCustom: false },
+    { kdsek: 'P', nmsek: 'PG ST. Theresia', vaCode: '05', active: true, isCustom: false }
   ],
   bankName: 'BCA',
+  vaSettings: [],
+  classes: [
+    { kdsek: 'M', kdkls: '3B', active: true },
+    { kdsek: 'Y', kdkls: '5B', active: true },
+    { kdsek: 'K', kdkls: '7C', active: true },
+    { kdsek: 'T', kdkls: 'A2', active: true }
+  ],
   siswa: [
     { nospp: 'M3B00342', nama: 'Anna', kdsek: 'M', kdkls: '3B', id: '00342', spp: 335000, komp: 20000, idpemakai: 'admin' },
     { nospp: 'Y5B00140', nama: 'Budi', kdsek: 'Y', kdkls: '5B', id: '00140', spp: 330000, komp: 20000, idpemakai: 'admin' },
@@ -98,10 +105,15 @@ const ui = {
   loginForm: document.getElementById('loginForm'),
   schoolSettingsForm: document.getElementById('schoolSettingsForm'),
   schoolSettingsTableBody: document.getElementById('schoolSettingsTableBody'),
+  newSchoolName: document.getElementById('newSchoolName'),
+  newSchoolVaCode: document.getElementById('newSchoolVaCode'),
+  addSchoolBtn: document.getElementById('addSchoolBtn'),
+  schoolClassSettings: document.getElementById('schoolClassSettings'),
   schoolSettingsStatus: document.getElementById('schoolSettingsStatus'),
   schoolSettingsSaveBtn: document.getElementById('schoolSettingsSaveBtn'),
   bankSettingsForm: document.getElementById('bankSettingsForm'),
-  bankName: document.getElementById('bankName'),
+  bankVaSettings: document.getElementById('bankVaSettings'),
+  addVaBankBtn: document.getElementById('addVaBankBtn'),
   bankSettingsStatus: document.getElementById('bankSettingsStatus'),
   bankSettingsSaveBtn: document.getElementById('bankSettingsSaveBtn')
 };
@@ -110,12 +122,80 @@ function clone(data) {
   return JSON.parse(JSON.stringify(data));
 }
 
+function normalizeSchoolClasses(rows) {
+  const classes = new Map();
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const kdsek = String(row.kdsek || row.school_code || '').trim();
+    const kdkls = String(row.kdkls || row.class_name || '').trim();
+    if (!kdsek || !kdkls) return;
+
+    const key = `${kdsek.toLowerCase()}\u0000${kdkls.toLowerCase()}`;
+    if (classes.has(key)) return;
+    const activeValue = row.active === undefined ? row.is_active : row.active;
+    classes.set(key, {
+      kdsek,
+      kdkls,
+      active: activeValue === undefined || activeValue === null
+        ? true
+        : activeValue === true || activeValue === 1 || activeValue === 'true'
+    });
+  });
+
+  return [...classes.values()].sort((a, b) => (
+    a.kdsek.localeCompare(b.kdsek, 'id') || a.kdkls.localeCompare(b.kdkls, 'id')
+  ));
+}
+
+function deriveSchoolClasses(students) {
+  return normalizeSchoolClasses((students || []).map((student) => ({
+    kdsek: student.kdsek,
+    kdkls: student.kdkls,
+    active: true
+  })));
+}
+
+function mergeSchoolClasses(configuredClasses, students) {
+  const classes = normalizeSchoolClasses(configuredClasses);
+  const classKeys = new Set(classes.map((item) => `${item.kdsek.toLowerCase()}\u0000${item.kdkls.toLowerCase()}`));
+  const inferredActive = classes.length === 0;
+  deriveSchoolClasses(students).forEach((item) => {
+    const key = `${item.kdsek.toLowerCase()}\u0000${item.kdkls.toLowerCase()}`;
+    if (!classKeys.has(key)) {
+      classes.push({ ...item, active: inferredActive });
+      classKeys.add(key);
+    }
+  });
+  return normalizeSchoolClasses(classes);
+}
+
+function normalizeLocalSchool(row) {
+  const defaultSchool = DEFAULT_DB.schools.find((item) => item.kdsek === String(row.kdsek || ''));
+  return {
+    kdsek: String(row.kdsek || '').trim(),
+    nmsek: String(row.nmsek || 'Sekolah').trim(),
+    vaCode: String(row.vaCode || defaultSchool?.vaCode || '').trim(),
+    active: row.active !== false,
+    isCustom: row.isCustom === true
+  };
+}
+
+function normalizeSupabaseVABank(row) {
+  return {
+    id: String(row.config_id || ''),
+    bankName: String(row.bank_name || '').trim(),
+    vaPrefix: String(row.va_prefix || '').trim(),
+    active: row.is_active === true
+  };
+}
+
 function loadLocalData() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_DB));
-      return clone(DEFAULT_DB);
+      const defaults = clone(DEFAULT_DB);
+      defaults.classes = mergeSchoolClasses(defaults.classes, defaults.siswa);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults));
+      return defaults;
     }
     const parsed = JSON.parse(raw);
     const users = (parsed.users || clone(DEFAULT_DB.users)).map((user) => {
@@ -129,9 +209,11 @@ function loadLocalData() {
 
     const normalized = {
       users,
-      schools: parsed.schools || clone(DEFAULT_DB.schools),
+      schools: (parsed.schools || clone(DEFAULT_DB.schools)).map(normalizeLocalSchool),
       bankName: parsed.bankName || DEFAULT_DB.bankName,
+      vaSettings: Array.isArray(parsed.vaSettings) ? parsed.vaSettings : [],
       siswa: parsed.siswa || clone(DEFAULT_DB.siswa),
+      classes: mergeSchoolClasses(parsed.classes, parsed.siswa || clone(DEFAULT_DB.siswa)),
       transaksi: parsed.transaksi || clone(DEFAULT_DB.transaksi)
     };
 
@@ -154,7 +236,18 @@ function hasSupabaseConfig() {
 function normalizeSupabaseSchool(row) {
   return {
     kdsek: String(row.kdsek || row.id_sekolah || row.kode_sekolah || '').trim(),
-    nmsek: String(row.nmsek || row.nama_sekolah || row.nama || 'Sekolah').trim()
+    nmsek: String(row.nmsek || row.nama_sekolah || row.nama || 'Sekolah').trim(),
+    vaCode: String(row.va_school_code || '').trim(),
+    active: row.is_active !== false,
+    isCustom: row.is_custom === true
+  };
+}
+
+function normalizeSupabaseSchoolClass(row) {
+  return {
+    kdsek: String(row.school_code || '').trim(),
+    kdkls: String(row.class_name || '').trim(),
+    active: row.is_active !== false
   };
 }
 
@@ -197,28 +290,29 @@ async function loadSupabaseData() {
   }
 
   try {
-    const [schoolsRes, mastankRes, mastsppRes, pembayaranRes, bankSettingsRes, schoolSettingsRes] = await Promise.all([
+    const [schoolsRes, mastankRes, mastsppRes, pembayaranRes, bankSettingsRes, schoolSettingsRes, schoolClassesRes, vaSettingsRes] = await Promise.all([
       app.supabase.from('mastsek').select('*'),
       app.supabase.from('mastank').select('*'),
       app.supabase.from('mastspp').select('*'),
       app.supabase.from('pembayaran').select('*'),
       app.supabase.from('spp_app_bank_settings').select('bank_name').eq('setting_id', 1).maybeSingle(),
-      app.supabase.from('spp_app_school_settings').select('school_code, school_name')
+      app.supabase.from('spp_app_school_settings').select('school_code, school_name, va_school_code, is_active, is_custom'),
+      app.supabase.from('spp_app_school_classes').select('school_code, class_name, is_active'),
+      app.supabase.from('spp_app_va_settings').select('config_id, bank_name, va_prefix, is_active')
     ]);
 
-    const settingsErrors = [bankSettingsRes.error, schoolSettingsRes.error].filter(Boolean);
+    const settingsErrors = [bankSettingsRes.error, schoolSettingsRes.error, schoolClassesRes.error, vaSettingsRes.error].filter(Boolean);
     app.settingsReady = settingsErrors.length === 0;
     if (settingsErrors.length) {
-      console.warn('Supabase settings are unavailable. Run migration 008_spp_catalog_settings.sql.', settingsErrors);
+      console.warn('Supabase settings are unavailable. Ensure the legacy mapping schema, migration 008_spp_catalog_settings.sql, and migration 009_spp_school_classes.sql are available.', settingsErrors);
     }
 
     const schoolsData = schoolsRes.data || [];
     const studentMaster = mastankRes.data || [];
     const tagihanData = mastsppRes.data || [];
     const transaksiData = pembayaranRes.data || [];
-    const schoolNameOverrides = new Map((schoolSettingsRes.data || [])
-      .map((row) => [String(row.school_code || '').trim(), String(row.school_name || '').trim()])
-      .filter(([code, name]) => code && name));
+    const schoolSettings = schoolSettingsRes.data || [];
+    const schoolSettingsByCode = new Map(schoolSettings.map((row) => [String(row.school_code || '').trim(), row]));
 
     const studentById = new Map();
     studentMaster.forEach((student) => {
@@ -226,14 +320,26 @@ async function loadSupabaseData() {
       if (key) studentById.set(key, student);
     });
 
-    const fallbackSchools = (schoolsData.length ? schoolsData : [{ kdsek: 'T', nmsek: 'TK ST. Theresia' }, { kdsek: 'M', nmsek: 'SD ST. Maria' }, { kdsek: 'K', nmsek: 'SMP ST. Mikael' }, { kdsek: 'Y', nmsek: 'SD ST. Yusuf' }])
+    const baseSchools = (schoolsData.length ? schoolsData : [{ kdsek: 'T', nmsek: 'TK ST. Theresia' }, { kdsek: 'M', nmsek: 'SD ST. Maria' }, { kdsek: 'K', nmsek: 'SMP ST. Mikael' }, { kdsek: 'Y', nmsek: 'SD ST. Yusuf' }])
       .map((row) => normalizeSupabaseSchool({
         ...row,
         kdsek: row.kdsek || row.id_sekolah || row.kode_sekolah,
         nmsek: row.nmsek || row.nama_sekolah || row.nama
       }))
-      .map((school) => ({ ...school, nmsek: schoolNameOverrides.get(school.kdsek) || school.nmsek }))
       .filter((school) => school.kdsek);
+    const baseSchoolCodes = new Set(baseSchools.map((school) => school.kdsek));
+    const fallbackSchools = baseSchools.map((school) => {
+      const settings = schoolSettingsByCode.get(school.kdsek);
+      return settings
+        ? normalizeSupabaseSchool({ ...school, ...settings, nmsek: settings.school_name || school.nmsek })
+        : school;
+    }).concat(schoolSettings
+      .filter((row) => row.is_custom && !baseSchoolCodes.has(String(row.school_code || '').trim()))
+      .map((row) => normalizeSupabaseSchool({
+        ...row,
+        kdsek: row.school_code,
+        nmsek: row.school_name
+      })));
 
     const fallbackSiswa = (tagihanData.length ? tagihanData : DEFAULT_DB.siswa)
       .map((row) => {
@@ -243,7 +349,7 @@ async function loadSupabaseData() {
           ...row,
           nama: row.nama || master.nama || row.nama_siswa || master.nama_siswa || 'Siswa',
           kdsek: row.kdsek || master.id_sekolah || row.id_sekolah || '',
-          kdkls: row.kdkls || master.kelas_aktif || row.kelas_aktif || '',
+          kdkls: row.kdkls || master.kdkls || master.kelas_aktif || row.kelas_aktif || '',
           id: row.id || row.id_siswa || master.id || '',
           nospp: row.nospp || row.no_spp || String(row.id || row.id_siswa || '').padStart(5, '0')
         });
@@ -258,6 +364,11 @@ async function loadSupabaseData() {
       bankName: bankSettingsRes.data && bankSettingsRes.data.bank_name
         ? String(bankSettingsRes.data.bank_name).trim()
         : DEFAULT_DB.bankName,
+      vaSettings: (vaSettingsRes.data || []).map(normalizeSupabaseVABank),
+      classes: mergeSchoolClasses(
+        (schoolClassesRes.data || []).map(normalizeSupabaseSchoolClass),
+        fallbackSiswa
+      ),
       users: [],
       siswa: fallbackSiswa,
       transaksi: fallbackTransaksi
@@ -293,13 +404,13 @@ function setSettingsStatus(element, message, tone = '') {
 }
 
 function getSettingsUnavailableMessage() {
-  return 'Pengaturan Supabase belum siap. Jalankan migration supabase/008_spp_catalog_settings.sql di SQL Editor.';
+  return 'Pengaturan Supabase belum siap. Pastikan schema legacy (migration 005) dan migration 008 sudah diterapkan, lalu jalankan 009_spp_school_classes.sql di SQL Editor.';
 }
 
 function showSettingsError(element, error, action) {
   console.error(`${action} failed:`, error);
   const detail = String(error && error.message ? error.message : '');
-  const missingRpc = /save_spp_catalog_settings|PGRST202|42883/i.test(`${error && error.code ? error.code : ''} ${detail}`);
+  const missingRpc = /save_spp_catalog_settings_v3|PGRST202|42883/i.test(`${error && error.code ? error.code : ''} ${detail}`);
   const message = missingRpc
     ? getSettingsUnavailableMessage()
     : `Gagal menyimpan ${action.toLowerCase()}: ${detail || 'terjadi kesalahan yang tidak diketahui.'}`;
@@ -309,17 +420,28 @@ function showSettingsError(element, error, action) {
 function renderSettings() {
   const canSave = canManageSettings() && (!app.useSupabase || app.settingsReady);
   ui.schoolSettingsTableBody.innerHTML = app.state.schools.map((school) => `
-    <tr>
+    <tr data-school-row="true" data-school-code="${escapeHtml(school.kdsek)}" data-school-active="${school.active ? 'true' : 'false'}" data-school-custom="${school.isCustom ? 'true' : 'false'}">
       <td>${escapeHtml(school.kdsek)}</td>
-      <td><input type="text" data-school-code="${escapeHtml(school.kdsek)}" value="${escapeHtml(school.nmsek)}" maxlength="100" required /></td>
+      <td><input type="text" data-school-va-code value="${escapeHtml(school.vaCode || '')}" inputmode="numeric" pattern="[0-9]{2}" maxlength="2" placeholder="01" /></td>
+      <td><input type="text" data-school-name value="${escapeHtml(school.nmsek)}" maxlength="100" required /></td>
+      <td>${school.active ? 'Aktif' : 'Nonaktif'}</td>
+      <td><button type="button" class="action-btn ${school.active ? 'delete' : 'edit'}" data-school-action="${escapeHtml(school.kdsek)}">${school.active ? 'Hapus' : 'Aktifkan'}</button></td>
     </tr>
   `).join('');
-  ui.bankName.value = app.state.bankName || DEFAULT_DB.bankName;
-  ui.paymentBankName.textContent = app.state.bankName || DEFAULT_DB.bankName;
+  renderSchoolClassSettings();
+  renderBankVASettings();
+  const activeBanks = app.state.vaSettings.filter((item) => item.active).map((item) => item.bankName);
+  ui.paymentBankName.textContent = activeBanks.length ? activeBanks.join(', ') : 'Belum diatur';
   ui.schoolSettingsForm.querySelectorAll('input, button').forEach((control) => {
     control.disabled = !canSave;
   });
-  ui.bankName.disabled = !canSave;
+  ui.newSchoolName.disabled = !canSave;
+  ui.newSchoolVaCode.disabled = !canSave;
+  ui.addSchoolBtn.disabled = !canSave;
+  ui.bankSettingsForm.querySelectorAll('input, button').forEach((control) => {
+    control.disabled = !canSave;
+  });
+  ui.addVaBankBtn.disabled = !canSave;
   ui.bankSettingsSaveBtn.disabled = !canSave;
 
   if (app.useSupabase && !app.settingsReady) {
@@ -330,6 +452,97 @@ function renderSettings() {
     setSettingsStatus(ui.schoolSettingsStatus, '');
     setSettingsStatus(ui.bankSettingsStatus, '');
   }
+}
+
+function renderBankVASettings() {
+  if (!app.state.vaSettings.length) {
+    ui.bankVaSettings.innerHTML = '<tr><td colspan="4" class="empty-state">Belum ada bank VA. Tambahkan konfigurasi bank.</td></tr>';
+    return;
+  }
+
+  ui.bankVaSettings.innerHTML = app.state.vaSettings.map((item) => `
+    <tr data-va-row="${escapeHtml(item.id)}">
+      <td><input type="text" data-va-bank-name value="${escapeHtml(item.bankName)}" maxlength="100" required /></td>
+      <td><input type="text" data-va-prefix value="${escapeHtml(item.vaPrefix)}" inputmode="numeric" pattern="[0-9]{5,50}" maxlength="50" placeholder="Minimal 5 digit" required /></td>
+      <td><input type="checkbox" data-va-active ${item.active ? 'checked' : ''} aria-label="Aktifkan VA ${escapeHtml(item.bankName)}" /></td>
+      <td><button type="button" class="action-btn delete" data-remove-va="${escapeHtml(item.id)}">Hapus</button></td>
+    </tr>
+  `).join('');
+}
+
+function getSchoolSettingsDraft() {
+  return [...ui.schoolSettingsTableBody.querySelectorAll('[data-school-row]')].map((row) => ({
+    kdsek: row.dataset.schoolCode,
+    nmsek: row.querySelector('[data-school-name]').value.trim(),
+    vaCode: row.querySelector('[data-school-va-code]').value.trim(),
+    active: row.dataset.schoolActive === 'true',
+    isCustom: row.dataset.schoolCustom === 'true'
+  }));
+}
+
+function getSchoolClassesDraft() {
+  return [...ui.schoolClassSettings.querySelectorAll('[data-class-name]')].map((input) => ({
+    kdsek: input.dataset.classSchool,
+    kdkls: input.dataset.className,
+    active: input.checked
+  }));
+}
+
+function getBankSettingsDraft() {
+  return [...ui.bankVaSettings.querySelectorAll('[data-va-row]')].map((row) => ({
+    id: row.dataset.vaRow,
+    bankName: row.querySelector('[data-va-bank-name]').value.trim(),
+    vaPrefix: row.querySelector('[data-va-prefix]').value.trim(),
+    active: row.querySelector('[data-va-active]').checked
+  }));
+}
+
+function getActiveVABanks() {
+  return app.state.vaSettings.filter((item) => item.active && /^\d{5,50}$/.test(item.vaPrefix));
+}
+
+function getStudentVirtualAccounts(student) {
+  const school = app.state.schools.find((item) => item.kdsek === student.kdsek);
+  if (!school || !/^\d{2}$/.test(school.vaCode || '') || !/^\d+$/.test(String(student.id || ''))) return [];
+
+  return getActiveVABanks().map((bank) => ({
+    bankName: bank.bankName,
+    number: `${bank.vaPrefix}${school.vaCode}${student.id}`
+  }));
+}
+
+function renderSchoolClassSettings() {
+  if (!app.state.schools.length) {
+    ui.schoolClassSettings.innerHTML = '<p class="empty-state">Belum ada data sekolah.</p>';
+    return;
+  }
+
+  ui.schoolClassSettings.innerHTML = app.state.schools.map((school) => {
+    const classes = app.state.classes.filter((item) => item.kdsek === school.kdsek);
+    const classRows = classes.length
+      ? classes.map((item) => `
+        <label class="school-class-item">
+          <input type="checkbox" data-class-school="${escapeHtml(item.kdsek)}" data-class-name="${escapeHtml(item.kdkls)}" ${item.active ? 'checked' : ''} />
+          <span>${escapeHtml(item.kdkls)}</span>
+        </label>
+      `).join('')
+      : '<p class="empty-state">Belum ada kelas. Tambahkan kelas di bawah.</p>';
+
+    return `
+      <section class="school-class-card">
+        <h4>${escapeHtml(school.nmsek)} <span>(${escapeHtml(school.kdsek)})</span></h4>
+        <p class="school-class-hint">Centang kelas yang boleh dipilih untuk siswa baru.</p>
+        <div class="school-class-list">${classRows}</div>
+        <div class="school-class-add">
+          <label>
+            <span>Tambah kelas</span>
+            <input type="text" data-new-class="${escapeHtml(school.kdsek)}" maxlength="100" placeholder="Contoh: 3B" />
+          </label>
+          <button type="button" class="secondary-button small-button" data-add-class="${escapeHtml(school.kdsek)}">Tambah</button>
+        </div>
+      </section>
+    `;
+  }).join('');
 }
 
 function formatRupiah(value) {
@@ -423,13 +636,40 @@ function applyUserAccess() {
   }
 }
 
-function populateSchoolSelect(selectedValue = '') {
-  const allowedSchools = app.state.schools.filter((school) => getAllowedSchoolCodes().includes(school.kdsek));
+function populateStudentClassSelect(selectedValue = '') {
+  const schoolCode = ui.studentSekolah.value;
+  const activeClasses = app.state.classes.filter((item) => item.kdsek === schoolCode && item.active);
+  const options = [...activeClasses];
+  if (selectedValue && !options.some((item) => item.kdkls === selectedValue)) {
+    options.push({ kdsek: schoolCode, kdkls: selectedValue, active: false });
+  }
+
+  const placeholder = activeClasses.length ? 'Pilih kelas' : 'Belum ada kelas aktif untuk sekolah ini';
+  ui.studentKelas.innerHTML = `<option value="">${placeholder}</option>${options.map((item) => (
+    `<option value="${escapeHtml(item.kdkls)}">${escapeHtml(item.kdkls)}${item.active ? '' : ' (nonaktif)'}</option>`
+  )).join('')}`;
+  ui.studentKelas.disabled = options.length === 0;
+  ui.studentKelas.value = selectedValue || '';
+}
+
+function populateSchoolSelect(selectedValue = '', selectedClass = '') {
+  const allowedSchools = app.state.schools.filter((school) => (
+    getAllowedSchoolCodes().includes(school.kdsek) && (school.active || school.kdsek === selectedValue)
+  ));
+  const currentValue = ui.studentSekolah.value;
+  const nextValue = allowedSchools.some((school) => school.kdsek === selectedValue)
+    ? selectedValue
+    : allowedSchools.some((school) => school.kdsek === currentValue)
+      ? currentValue
+      : allowedSchools[0]?.kdsek || '';
   const options = allowedSchools
-    .map((school) => `<option value="${escapeHtml(school.kdsek)}" ${selectedValue === school.kdsek ? 'selected' : ''}>${escapeHtml(school.nmsek)}</option>`)
+    .map((school) => `<option value="${escapeHtml(school.kdsek)}">${escapeHtml(school.nmsek)}</option>`)
     .join('');
 
   ui.studentSekolah.innerHTML = options;
+  ui.studentSekolah.disabled = allowedSchools.length === 0;
+  ui.studentSekolah.value = nextValue;
+  populateStudentClassSelect(selectedClass);
   applyUserAccess();
 }
 
@@ -448,7 +688,7 @@ function getFilteredStudents() {
 function renderStudentTable() {
   const rows = getFilteredStudents();
   if (!rows.length) {
-    ui.studentTableBody.innerHTML = '<tr><td colspan="7" class="empty-state">Tidak ada data siswa yang cocok.</td></tr>';
+    ui.studentTableBody.innerHTML = '<tr><td colspan="8" class="empty-state">Tidak ada data siswa yang cocok.</td></tr>';
     return;
   }
 
@@ -458,6 +698,12 @@ function renderStudentTable() {
       .filter((tx) => tx.nospp === row.nospp)
       .reduce((sum, tx) => sum + Number(tx.nominal || 0), 0);
     const status = totalBayar >= totalTagihan ? 'Lunas' : 'Belum';
+    const virtualAccounts = getStudentVirtualAccounts(row);
+    const virtualAccountMarkup = virtualAccounts.length
+      ? `<div class="student-va-list">${virtualAccounts.map((item) => `
+        <div><span>${escapeHtml(item.bankName)}</span><strong>${escapeHtml(item.number)}</strong></div>
+      `).join('')}</div>`
+      : '<span class="empty-state">Belum diatur</span>';
 
     return `
       <tr>
@@ -465,6 +711,7 @@ function renderStudentTable() {
         <td>${row.nama}</td>
         <td>${escapeHtml(getSchoolName(row.kdsek))}</td>
         <td>${row.kdkls}</td>
+        <td>${virtualAccountMarkup}</td>
         <td>${formatRupiah(totalTagihan)}</td>
         <td><span class="status-pill ${status === 'Lunas' ? 'lunas' : 'belum'}">${status}</span></td>
         <td>
@@ -636,6 +883,7 @@ function resetStudentForm() {
   ui.studentIdEdit.value = '';
   ui.studentSpp.value = 0;
   ui.studentKomp.value = 0;
+  populateStudentClassSelect();
   ui.studentSubmitBtn.textContent = 'Simpan Siswa';
 }
 
@@ -643,8 +891,7 @@ function fillStudentForm(row) {
   ui.studentIdEdit.value = row.nospp;
   ui.studentNospp.value = row.nospp;
   ui.studentNama.value = row.nama;
-  ui.studentSekolah.value = row.kdsek;
-  ui.studentKelas.value = row.kdkls;
+  populateSchoolSelect(row.kdsek, row.kdkls);
   ui.studentIndex.value = row.id;
   ui.studentSpp.value = row.spp;
   ui.studentKomp.value = row.komp;
@@ -667,7 +914,45 @@ function addOrUpdateStudent(event) {
     return;
   }
 
+  if (!/^\d{1,10}$/.test(id)) {
+    alert('ID siswa hanya boleh berisi angka, maksimal 10 digit.');
+    return;
+  }
+
   const existingIndex = app.state.siswa.findIndex((item) => item.nospp === nospp);
+  const existingStudent = existingIndex >= 0 ? app.state.siswa[existingIndex] : null;
+  const duplicateStudentId = app.state.siswa.some((item) => item.id === id && item.nospp !== nospp);
+  if (duplicateStudentId) {
+    alert('ID siswa sudah digunakan. ID harus unik di seluruh sekolah.');
+    return;
+  }
+
+  const selectedSchool = app.state.schools.find((item) => item.kdsek === kdsek);
+  const existingSchool = existingStudent && existingStudent.kdsek === kdsek;
+  if (!selectedSchool || (!selectedSchool.active && !existingSchool)) {
+    alert('Pilih sekolah yang aktif.');
+    return;
+  }
+
+  const needsNewVA = !existingStudent || existingStudent.kdsek !== kdsek || existingStudent.id !== id;
+  if (needsNewVA && !/^\d{2}$/.test(selectedSchool.vaCode || '')) {
+    alert('ID VA sekolah belum diatur. Atur kode dua digit di menu Sekolah terlebih dahulu.');
+    return;
+  }
+  if (needsNewVA && !getActiveVABanks().length) {
+    alert('Belum ada bank VA aktif. Atur minimal satu prefix di menu Bank terlebih dahulu.');
+    return;
+  }
+
+  const activeClass = app.state.classes.some((item) => item.kdsek === kdsek && item.kdkls === kdkls && item.active);
+  const retainingInactiveClass = existingStudent
+    && existingStudent.kdsek === kdsek
+    && existingStudent.kdkls === kdkls;
+  if (!activeClass && !retainingInactiveClass) {
+    alert('Pilih kelas aktif yang sudah diatur untuk sekolah ini.');
+    return;
+  }
+
   const payload = { nospp, nama, kdsek, kdkls, id, spp, komp, idpemakai: app.user ? app.user.idpemakai : 'admin' };
 
   if (existingIndex >= 0) {
@@ -834,7 +1119,45 @@ async function login(username, password) {
   return false;
 }
 
-async function saveCatalogSettings(bankName, schools) {
+function createVAConfigId() {
+  return `va-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function generateInternalSchoolCode(schools) {
+  const existingCodes = new Set(schools.map((school) => school.kdsek));
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  for (const first of characters) {
+    for (const second of characters) {
+      const code = `${first}${second}`;
+      if (!existingCodes.has(code)) return code;
+    }
+  }
+  throw new Error('Batas kode internal sekolah sudah tercapai.');
+}
+
+function isSchoolUsed(schoolCode) {
+  return app.state.siswa.some((student) => student.kdsek === schoolCode)
+    || app.state.transaksi.some((transaction) => transaction.kdsek === schoolCode);
+}
+
+function validateVABanks(vaSettings) {
+  if (vaSettings.length > 100) return 'Jumlah konfigurasi bank VA maksimal 100.';
+  if (vaSettings.some((item) => !item.id || !item.bankName || item.bankName.length > 100 || !/^\d{5,50}$/.test(item.vaPrefix))) {
+    return 'Setiap bank wajib memiliki nama dan prefix VA angka minimal 5 digit (maksimal 50).';
+  }
+
+  const activeBanks = vaSettings.filter((item) => item.active);
+  if (activeBanks.length > 2) return 'Maksimal dua bank VA boleh aktif.';
+  if (new Set(activeBanks.map((item) => item.vaPrefix)).size !== activeBanks.length) {
+    return 'Prefix VA untuk setiap bank aktif harus berbeda.';
+  }
+  if (new Set(vaSettings.map((item) => item.id)).size !== vaSettings.length) {
+    return 'ID konfigurasi bank VA tidak boleh berulang.';
+  }
+  return '';
+}
+
+async function saveCatalogSettings(schools, classes, vaSettings) {
   if (!canManageSettings()) {
     throw new Error('Hanya Admin yang dapat mengubah pengaturan sekolah dan bank.');
   }
@@ -847,37 +1170,82 @@ async function saveCatalogSettings(bankName, schools) {
       throw new Error('Silakan keluar lalu masuk kembali sebagai Admin untuk menyimpan perubahan.');
     }
 
-    const { error } = await app.supabase.rpc('save_spp_catalog_settings', {
+    const activeBank = vaSettings.find((item) => item.active);
+    const { error } = await app.supabase.rpc('save_spp_catalog_settings_v3', {
       p_username: app.adminCredentials.username,
       p_password: app.adminCredentials.password,
-      p_bank_name: bankName,
-      p_school_names: schools.map((school) => ({ kdsek: school.kdsek, nmsek: school.nmsek }))
+      p_bank_name: activeBank ? activeBank.bankName : app.state.bankName || DEFAULT_DB.bankName,
+      p_school_catalog: schools.map((school) => ({
+        kdsek: school.kdsek,
+        nmsek: school.nmsek,
+        va_school_code: school.vaCode || null,
+        is_active: school.active,
+        is_custom: school.isCustom
+      })),
+      p_school_classes: classes.map((item) => ({
+        school_code: item.kdsek,
+        class_name: item.kdkls,
+        is_active: item.active
+      })),
+      p_va_settings: vaSettings.map((item) => ({
+        config_id: item.id,
+        bank_name: item.bankName,
+        va_prefix: item.vaPrefix,
+        is_active: item.active
+      }))
     });
     if (error) throw error;
   }
 
-  app.state.bankName = bankName;
-  app.state.schools = clone(schools);
+  const activeBank = vaSettings.find((item) => item.active);
+  app.state.bankName = activeBank ? activeBank.bankName : app.state.bankName || DEFAULT_DB.bankName;
+  app.state.vaSettings = clone(vaSettings);
+  app.state.schools = schools.map(normalizeLocalSchool);
+  app.state.classes = normalizeSchoolClasses(classes);
   saveLocalData();
   renderAll();
 }
 
 async function handleSchoolSettingsSubmit(event) {
   event.preventDefault();
-  const schools = [...ui.schoolSettingsTableBody.querySelectorAll('[data-school-code]')].map((input) => ({
-    kdsek: input.dataset.schoolCode,
-    nmsek: input.value.trim()
-  }));
-  const invalidSchool = schools.find((school) => !school.nmsek || school.nmsek.length > 100);
-  if (!schools.length || invalidSchool) {
-    setSettingsStatus(ui.schoolSettingsStatus, 'Semua nama sekolah wajib diisi dan maksimal 100 karakter.', 'error');
+  const schools = getSchoolSettingsDraft();
+  const classes = getSchoolClassesDraft();
+  const invalidSchool = schools.find((school) => (
+    !school.kdsek || !school.nmsek || school.nmsek.length > 100
+    || (school.active && !/^\d{2}$/.test(school.vaCode))
+    || (school.vaCode && !/^\d{2}$/.test(school.vaCode))
+  ));
+  const schoolCodes = new Set(schools.map((school) => school.kdsek));
+  const vaSchoolCodes = schools.map((school) => school.vaCode).filter(Boolean);
+  const classKeys = new Set();
+  const invalidClass = classes.find((item) => {
+    const key = `${item.kdsek.toLowerCase()}\u0000${item.kdkls.toLowerCase()}`;
+    if (!schoolCodes.has(item.kdsek) || !item.kdkls || item.kdkls.length > 100 || classKeys.has(key)) return true;
+    classKeys.add(key);
+    return false;
+  });
+  if (!schools.length || schools.length > 100 || !schools.some((school) => school.active) || invalidSchool) {
+    setSettingsStatus(ui.schoolSettingsStatus, 'Setiap sekolah aktif wajib memiliki nama dan ID VA dua digit yang valid. Minimal satu sekolah harus aktif.', 'error');
+    return;
+  }
+  if (new Set(vaSchoolCodes).size !== vaSchoolCodes.length) {
+    setSettingsStatus(ui.schoolSettingsStatus, 'ID VA sekolah tidak boleh berulang, termasuk untuk sekolah nonaktif.', 'error');
+    return;
+  }
+  const invalidBankSettings = validateVABanks(app.state.vaSettings);
+  if (invalidBankSettings) {
+    setSettingsStatus(ui.schoolSettingsStatus, `Selesaikan konfigurasi bank VA terlebih dahulu: ${invalidBankSettings}`, 'error');
+    return;
+  }
+  if (invalidClass || classes.length > 500) {
+    setSettingsStatus(ui.schoolSettingsStatus, 'Daftar kelas tidak valid. Pastikan setiap kelas memiliki sekolah, nama maksimal 100 karakter, dan tidak ada nama kelas ganda.', 'error');
     return;
   }
 
   ui.schoolSettingsSaveBtn.disabled = true;
   try {
-    await saveCatalogSettings(app.state.bankName || DEFAULT_DB.bankName, schools);
-    setSettingsStatus(ui.schoolSettingsStatus, 'Nama sekolah berhasil disimpan dan diterapkan ke pilihan serta laporan.', 'success');
+    await saveCatalogSettings(schools, classes, app.state.vaSettings);
+    setSettingsStatus(ui.schoolSettingsStatus, 'Pengaturan sekolah, ID VA, dan kelas berhasil disimpan.', 'success');
   } catch (error) {
     showSettingsError(ui.schoolSettingsStatus, error, 'Pengaturan sekolah');
   } finally {
@@ -887,16 +1255,27 @@ async function handleSchoolSettingsSubmit(event) {
 
 async function handleBankSettingsSubmit(event) {
   event.preventDefault();
-  const bankName = ui.bankName.value.trim();
-  if (!bankName || bankName.length > 100) {
-    setSettingsStatus(ui.bankSettingsStatus, 'Nama bank wajib diisi dan maksimal 100 karakter.', 'error');
+  const vaSettings = getBankSettingsDraft();
+  const invalidSettings = validateVABanks(vaSettings);
+  if (invalidSettings) {
+    setSettingsStatus(ui.bankSettingsStatus, invalidSettings, 'error');
+    return;
+  }
+  const schoolCodes = app.state.schools
+    .filter((school) => school.active)
+    .map((school) => school.vaCode);
+  const allSchoolCodes = app.state.schools.map((school) => school.vaCode).filter(Boolean);
+  if (!schoolCodes.length || schoolCodes.some((code) => !/^\d{2}$/.test(code))
+      || allSchoolCodes.some((code) => !/^\d{2}$/.test(code))
+      || new Set(allSchoolCodes).size !== allSchoolCodes.length) {
+    setSettingsStatus(ui.bankSettingsStatus, 'Atur dan simpan ID VA dua digit yang valid dan unik untuk sekolah terlebih dahulu.', 'error');
     return;
   }
 
   ui.bankSettingsSaveBtn.disabled = true;
   try {
-    await saveCatalogSettings(bankName, app.state.schools);
-    setSettingsStatus(ui.bankSettingsStatus, 'Nama bank berhasil disimpan dan ditampilkan pada halaman pembayaran.', 'success');
+    await saveCatalogSettings(app.state.schools, app.state.classes, vaSettings);
+    setSettingsStatus(ui.bankSettingsStatus, 'Konfigurasi bank VA berhasil disimpan.', 'success');
   } catch (error) {
     showSettingsError(ui.bankSettingsStatus, error, 'Pengaturan bank');
   } finally {
@@ -911,11 +1290,142 @@ function setupEvents() {
 
   ui.searchStudent.addEventListener('input', renderStudentTable);
   ui.schoolFilter.addEventListener('change', renderStudentTable);
+  ui.studentSekolah.addEventListener('change', () => populateStudentClassSelect());
   ui.studentForm.addEventListener('submit', addOrUpdateStudent);
   ui.studentResetBtn.addEventListener('click', resetStudentForm);
   ui.paymentForm.addEventListener('submit', handlePaymentSubmit);
   ui.schoolSettingsForm.addEventListener('submit', handleSchoolSettingsSubmit);
   ui.bankSettingsForm.addEventListener('submit', handleBankSettingsSubmit);
+  ui.addSchoolBtn.addEventListener('click', () => {
+    const name = ui.newSchoolName.value.trim();
+    const vaCode = ui.newSchoolVaCode.value.trim();
+    const schools = getSchoolSettingsDraft();
+    if (!name || name.length > 100 || !/^\d{2}$/.test(vaCode)) {
+      setSettingsStatus(ui.schoolSettingsStatus, 'Nama sekolah wajib diisi dan ID VA harus tepat dua digit.', 'error');
+      return;
+    }
+    if (schools.length >= 100) {
+      setSettingsStatus(ui.schoolSettingsStatus, 'Jumlah sekolah maksimal 100.', 'error');
+      return;
+    }
+    if (schools.some((school) => school.vaCode === vaCode)) {
+      setSettingsStatus(ui.schoolSettingsStatus, 'ID VA tersebut sudah digunakan sekolah lain.', 'error');
+      return;
+    }
+
+    let kdsek;
+    try {
+      kdsek = generateInternalSchoolCode(schools);
+    } catch (error) {
+      setSettingsStatus(ui.schoolSettingsStatus, error.message, 'error');
+      return;
+    }
+
+    app.state.schools = [...schools, { kdsek, nmsek: name, vaCode, active: true, isCustom: true }];
+    app.state.classes = normalizeSchoolClasses(getSchoolClassesDraft());
+    ui.newSchoolName.value = '';
+    ui.newSchoolVaCode.value = '';
+    renderSettings();
+    setSettingsStatus(ui.schoolSettingsStatus, 'Sekolah ditambahkan. Klik "Simpan Sekolah dan Kelas" untuk menerapkan perubahan.', 'success');
+  });
+  ui.addVaBankBtn.addEventListener('click', () => {
+    const vaSettings = getBankSettingsDraft();
+    if (vaSettings.length >= 100) {
+      setSettingsStatus(ui.bankSettingsStatus, 'Jumlah konfigurasi bank VA maksimal 100.', 'error');
+      return;
+    }
+    const activeCount = vaSettings.filter((item) => item.active).length;
+    const activeId = createVAConfigId();
+    app.state.vaSettings = [...vaSettings, {
+      id: activeId,
+      bankName: app.state.bankName || DEFAULT_DB.bankName,
+      vaPrefix: '',
+      active: activeCount < 2
+    }];
+    renderBankVASettings();
+    setSettingsStatus(ui.bankSettingsStatus, 'Isi nama bank dan prefix VA angka minimal 5 digit, lalu simpan.', 'success');
+  });
+  ui.schoolSettingsForm.addEventListener('click', (event) => {
+    const schoolAction = event.target.closest('[data-school-action]');
+    if (schoolAction) {
+      const schoolCode = schoolAction.dataset.schoolAction;
+      const schools = getSchoolSettingsDraft();
+      const school = schools.find((item) => item.kdsek === schoolCode);
+      if (!school) return;
+
+      const classes = getSchoolClassesDraft();
+      const schoolUsed = isSchoolUsed(schoolCode);
+      let removed = false;
+      let message;
+      if (!school.active) {
+        school.active = true;
+        message = 'Sekolah diaktifkan kembali. Simpan perubahan untuk menerapkannya.';
+      } else if (schoolUsed) {
+        school.active = false;
+        message = 'Sekolah memiliki data siswa atau transaksi, jadi dinonaktifkan agar riwayat tetap utuh.';
+      } else {
+        schools.splice(schools.indexOf(school), 1);
+        removed = true;
+        message = 'Sekolah tanpa data berhasil dihapus dari daftar. Simpan perubahan untuk menerapkannya.';
+      }
+
+      app.state.schools = schools;
+      app.state.classes = normalizeSchoolClasses(
+        removed ? classes.filter((item) => item.kdsek !== schoolCode) : classes
+      );
+      renderSettings();
+      setSettingsStatus(ui.schoolSettingsStatus, message, 'success');
+      return;
+    }
+
+    const button = event.target.closest('[data-add-class]');
+    if (!button) return;
+
+    const schoolCode = button.dataset.addClass;
+    const card = button.closest('.school-class-card');
+    const input = card.querySelector('[data-new-class]');
+    const className = input.value.trim();
+    const duplicate = [...ui.schoolClassSettings.querySelectorAll('[data-class-name]')].some((item) => (
+      item.dataset.classSchool === schoolCode
+      && item.dataset.className.toLowerCase() === className.toLowerCase()
+    ));
+    if (!className || className.length > 100) {
+      setSettingsStatus(ui.schoolSettingsStatus, 'Nama kelas wajib diisi dan maksimal 100 karakter.', 'error');
+      return;
+    }
+    if (duplicate) {
+      setSettingsStatus(ui.schoolSettingsStatus, 'Kelas tersebut sudah terdaftar untuk sekolah ini. Centang kelasnya untuk mengaktifkan.', 'error');
+      return;
+    }
+    if (ui.schoolClassSettings.querySelectorAll('[data-class-name]').length >= 500) {
+      setSettingsStatus(ui.schoolSettingsStatus, 'Jumlah kelas maksimal 500.', 'error');
+      return;
+    }
+
+    const list = card.querySelector('.school-class-list');
+    list.innerHTML = '';
+    const label = document.createElement('label');
+    label.className = 'school-class-item';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = true;
+    checkbox.dataset.classSchool = schoolCode;
+    checkbox.dataset.className = className;
+    const name = document.createElement('span');
+    name.textContent = className;
+    label.append(checkbox, name);
+    list.appendChild(label);
+    input.value = '';
+    setSettingsStatus(ui.schoolSettingsStatus, 'Kelas ditambahkan. Klik "Simpan Sekolah dan Kelas" untuk menerapkan perubahan.', 'success');
+  });
+  ui.bankSettingsForm.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-remove-va]');
+    if (!button) return;
+    const removedId = button.dataset.removeVa;
+    app.state.vaSettings = getBankSettingsDraft().filter((item) => item.id !== removedId);
+    renderBankVASettings();
+    setSettingsStatus(ui.bankSettingsStatus, 'Bank VA dihapus dari daftar. Simpan perubahan untuk menerapkannya.', 'success');
+  });
 
   ui.studentTableBody.addEventListener('click', (event) => {
     const target = event.target.closest('button');

@@ -12,10 +12,11 @@ Aplikasi ini adalah starter web yang menggunakan Supabase sebagai backend untuk 
 ## Langkah setup
 
 1. Buat project baru di Supabase.
-2. Buka SQL Editor dan jalankan `../supabase/001_init_spp_schema.sql`, lalu `./supabase/007_legacy_login_rpc.sql`.
-3. Jalankan `./supabase/008_spp_catalog_settings.sql` setelah migration `007`. Menu Sekolah dan Bank tersedia untuk akun dengan role `superadmin`.
-4. Masukkan URL project dan anon key ke file `config.js`.
-5. Buka `index.html` di browser, atau jalankan server lokal seperti:
+2. Buka SQL Editor dan jalankan `../supabase/001_init_spp_schema.sql`. Jika belum pernah dijalankan, lanjutkan dengan `../supabase/005_legacy_mapping_upgrade.sql` agar kolom sekolah legacy dan tabel transaksi tersedia.
+3. Jalankan `./supabase/007_legacy_login_rpc.sql`, lalu `./supabase/008_spp_catalog_settings.sql`, dan terakhir `./supabase/009_spp_school_classes.sql`. Migration `009` membuat pengaturan kelas per sekolah, ID VA sekolah dua digit, konfigurasi prefix bank, serta RPC untuk menyimpan perubahan katalog.
+4. Di menu Sekolah, atur lalu simpan ID VA dua digit yang unik untuk semua sekolah aktif. Sekolah tanpa data siswa/transaksi dapat dihapus; sekolah yang sudah dipakai hanya dapat dinonaktifkan. Setelah itu, di menu Bank tambahkan prefix VA angka 5–50 digit dan aktifkan maksimal dua bank. Nomor VA siswa dibentuk dari `prefix bank + ID VA sekolah + ID siswa`.
+5. Masukkan URL project dan anon key ke file `config.js`.
+6. Buka `index.html` di browser, atau jalankan server lokal seperti:
 
    python -m http.server 8000
 
@@ -27,4 +28,4 @@ Aplikasi ini adalah starter web yang menggunakan Supabase sebagai backend untuk 
 
 - Login legacy memverifikasi akun melalui RPC `login_mastusr`; browser tidak membaca tabel `mastusr` atau password secara langsung.
 - Untuk sistem produksi lebih aman, sebaiknya migrasikan ke auth Supabase dan hapus password plaintext dari tabel legacy.
-- Data sekolah dari `mastsek`, data siswa dari `mastspp`, dan transaksi dari `tranhspp` sudah siap dipakai.
+- Data sekolah dibaca dari `mastsek`, data siswa dari `mastspp`/`mastank`, dan transaksi dari `pembayaran`.

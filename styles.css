@@ -386,7 +386,8 @@ select:focus-visible {
 }
 
 .search-box input,
-label input {
+label input,
+label select {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -482,6 +483,144 @@ label {
 
 .settings-table input {
   min-width: 220px;
+}
+
+.settings-table [data-school-va-code] {
+  min-width: 72px;
+  width: 72px;
+}
+
+.settings-table input[type="checkbox"] {
+  accent-color: var(--secondary);
+  min-width: 0;
+  width: auto;
+}
+
+.school-add-row {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) 150px auto;
+  margin-top: 14px;
+  max-width: 760px;
+}
+
+.school-add-row label {
+  display: grid;
+  gap: 6px;
+}
+
+.school-add-row label span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.school-add-row input {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 10px 12px;
+  width: 100%;
+}
+
+.bank-va-table {
+  min-width: 760px;
+}
+
+.bank-va-table input:not([type="checkbox"]) {
+  min-width: 200px;
+}
+
+.student-va-list {
+  display: grid;
+  gap: 4px;
+  min-width: 140px;
+}
+
+.student-va-list div {
+  display: grid;
+  gap: 2px;
+}
+
+.student-va-list span {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.student-va-list strong {
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+}
+
+.school-class-settings {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.school-class-card {
+  background: #f8fbff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.school-class-card h4 {
+  color: var(--primary);
+  margin: 0;
+}
+
+.school-class-card h4 span,
+.school-class-hint {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.school-class-hint {
+  font-size: 0.82rem;
+  margin: 6px 0 12px;
+}
+
+.school-class-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.school-class-item {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  display: inline-flex;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.school-class-item input {
+  accent-color: var(--secondary);
+  margin: 0;
+  width: auto;
+}
+
+.school-class-add {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 14px;
+  max-width: 520px;
+}
+
+.school-class-add label {
+  display: grid;
+  gap: 6px;
+}
+
+.school-class-add label span {
+  color: var(--muted);
+  font-size: 0.8rem;
 }
 
 .bank-name-field {
@@ -935,5 +1074,9 @@ label {
     flex: 0 0 auto;
     font-size: 0.72rem;
     padding: 8px 6px;
+  }
+
+  .school-add-row {
+    grid-template-columns: 1fr;
   }
 }

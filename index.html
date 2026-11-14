@@ -129,11 +129,13 @@
                 </label>
                 <label>
                   <span>Kelas</span>
-                  <input id="studentKelas" type="text" placeholder="contoh: 3B" required />
+                  <select id="studentKelas" required disabled>
+                    <option value="">Pilih sekolah terlebih dahulu</option>
+                  </select>
                 </label>
                 <label>
-                  <span>Nomor Induk</span>
-                  <input id="studentIndex" type="text" placeholder="contoh: 00342" required />
+                  <span>ID Siswa</span>
+                  <input id="studentIndex" type="text" inputmode="numeric" pattern="[0-9]+" maxlength="10" placeholder="contoh: 3323" required />
                 </label>
                 <label>
                   <span>Tagihan SPP</span>
@@ -158,6 +160,7 @@
                     <th>Nama</th>
                     <th>Sekolah</th>
                     <th>Kelas</th>
+                    <th>Virtual Account</th>
                     <th>Tagihan</th>
                     <th>Status</th>
                     <th>Aksi</th>
@@ -174,7 +177,7 @@
             <div class="panel-header">
               <h3>Input Pembayaran</h3>
             </div>
-            <p class="bank-payment-note">Nama bank: <strong id="paymentBankName">BCA</strong></p>
+            <p class="bank-payment-note">Bank VA aktif: <strong id="paymentBankName">Belum diatur</strong>. Nomor VA setiap siswa ditampilkan pada data siswa.</p>
             <form id="paymentForm">
               <div class="form-grid">
                 <label>
@@ -304,23 +307,38 @@
         <section class="page" id="sekolahPage">
           <div class="panel">
             <div class="panel-header">
-              <h3>Pengaturan Nama Sekolah</h3>
+              <h3>Pengaturan Sekolah, ID VA, dan Kelas</h3>
             </div>
-            <p class="settings-description">Ubah nama sekolah yang ditampilkan pada pilihan sekolah, data siswa, dan laporan. Kode sekolah tidak berubah.</p>
+            <p class="settings-description">ID internal sekolah lama tetap dipakai untuk menjaga data. Atur ID VA dua digit, nama, dan kelas. Sekolah yang sudah memiliki siswa atau transaksi hanya dapat dinonaktifkan.</p>
             <form id="schoolSettingsForm">
               <div class="table-wrap">
                 <table class="settings-table">
                   <thead>
                     <tr>
-                      <th>Kode</th>
+                      <th>Kode Internal</th>
+                      <th>ID VA</th>
                       <th>Nama Sekolah</th>
+                      <th>Status</th>
+                      <th>Aksi</th>
                     </tr>
                   </thead>
                   <tbody id="schoolSettingsTableBody"></tbody>
                 </table>
               </div>
+              <div class="school-add-row">
+                <label>
+                  <span>Nama sekolah baru</span>
+                  <input id="newSchoolName" type="text" maxlength="100" placeholder="Nama sekolah" />
+                </label>
+                <label>
+                  <span>ID VA (01–99)</span>
+                  <input id="newSchoolVaCode" type="text" inputmode="numeric" pattern="[0-9]{2}" maxlength="2" placeholder="Contoh: 06" />
+                </label>
+                <button type="button" class="secondary-button small-button" id="addSchoolBtn">Tambah Sekolah</button>
+              </div>
+              <div id="schoolClassSettings" class="school-class-settings"></div>
               <div class="form-actions">
-                <button type="submit" class="primary-button" id="schoolSettingsSaveBtn">Simpan Nama Sekolah</button>
+                <button type="submit" class="primary-button" id="schoolSettingsSaveBtn">Simpan Sekolah dan Kelas</button>
               </div>
               <p class="settings-status" id="schoolSettingsStatus" role="status" aria-live="polite"></p>
             </form>
@@ -330,16 +348,26 @@
         <section class="page" id="bankPage">
           <div class="panel form-panel">
             <div class="panel-header">
-              <h3>Pengaturan Nama Bank</h3>
+              <h3>Pengaturan Bank dan Kode VA</h3>
             </div>
-            <p class="settings-description">Ubah nama bank yang ditampilkan pada halaman pembayaran. Pengaturan ini tidak mengubah nomor rekening.</p>
+            <p class="settings-description">Atur prefix VA angka 5–50 digit. Maksimal dua prefix boleh aktif; setiap siswa mendapat VA dari masing-masing prefix aktif.</p>
             <form id="bankSettingsForm">
-              <label class="bank-name-field">
-                <span>Nama Bank</span>
-                <input id="bankName" type="text" maxlength="100" required placeholder="Contoh: BCA" />
-              </label>
+              <div class="table-wrap">
+                <table class="settings-table bank-va-table">
+                  <thead>
+                    <tr>
+                      <th>Nama Bank</th>
+                      <th>Kode VA / Prefix</th>
+                      <th>Aktif</th>
+                      <th>Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="bankVaSettings"></tbody>
+                </table>
+              </div>
               <div class="form-actions">
-                <button type="submit" class="primary-button" id="bankSettingsSaveBtn">Simpan Nama Bank</button>
+                <button type="button" class="secondary-button" id="addVaBankBtn">Tambah Bank VA</button>
+                <button type="submit" class="primary-button" id="bankSettingsSaveBtn">Simpan Pengaturan VA</button>
               </div>
               <p class="settings-status" id="bankSettingsStatus" role="status" aria-live="polite"></p>
             </form>
