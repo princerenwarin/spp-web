@@ -13,8 +13,9 @@ Aplikasi ini adalah starter web yang menggunakan Supabase sebagai backend untuk 
 
 1. Buat project baru di Supabase.
 2. Buka SQL Editor dan jalankan `../supabase/001_init_spp_schema.sql`, lalu `./supabase/007_legacy_login_rpc.sql`.
-3. Masukkan URL project dan anon key ke file `config.js`.
-4. Buka `index.html` di browser, atau jalankan server lokal seperti:
+3. Jalankan `./supabase/008_spp_catalog_settings.sql` setelah migration `007`. Menu Sekolah dan Bank tersedia untuk akun dengan role `superadmin`.
+4. Masukkan URL project dan anon key ke file `config.js`.
+5. Buka `index.html` di browser, atau jalankan server lokal seperti:
 
    python -m http.server 8000
 

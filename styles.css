@@ -459,6 +459,53 @@ label {
   margin-top: 22px;
 }
 
+.settings-description,
+.bank-payment-note {
+  color: var(--muted);
+  line-height: 1.55;
+  margin: 0 0 16px;
+}
+
+.settings-table {
+  min-width: 0;
+}
+
+.settings-table input,
+.bank-name-field input {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 10px 12px;
+  width: 100%;
+}
+
+.settings-table input {
+  min-width: 220px;
+}
+
+.bank-name-field {
+  max-width: 520px;
+}
+
+.settings-status {
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 14px 0 0;
+}
+
+.settings-status:empty {
+  display: none;
+}
+
+.settings-status.error {
+  color: #a33232;
+}
+
+.settings-status.success {
+  color: #147253;
+}
+
 .wide {
   width: 100%;
 }
@@ -885,9 +932,8 @@ label {
   }
 
   .nav {
-    flex: 1 1 0;
+    flex: 0 0 auto;
     font-size: 0.72rem;
-    min-width: 0;
     padding: 8px 6px;
   }
 }

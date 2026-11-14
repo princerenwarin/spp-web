@@ -27,6 +27,8 @@
           <button class="nav" data-page="siswa">Data Siswa</button>
           <button class="nav" data-page="pembayaran">Pembayaran</button>
           <button class="nav" data-page="laporan">Laporan</button>
+          <button class="nav admin-only" data-page="sekolah" hidden>Sekolah</button>
+          <button class="nav admin-only" data-page="bank" hidden>Bank</button>
         </nav>
 
         <div class="sidebar-footer">
@@ -172,6 +174,7 @@
             <div class="panel-header">
               <h3>Input Pembayaran</h3>
             </div>
+            <p class="bank-payment-note">Nama bank: <strong id="paymentBankName">BCA</strong></p>
             <form id="paymentForm">
               <div class="form-grid">
                 <label>
@@ -295,6 +298,51 @@
                 <tbody id="detailReportTable"></tbody>
               </table>
             </div>
+          </div>
+        </section>
+
+        <section class="page" id="sekolahPage">
+          <div class="panel">
+            <div class="panel-header">
+              <h3>Pengaturan Nama Sekolah</h3>
+            </div>
+            <p class="settings-description">Ubah nama sekolah yang ditampilkan pada pilihan sekolah, data siswa, dan laporan. Kode sekolah tidak berubah.</p>
+            <form id="schoolSettingsForm">
+              <div class="table-wrap">
+                <table class="settings-table">
+                  <thead>
+                    <tr>
+                      <th>Kode</th>
+                      <th>Nama Sekolah</th>
+                    </tr>
+                  </thead>
+                  <tbody id="schoolSettingsTableBody"></tbody>
+                </table>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="primary-button" id="schoolSettingsSaveBtn">Simpan Nama Sekolah</button>
+              </div>
+              <p class="settings-status" id="schoolSettingsStatus" role="status" aria-live="polite"></p>
+            </form>
+          </div>
+        </section>
+
+        <section class="page" id="bankPage">
+          <div class="panel form-panel">
+            <div class="panel-header">
+              <h3>Pengaturan Nama Bank</h3>
+            </div>
+            <p class="settings-description">Ubah nama bank yang ditampilkan pada halaman pembayaran. Pengaturan ini tidak mengubah nomor rekening.</p>
+            <form id="bankSettingsForm">
+              <label class="bank-name-field">
+                <span>Nama Bank</span>
+                <input id="bankName" type="text" maxlength="100" required placeholder="Contoh: BCA" />
+              </label>
+              <div class="form-actions">
+                <button type="submit" class="primary-button" id="bankSettingsSaveBtn">Simpan Nama Bank</button>
+              </div>
+              <p class="settings-status" id="bankSettingsStatus" role="status" aria-live="polite"></p>
+            </form>
           </div>
         </section>
       </main>

@@ -26,6 +26,7 @@ const DEFAULT_DB = {
     { kdsek: 'Y', nmsek: 'SD ST. Yusuf' },
     { kdsek: 'P', nmsek: 'PG ST. Theresia' }
   ],
+  bankName: 'BCA',
   siswa: [
     { nospp: 'M3B00342', nama: 'Anna', kdsek: 'M', kdkls: '3B', id: '00342', spp: 335000, komp: 20000, idpemakai: 'admin' },
     { nospp: 'Y5B00140', nama: 'Budi', kdsek: 'Y', kdkls: '5B', id: '00140', spp: 330000, komp: 20000, idpemakai: 'admin' },
@@ -44,14 +45,18 @@ const app = {
   user: null,
   state: null,
   currentPage: 'dashboard',
-  useSupabase: false
+  useSupabase: false,
+  settingsReady: false,
+  adminCredentials: null
 };
 
 const pageMap = {
   dashboard: document.getElementById('dashboardPage'),
   siswa: document.getElementById('siswaPage'),
   pembayaran: document.getElementById('pembayaranPage'),
-  laporan: document.getElementById('laporanPage')
+  laporan: document.getElementById('laporanPage'),
+  sekolah: document.getElementById('sekolahPage'),
+  bank: document.getElementById('bankPage')
 };
 
 const ui = {
@@ -87,9 +92,18 @@ const ui = {
   totalTagihan: document.getElementById('totalTagihan'),
   paymentThisMonth: document.getElementById('paymentThisMonth'),
   totalTransaksi: document.getElementById('totalTransaksi'),
+  paymentBankName: document.getElementById('paymentBankName'),
   searchStudent: document.getElementById('searchStudent'),
   paymentForm: document.getElementById('paymentForm'),
-  loginForm: document.getElementById('loginForm')
+  loginForm: document.getElementById('loginForm'),
+  schoolSettingsForm: document.getElementById('schoolSettingsForm'),
+  schoolSettingsTableBody: document.getElementById('schoolSettingsTableBody'),
+  schoolSettingsStatus: document.getElementById('schoolSettingsStatus'),
+  schoolSettingsSaveBtn: document.getElementById('schoolSettingsSaveBtn'),
+  bankSettingsForm: document.getElementById('bankSettingsForm'),
+  bankName: document.getElementById('bankName'),
+  bankSettingsStatus: document.getElementById('bankSettingsStatus'),
+  bankSettingsSaveBtn: document.getElementById('bankSettingsSaveBtn')
 };
 
 function clone(data) {
@@ -116,6 +130,7 @@ function loadLocalData() {
     const normalized = {
       users,
       schools: parsed.schools || clone(DEFAULT_DB.schools),
+      bankName: parsed.bankName || DEFAULT_DB.bankName,
       siswa: parsed.siswa || clone(DEFAULT_DB.siswa),
       transaksi: parsed.transaksi || clone(DEFAULT_DB.transaksi)
     };
@@ -138,8 +153,8 @@ function hasSupabaseConfig() {
 
 function normalizeSupabaseSchool(row) {
   return {
-    kdsek: String(row.kdsek || row.kode_sekolah || '').trim(),
-    nmsek: row.nmsek || row.nama_sekolah || 'Sekolah'
+    kdsek: String(row.kdsek || row.id_sekolah || row.kode_sekolah || '').trim(),
+    nmsek: String(row.nmsek || row.nama_sekolah || row.nama || 'Sekolah').trim()
   };
 }
 
@@ -182,17 +197,28 @@ async function loadSupabaseData() {
   }
 
   try {
-    const [schoolsRes, mastankRes, mastsppRes, pembayaranRes] = await Promise.all([
+    const [schoolsRes, mastankRes, mastsppRes, pembayaranRes, bankSettingsRes, schoolSettingsRes] = await Promise.all([
       app.supabase.from('mastsek').select('*'),
       app.supabase.from('mastank').select('*'),
       app.supabase.from('mastspp').select('*'),
-      app.supabase.from('pembayaran').select('*')
+      app.supabase.from('pembayaran').select('*'),
+      app.supabase.from('spp_app_bank_settings').select('bank_name').eq('setting_id', 1).maybeSingle(),
+      app.supabase.from('spp_app_school_settings').select('school_code, school_name')
     ]);
+
+    const settingsErrors = [bankSettingsRes.error, schoolSettingsRes.error].filter(Boolean);
+    app.settingsReady = settingsErrors.length === 0;
+    if (settingsErrors.length) {
+      console.warn('Supabase settings are unavailable. Run migration 008_spp_catalog_settings.sql.', settingsErrors);
+    }
 
     const schoolsData = schoolsRes.data || [];
     const studentMaster = mastankRes.data || [];
     const tagihanData = mastsppRes.data || [];
     const transaksiData = pembayaranRes.data || [];
+    const schoolNameOverrides = new Map((schoolSettingsRes.data || [])
+      .map((row) => [String(row.school_code || '').trim(), String(row.school_name || '').trim()])
+      .filter(([code, name]) => code && name));
 
     const studentById = new Map();
     studentMaster.forEach((student) => {
@@ -202,10 +228,11 @@ async function loadSupabaseData() {
 
     const fallbackSchools = (schoolsData.length ? schoolsData : [{ kdsek: 'T', nmsek: 'TK ST. Theresia' }, { kdsek: 'M', nmsek: 'SD ST. Maria' }, { kdsek: 'K', nmsek: 'SMP ST. Mikael' }, { kdsek: 'Y', nmsek: 'SD ST. Yusuf' }])
       .map((row) => normalizeSupabaseSchool({
+        ...row,
         kdsek: row.kdsek || row.id_sekolah || row.kode_sekolah,
-        nmsek: row.nmsek || row.nama_sekolah || row.nama,
-        ...row
+        nmsek: row.nmsek || row.nama_sekolah || row.nama
       }))
+      .map((school) => ({ ...school, nmsek: schoolNameOverrides.get(school.kdsek) || school.nmsek }))
       .filter((school) => school.kdsek);
 
     const fallbackSiswa = (tagihanData.length ? tagihanData : DEFAULT_DB.siswa)
@@ -228,6 +255,9 @@ async function loadSupabaseData() {
 
     return {
       schools: fallbackSchools,
+      bankName: bankSettingsRes.data && bankSettingsRes.data.bank_name
+        ? String(bankSettingsRes.data.bank_name).trim()
+        : DEFAULT_DB.bankName,
       users: [],
       siswa: fallbackSiswa,
       transaksi: fallbackTransaksi
@@ -247,6 +277,61 @@ function getSchoolName(kdsek) {
   return school ? school.nmsek : '-';
 }
 
+function escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[character]));
+}
+
+function setSettingsStatus(element, message, tone = '') {
+  element.textContent = message;
+  element.className = `settings-status${tone ? ` ${tone}` : ''}`;
+}
+
+function getSettingsUnavailableMessage() {
+  return 'Pengaturan Supabase belum siap. Jalankan migration supabase/008_spp_catalog_settings.sql di SQL Editor.';
+}
+
+function showSettingsError(element, error, action) {
+  console.error(`${action} failed:`, error);
+  const detail = String(error && error.message ? error.message : '');
+  const missingRpc = /save_spp_catalog_settings|PGRST202|42883/i.test(`${error && error.code ? error.code : ''} ${detail}`);
+  const message = missingRpc
+    ? getSettingsUnavailableMessage()
+    : `Gagal menyimpan ${action.toLowerCase()}: ${detail || 'terjadi kesalahan yang tidak diketahui.'}`;
+  setSettingsStatus(element, message, 'error');
+}
+
+function renderSettings() {
+  const canSave = canManageSettings() && (!app.useSupabase || app.settingsReady);
+  ui.schoolSettingsTableBody.innerHTML = app.state.schools.map((school) => `
+    <tr>
+      <td>${escapeHtml(school.kdsek)}</td>
+      <td><input type="text" data-school-code="${escapeHtml(school.kdsek)}" value="${escapeHtml(school.nmsek)}" maxlength="100" required /></td>
+    </tr>
+  `).join('');
+  ui.bankName.value = app.state.bankName || DEFAULT_DB.bankName;
+  ui.paymentBankName.textContent = app.state.bankName || DEFAULT_DB.bankName;
+  ui.schoolSettingsForm.querySelectorAll('input, button').forEach((control) => {
+    control.disabled = !canSave;
+  });
+  ui.bankName.disabled = !canSave;
+  ui.bankSettingsSaveBtn.disabled = !canSave;
+
+  if (app.useSupabase && !app.settingsReady) {
+    const message = getSettingsUnavailableMessage();
+    setSettingsStatus(ui.schoolSettingsStatus, message, 'error');
+    setSettingsStatus(ui.bankSettingsStatus, message, 'error');
+  } else {
+    setSettingsStatus(ui.schoolSettingsStatus, '');
+    setSettingsStatus(ui.bankSettingsStatus, '');
+  }
+}
+
 function formatRupiah(value) {
   const amount = Number(value || 0);
   return new Intl.NumberFormat('id-ID', {
@@ -257,8 +342,15 @@ function formatRupiah(value) {
 }
 
 function setPage(pageName) {
+  if (!pageMap[pageName]) return;
+
   if (pageName === 'pembayaran' && !canAccessPayment()) {
     alert('Hanya Admin KKMS yang dapat mengakses halaman pembayaran.');
+    return;
+  }
+
+  if (['sekolah', 'bank'].includes(pageName) && !canManageSettings()) {
+    alert('Hanya Admin yang dapat mengubah pengaturan sekolah dan bank.');
     return;
   }
 
@@ -275,7 +367,9 @@ function setPage(pageName) {
     dashboard: 'Overview',
     siswa: 'Data Siswa',
     pembayaran: 'Pembayaran',
-    laporan: 'Laporan'
+    laporan: 'Laporan',
+    sekolah: 'Sekolah',
+    bank: 'Bank'
   }[pageName];
 }
 
@@ -299,6 +393,10 @@ function canAccessPayment() {
   return !!app.user && app.user.role === 'superadmin';
 }
 
+function canManageSettings() {
+  return canAccessPayment();
+}
+
 function canAccessAllReports() {
   return !!app.user && (app.user.role === 'superadmin' || app.user.role === 'yayasan');
 }
@@ -308,10 +406,13 @@ function applyUserAccess() {
   if (paymentNav) {
     paymentNav.style.display = canAccessPayment() ? 'block' : 'none';
   }
+  document.querySelectorAll('.admin-only').forEach((button) => {
+    button.hidden = !canManageSettings();
+  });
 
   const allowedSchools = app.state.schools.filter((school) => getAllowedSchoolCodes().includes(school.kdsek));
   const schoolFilterOptions = ['<option value="all">Semua</option>']
-    .concat(allowedSchools.map((school) => `<option value="${school.kdsek}">${school.nmsek}</option>`))
+    .concat(allowedSchools.map((school) => `<option value="${escapeHtml(school.kdsek)}">${escapeHtml(school.nmsek)}</option>`))
     .join('');
   ui.schoolFilter.innerHTML = schoolFilterOptions;
 
@@ -325,7 +426,7 @@ function applyUserAccess() {
 function populateSchoolSelect(selectedValue = '') {
   const allowedSchools = app.state.schools.filter((school) => getAllowedSchoolCodes().includes(school.kdsek));
   const options = allowedSchools
-    .map((school) => `<option value="${school.kdsek}" ${selectedValue === school.kdsek ? 'selected' : ''}>${school.nmsek}</option>`)
+    .map((school) => `<option value="${escapeHtml(school.kdsek)}" ${selectedValue === school.kdsek ? 'selected' : ''}>${escapeHtml(school.nmsek)}</option>`)
     .join('');
 
   ui.studentSekolah.innerHTML = options;
@@ -362,7 +463,7 @@ function renderStudentTable() {
       <tr>
         <td>${row.nospp}</td>
         <td>${row.nama}</td>
-        <td>${getSchoolName(row.kdsek)}</td>
+        <td>${escapeHtml(getSchoolName(row.kdsek))}</td>
         <td>${row.kdkls}</td>
         <td>${formatRupiah(totalTagihan)}</td>
         <td><span class="status-pill ${status === 'Lunas' ? 'lunas' : 'belum'}">${status}</span></td>
@@ -483,7 +584,7 @@ function renderReport() {
     <div class="report-item">
       <div class="report-item-meta">
         <span class="report-badge">${row.jumlah} siswa</span>
-        <strong>${row.school}</strong>
+        <strong>${escapeHtml(row.school)}</strong>
       </div>
       <div class="report-item-metrics">
         <span>Tagihan <strong>${formatRupiah(row.totalTagihan)}</strong></span>
@@ -495,7 +596,7 @@ function renderReport() {
 
   ui.reportTable.innerHTML = summary.map((row) => `
     <tr>
-      <td>${row.school}</td>
+      <td>${escapeHtml(row.school)}</td>
       <td>${row.jumlah}</td>
       <td>${formatRupiah(row.totalTagihan)}</td>
       <td>${formatRupiah(row.totalTerbayar)}</td>
@@ -518,7 +619,7 @@ function renderReport() {
       <tr>
         <td>${row.nospp}</td>
         <td>${row.nama}</td>
-        <td>${getSchoolName(row.kdsek)}</td>
+        <td>${escapeHtml(getSchoolName(row.kdsek))}</td>
         <td>${row.kdkls}</td>
         <td>${formatRupiah(totalTagihan)}</td>
         <td>${formatRupiah(totalTerbayar)}</td>
@@ -709,6 +810,9 @@ async function login(username, password) {
     };
 
     app.user = mappedUser;
+    app.adminCredentials = mappedUser.role === 'superadmin'
+      ? { username: username.trim(), password }
+      : null;
     ui.userName.textContent = mappedUser.jabatan || mappedUser.idpemakai;
     ui.sidebar.hidden = false;
     applyUserAccess();
@@ -719,6 +823,7 @@ async function login(username, password) {
   const localUser = app.state.users.find((item) => matchLoginUser(item, username, true) && item.password === password);
   if (localUser) {
     app.user = localUser;
+    app.adminCredentials = null;
     ui.userName.textContent = localUser.jabatan || localUser.idpemakai;
     ui.sidebar.hidden = false;
     applyUserAccess();
@@ -727,6 +832,76 @@ async function login(username, password) {
   }
 
   return false;
+}
+
+async function saveCatalogSettings(bankName, schools) {
+  if (!canManageSettings()) {
+    throw new Error('Hanya Admin yang dapat mengubah pengaturan sekolah dan bank.');
+  }
+
+  if (app.useSupabase) {
+    if (!app.settingsReady) {
+      throw new Error(getSettingsUnavailableMessage());
+    }
+    if (!app.adminCredentials) {
+      throw new Error('Silakan keluar lalu masuk kembali sebagai Admin untuk menyimpan perubahan.');
+    }
+
+    const { error } = await app.supabase.rpc('save_spp_catalog_settings', {
+      p_username: app.adminCredentials.username,
+      p_password: app.adminCredentials.password,
+      p_bank_name: bankName,
+      p_school_names: schools.map((school) => ({ kdsek: school.kdsek, nmsek: school.nmsek }))
+    });
+    if (error) throw error;
+  }
+
+  app.state.bankName = bankName;
+  app.state.schools = clone(schools);
+  saveLocalData();
+  renderAll();
+}
+
+async function handleSchoolSettingsSubmit(event) {
+  event.preventDefault();
+  const schools = [...ui.schoolSettingsTableBody.querySelectorAll('[data-school-code]')].map((input) => ({
+    kdsek: input.dataset.schoolCode,
+    nmsek: input.value.trim()
+  }));
+  const invalidSchool = schools.find((school) => !school.nmsek || school.nmsek.length > 100);
+  if (!schools.length || invalidSchool) {
+    setSettingsStatus(ui.schoolSettingsStatus, 'Semua nama sekolah wajib diisi dan maksimal 100 karakter.', 'error');
+    return;
+  }
+
+  ui.schoolSettingsSaveBtn.disabled = true;
+  try {
+    await saveCatalogSettings(app.state.bankName || DEFAULT_DB.bankName, schools);
+    setSettingsStatus(ui.schoolSettingsStatus, 'Nama sekolah berhasil disimpan dan diterapkan ke pilihan serta laporan.', 'success');
+  } catch (error) {
+    showSettingsError(ui.schoolSettingsStatus, error, 'Pengaturan sekolah');
+  } finally {
+    ui.schoolSettingsSaveBtn.disabled = app.useSupabase && !app.settingsReady;
+  }
+}
+
+async function handleBankSettingsSubmit(event) {
+  event.preventDefault();
+  const bankName = ui.bankName.value.trim();
+  if (!bankName || bankName.length > 100) {
+    setSettingsStatus(ui.bankSettingsStatus, 'Nama bank wajib diisi dan maksimal 100 karakter.', 'error');
+    return;
+  }
+
+  ui.bankSettingsSaveBtn.disabled = true;
+  try {
+    await saveCatalogSettings(bankName, app.state.schools);
+    setSettingsStatus(ui.bankSettingsStatus, 'Nama bank berhasil disimpan dan ditampilkan pada halaman pembayaran.', 'success');
+  } catch (error) {
+    showSettingsError(ui.bankSettingsStatus, error, 'Pengaturan bank');
+  } finally {
+    ui.bankSettingsSaveBtn.disabled = app.useSupabase && !app.settingsReady;
+  }
 }
 
 function setupEvents() {
@@ -739,6 +914,8 @@ function setupEvents() {
   ui.studentForm.addEventListener('submit', addOrUpdateStudent);
   ui.studentResetBtn.addEventListener('click', resetStudentForm);
   ui.paymentForm.addEventListener('submit', handlePaymentSubmit);
+  ui.schoolSettingsForm.addEventListener('submit', handleSchoolSettingsSubmit);
+  ui.bankSettingsForm.addEventListener('submit', handleBankSettingsSubmit);
 
   ui.studentTableBody.addEventListener('click', (event) => {
     const target = event.target.closest('button');
@@ -763,6 +940,7 @@ function setupEvents() {
 
   document.getElementById('logoutBtn').addEventListener('click', () => {
     app.user = null;
+    app.adminCredentials = null;
     applyUserAccess();
     ui.sidebar.hidden = true;
     ui.loginScreen.classList.remove('hidden');
@@ -785,6 +963,7 @@ function setupEvents() {
       return;
     }
 
+    ui.loginForm.reset();
     renderAll();
     setPage('dashboard');
   });
@@ -796,18 +975,21 @@ function renderAll() {
   renderStudentTable();
   renderPaymentList();
   renderReport();
+  renderSettings();
 }
 
 async function hydrateAppData() {
   const configured = hasSupabaseConfig();
   if (!configured || !window.supabase) {
     app.useSupabase = false;
+    app.settingsReady = true;
     return;
   }
 
   app.supabase = initSupabase();
   if (!app.supabase) {
     app.useSupabase = false;
+    app.settingsReady = true;
     return;
   }
 
