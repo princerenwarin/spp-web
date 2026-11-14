@@ -182,19 +182,17 @@ async function loadSupabaseData() {
   }
 
   try {
-    const [schoolsRes, mastankRes, mastsppRes, pembayaranRes, usersRes] = await Promise.all([
+    const [schoolsRes, mastankRes, mastsppRes, pembayaranRes] = await Promise.all([
       app.supabase.from('mastsek').select('*'),
       app.supabase.from('mastank').select('*'),
       app.supabase.from('mastspp').select('*'),
-      app.supabase.from('pembayaran').select('*'),
-      app.supabase.from('mastusr').select('*')
+      app.supabase.from('pembayaran').select('*')
     ]);
 
     const schoolsData = schoolsRes.data || [];
     const studentMaster = mastankRes.data || [];
     const tagihanData = mastsppRes.data || [];
     const transaksiData = pembayaranRes.data || [];
-    const usersData = usersRes.data || [];
 
     const studentById = new Map();
     studentMaster.forEach((student) => {
@@ -225,21 +223,12 @@ async function loadSupabaseData() {
       })
       .filter((siswa) => siswa.nospp);
 
-    const fallbackUsers = (usersData.length ? usersData : DEFAULT_DB.users)
-      .map((user) => ({
-        idpemakai: user.idpemakai || user.username || user.id_pengguna || 'admin',
-        password: user.password || user.password_hash || 'admin123',
-        jabatan: user.jabatan || user.nama_lengkap || 'Admin',
-        role: (user.role || 'unit').toLowerCase(),
-        unit: user.unit || user.id_sekolah || 'ALL'
-      }));
-
     const fallbackTransaksi = (transaksiData.length ? transaksiData : DEFAULT_DB.transaksi)
       .map(normalizeSupabaseTransaction);
 
     return {
       schools: fallbackSchools,
-      users: fallbackUsers,
+      users: [],
       siswa: fallbackSiswa,
       transaksi: fallbackTransaksi
     };
@@ -698,23 +687,22 @@ function matchLoginUser(record, username, allowLegacyAliases = false) {
 
 async function login(username, password) {
   if (app.useSupabase && app.supabase) {
-    const { data, error } = await app.supabase.from('mastusr').select('*');
-    if (error || !data) {
-      return false;
+    const { data, error } = await app.supabase.rpc('login_mastusr', {
+      p_username: username,
+      p_password: password
+    });
+    if (error) {
+      console.error('Supabase login RPC failed:', error);
+      throw new Error('Layanan login Supabase belum siap. Jalankan SQL login_mastusr di Supabase.');
     }
 
-    const matchedUser = data.find((item) => matchLoginUser(item, username, false));
+    const matchedUser = data && data[0];
     if (!matchedUser) {
       return false;
     }
 
-    if (String(matchedUser.password || '').trim() !== String(password || '').trim()) {
-      return false;
-    }
-
     const mappedUser = {
-      idpemakai: matchedUser.idpemakai || matchedUser.username || username,
-      password: matchedUser.password || password,
+      idpemakai: matchedUser.idpemakai || username,
       jabatan: matchedUser.jabatan || matchedUser.nama_lengkap || 'Admin',
       role: String(matchedUser.role || 'unit').toLowerCase(),
       unit: matchedUser.id_sekolah || 'ALL'
@@ -786,8 +774,14 @@ function setupEvents() {
     const username = document.getElementById('loginUser').value.trim();
     const password = document.getElementById('loginPassword').value.trim();
 
-    if (!(await login(username, password))) {
-      alert('Username atau password salah.');
+    try {
+      if (!(await login(username, password))) {
+        alert('Username atau password salah.');
+        return;
+      }
+    } catch (error) {
+      console.error('Login failed:', error);
+      alert(error instanceof Error ? error.message : 'Login tidak dapat diproses.');
       return;
     }
 
@@ -817,10 +811,10 @@ async function hydrateAppData() {
     return;
   }
 
+  app.useSupabase = true;
   const supabaseData = await loadSupabaseData();
   if (supabaseData) {
     app.state = { ...app.state, ...supabaseData };
-    app.useSupabase = true;
   }
 }
 
