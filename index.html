@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sistem SPP - Supabase</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <aside class="sidebar" id="sidebar" hidden>
+        <div class="brand-box">
+          <img class="brand-mark" src="../logo/kombinasi-putih.png" alt="Logo KKMS" />
+          <div>
+            <p class="eyebrow">Sistem</p>
+            <h1>SPP School</h1>
+          </div>
+        </div>
+
+        <nav class="menu">
+          <button class="nav active" data-page="dashboard">Dashboard</button>
+          <button class="nav" data-page="siswa">Data Siswa</button>
+          <button class="nav" data-page="pembayaran">Pembayaran</button>
+          <button class="nav" data-page="laporan">Laporan</button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div>
+            <small>Login sebagai</small>
+            <strong id="userName">Admin</strong>
+          </div>
+          <button class="ghost-button" id="logoutBtn">Keluar</button>
+        </div>
+      </aside>
+
+      <main class="main-panel">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Dashboard</p>
+            <h2 id="pageTitle">Overview</h2>
+          </div>
+          <div class="topbar-actions">
+            <div class="filter-pill">
+              <label for="schoolFilter">Sekolah</label>
+              <select id="schoolFilter">
+                <option value="all">Semua</option>
+              </select>
+            </div>
+          </div>
+        </header>
+
+        <section class="page active" id="dashboardPage">
+          <div class="stats-grid">
+            <article class="stat-card accent">
+              <div class="stat-label">Total Siswa</div>
+              <div class="stat-value" id="totalSiswa">0</div>
+            </article>
+            <article class="stat-card purple">
+              <div class="stat-label">Total Tagihan</div>
+              <div class="stat-value" id="totalTagihan">Rp 0</div>
+            </article>
+            <article class="stat-card green">
+              <div class="stat-label">Pembayaran Bulan Ini</div>
+              <div class="stat-value" id="paymentThisMonth">Rp 0</div>
+            </article>
+            <article class="stat-card orange">
+              <div class="stat-label">Transaksi</div>
+              <div class="stat-value" id="totalTransaksi">0</div>
+            </article>
+          </div>
+
+          <div class="content-grid">
+            <div class="panel chart-panel">
+              <div class="panel-header">
+                <h3>Perkembangan Pembayaran</h3>
+              </div>
+              <div class="chart-placeholder">
+                <div class="bars">
+                  <span style="height: 40%"></span>
+                  <span style="height: 70%"></span>
+                  <span style="height: 52%"></span>
+                  <span style="height: 88%"></span>
+                  <span style="height: 64%"></span>
+                  <span style="height: 94%"></span>
+                  <span style="height: 72%"></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-header">
+                <h3>Aktivitas Terbaru</h3>
+              </div>
+              <ul class="activity-list" id="activityList"></ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="page" id="siswaPage">
+          <div class="panel">
+            <div class="panel-header">
+              <h3>Data Siswa</h3>
+              <div class="search-box">
+                <input id="searchStudent" type="text" placeholder="Cari nama / ID / kelas" />
+              </div>
+            </div>
+
+            <form id="studentForm" class="student-form">
+              <input type="hidden" id="studentIdEdit" />
+              <div class="student-form-grid">
+                <label>
+                  <span>No. SPP</span>
+                  <input id="studentNospp" type="text" placeholder="contoh: M3B00342" required />
+                </label>
+                <label>
+                  <span>Nama Siswa</span>
+                  <input id="studentNama" type="text" placeholder="Nama lengkap" required />
+                </label>
+                <label>
+                  <span>Sekolah</span>
+                  <select id="studentSekolah"></select>
+                </label>
+                <label>
+                  <span>Kelas</span>
+                  <input id="studentKelas" type="text" placeholder="contoh: 3B" required />
+                </label>
+                <label>
+                  <span>Nomor Induk</span>
+                  <input id="studentIndex" type="text" placeholder="contoh: 00342" required />
+                </label>
+                <label>
+                  <span>Tagihan SPP</span>
+                  <input id="studentSpp" type="number" min="0" step="1000" value="0" required />
+                </label>
+                <label>
+                  <span>Tagihan Komponen</span>
+                  <input id="studentKomp" type="number" min="0" step="1000" value="0" required />
+                </label>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="primary-button" id="studentSubmitBtn">Simpan Siswa</button>
+                <button type="button" class="secondary-button" id="studentResetBtn">Batal</button>
+              </div>
+            </form>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>No. SPP</th>
+                    <th>Nama</th>
+                    <th>Sekolah</th>
+                    <th>Kelas</th>
+                    <th>Tagihan</th>
+                    <th>Status</th>
+                    <th>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="studentTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="page" id="pembayaranPage">
+          <div class="panel form-panel">
+            <div class="panel-header">
+              <h3>Input Pembayaran</h3>
+            </div>
+            <form id="paymentForm">
+              <div class="form-grid">
+                <label>
+                  <span>No. SPP</span>
+                  <input name="nospp" type="text" required placeholder="contoh: M3B00342" />
+                </label>
+                <label>
+                  <span>Nama Siswa</span>
+                  <input name="nama" type="text" placeholder="Nama siswa" />
+                </label>
+                <label>
+                  <span>Periode</span>
+                  <input name="periode" type="text" placeholder="contoh: 112026" />
+                </label>
+                <label>
+                  <span>Jumlah Bayar</span>
+                  <input name="nominal" type="number" min="0" step="1000" required />
+                </label>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="primary-button">Simpan Pembayaran</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="panel payment-list-panel">
+            <div class="panel-header">
+              <h3>Riwayat Pembayaran</h3>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>No. SPP</th>
+                    <th>Nama</th>
+                    <th>Periode</th>
+                    <th>Tanggal</th>
+                    <th>Nominal</th>
+                    <th>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="paymentList"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="page" id="laporanPage">
+          <div class="report-hero">
+            <div>
+              <p class="eyebrow report-eyebrow">Ringkasan</p>
+              <h3>Laporan Pembayaran SPP</h3>
+            </div>
+            <div class="report-pill">Periode: <strong id="reportPeriod">2026</strong></div>
+          </div>
+
+          <div class="report-summary-grid">
+            <article class="report-summary-card accent">
+              <span>Jumlah Siswa</span>
+              <strong id="reportSummaryStudents">0</strong>
+              <small id="reportSummaryStudentsMeta">Total aktif</small>
+            </article>
+            <article class="report-summary-card purple">
+              <span>Tagihan</span>
+              <strong id="reportSummaryTagihan">Rp 0</strong>
+              <small>Seluruh sekolah</small>
+            </article>
+            <article class="report-summary-card green">
+              <span>Terbayar</span>
+              <strong id="reportSummaryTerbayar">Rp 0</strong>
+              <small>Sudah masuk</small>
+            </article>
+            <article class="report-summary-card orange">
+              <span>Belum Bayar</span>
+              <strong id="reportSummaryBelum">Rp 0</strong>
+              <small>Outstanding</small>
+            </article>
+          </div>
+
+          <div class="panel report-sheet">
+            <div class="panel-header">
+              <h3>Rekap per Sekolah</h3>
+              <button type="button" class="secondary-button small-button">Export</button>
+            </div>
+            <div class="report-list" id="reportList"></div>
+            <div class="table-wrap report-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Sekolah</th>
+                    <th>Jumlah Siswa</th>
+                    <th>Tagihan</th>
+                    <th>Terbayar</th>
+                    <th>Belum Bayar</th>
+                  </tr>
+                </thead>
+                <tbody id="reportTable"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel detail-report-panel">
+            <div class="panel-header">
+              <h3>Laporan Rinci Per Siswa</h3>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>No. SPP</th>
+                    <th>Nama Siswa</th>
+                    <th>Sekolah</th>
+                    <th>Kelas</th>
+                    <th>Tagihan</th>
+                    <th>Terbayar</th>
+                    <th>Sisa</th>
+                    <th>Status</th>
+                    <th>Terakhir Bayar</th>
+                  </tr>
+                </thead>
+                <tbody id="detailReportTable"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="loginScreen" class="login-screen">
+      <div class="login-card">
+        <div class="brand-lockup login-brand">
+          <img class="brand-mark large" src="../logo/kkms.png" alt="Logo KKMS" />
+          <img class="brand-mark large" src="../logo/yayasan.png" alt="Logo Yayasan" />
+        </div>
+
+        <div class="login-title-wrap">
+          <p class="eyebrow login-eyebrow">Akses masuk</p>
+          <h1>Laporan SPP</h1>
+          <p class="login-subtitle">Yayasan Santo Dominikus Cimahi</p>
+          <p class="login-subtitle small">Program kerjasama dengan KKMS Cimahi</p>
+        </div>
+
+        <form id="loginForm">
+          <label>
+            <span>Username</span>
+            <input type="text" id="loginUser" placeholder="Masukkan username" required />
+          </label>
+          <label>
+            <span>Password</span>
+            <input type="password" id="loginPassword" placeholder="Masukkan password" required />
+          </label>
+          <button type="submit" class="primary-button wide">Masuk</button>
+        </form>
+        <p class="login-hint">Gunakan akun sesuai role: <strong>adminkkms</strong> (semua akses), <strong>yayasan</strong> (laporan semua unit), atau <strong>adminmaria/adminmikael/admintheresia/adminyusup</strong> (unit masing-masing).</p>
+      </div>
+    </div>
+
+    <script src="./config.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
