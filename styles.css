@@ -28,6 +28,7 @@ html, body {
 
 body {
   min-height: 100vh;
+  font-size: 0.875rem;
 }
 
 button, input, select {
@@ -103,7 +104,7 @@ select:focus-visible {
 
 .brand-box h1 {
   margin: 0;
-  font-size: 1.08rem;
+  font-size: 1rem;
   letter-spacing: -0.02em;
 }
 
@@ -243,7 +244,7 @@ select:focus-visible {
 
 .topbar h2 {
   margin: 0;
-  font-size: 1.8rem;
+  font-size: 1.45rem;
 }
 
 .topbar-actions {
@@ -309,7 +310,7 @@ select:focus-visible {
 }
 
 .stat-value {
-  font-size: clamp(1.7rem, 2vw, 2.4rem);
+  font-size: clamp(1.3rem, 1.6vw, 1.9rem);
   font-weight: 800;
   letter-spacing: -0.05em;
 }
@@ -338,7 +339,7 @@ select:focus-visible {
 
 .panel-header h3 {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: 1rem;
 }
 
 .chart-placeholder {
@@ -542,7 +543,7 @@ label {
 
 .report-hero h3 {
   margin: 0;
-  font-size: clamp(1.3rem, 2vw, 1.8rem);
+  font-size: clamp(1.15rem, 1.6vw, 1.55rem);
 }
 
 .report-eyebrow {
@@ -593,7 +594,7 @@ label {
 }
 
 .report-summary-card strong {
-  font-size: clamp(1.4rem, 2vw, 2rem);
+  font-size: clamp(1.2rem, 1.6vw, 1.7rem);
   letter-spacing: -0.04em;
 }
 
@@ -722,7 +723,7 @@ label {
 
 .login-title-wrap h1 {
   color: var(--primary-2);
-  font-size: clamp(1.8rem, 5vw, 2.15rem);
+  font-size: clamp(1.4rem, 3.5vw, 1.6rem);
   letter-spacing: -0.045em;
   margin: 0;
 }
