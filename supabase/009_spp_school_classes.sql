@@ -311,7 +311,8 @@ BEGIN
       AND btrim(class.item->>'class_name') = existing.class_name
   );
 
-  DELETE FROM public.spp_app_va_settings;
+  DELETE FROM public.spp_app_va_settings
+  WHERE config_id IS NOT NULL;
 
   INSERT INTO public.spp_app_va_settings (config_id, bank_name, va_prefix, is_active, updated_at)
   SELECT
