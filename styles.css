@@ -1,17 +1,17 @@
 :root {
-  --bg: #f4f7fb;
+  --bg: #f3f6f7;
   --panel: #ffffff;
-  --panel-alt: #eef4ff;
-  --primary: #163b82;
-  --primary-2: #0f284d;
-  --secondary: #4f6eea;
-  --accent: #1ca978;
+  --panel-alt: #edf5f4;
+  --primary: #173b57;
+  --primary-2: #102b42;
+  --secondary: #147f79;
+  --accent: #249578;
   --warning: #f1ae36;
   --danger: #d96a6a;
   --text: #172033;
   --muted: #5d6a82;
-  --border: #dfe7f3;
-  --shadow: 0 12px 30px rgba(15, 32, 61, 0.08);
+  --border: #dce7e9;
+  --shadow: 0 16px 40px rgba(16, 43, 61, 0.08);
 }
 
 * {
@@ -34,6 +34,13 @@ button, input, select {
   font: inherit;
 }
 
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid rgba(20, 127, 121, 0.24);
+  outline-offset: 2px;
+}
+
 #app {
   display: flex;
   min-height: 100vh;
@@ -47,6 +54,10 @@ button, input, select {
   display: flex;
   flex-direction: column;
   gap: 24px;
+}
+
+.sidebar[hidden] {
+  display: none;
 }
 
 .brand-box {
@@ -82,7 +93,21 @@ button, input, select {
 
 .brand-box h1 {
   margin: 0;
-  font-size: 1.2rem;
+  font-size: 1.08rem;
+  letter-spacing: -0.02em;
+}
+
+.brand-partnership {
+  margin: 5px 0 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.58rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.brand-partnership span {
+  color: #8ed8ca;
+  font-weight: 800;
 }
 
 .eyebrow {
@@ -607,38 +632,127 @@ label {
 .login-screen {
   position: fixed;
   inset: 0;
-  background: linear-gradient(135deg, rgba(17, 39, 77, 0.95), rgba(79,110,234,0.82));
+  z-index: 20;
+  background:
+    radial-gradient(800px 440px at 8% 10%, rgba(86, 185, 171, 0.2), transparent 68%),
+    radial-gradient(640px 360px at 100% 100%, rgba(82, 126, 171, 0.2), transparent 70%),
+    linear-gradient(135deg, #102b42 0%, #17465d 58%, #117b74 100%);
   display: grid;
   place-items: center;
   padding: 24px;
+  overflow-y: auto;
 }
 
 .login-card {
-  width: min(440px, 100%);
-  background: rgba(255,255,255,0.96);
-  border-radius: 22px;
-  box-shadow: var(--shadow);
-  padding: 28px 24px;
+  width: min(460px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 24px;
+  box-shadow: 0 30px 80px rgba(7, 24, 39, 0.28);
+  padding: 32px;
 }
 
 .login-brand {
-  margin-bottom: 20px;
+  gap: 12px;
+  margin-bottom: 24px;
   color: var(--text);
 }
 
-.login-brand .eyebrow {
+.login-brand .brand-mark.large {
+  background: #fff;
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 20px rgba(16, 43, 61, 0.08);
+}
+
+.partner-separator {
+  color: var(--secondary);
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+
+.login-title-wrap {
+  margin-bottom: 24px;
+}
+
+.login-eyebrow {
+  color: var(--secondary) !important;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  margin-bottom: 8px;
+}
+
+.login-title-wrap h1 {
+  color: var(--primary-2);
+  font-size: clamp(1.8rem, 5vw, 2.15rem);
+  letter-spacing: -0.045em;
+  margin: 0;
+}
+
+.login-subtitle {
   color: var(--muted);
+  line-height: 1.55;
+  margin: 8px 0 0;
+}
+
+.login-partnership {
+  align-items: center;
+  background: linear-gradient(90deg, #f3f7fa, #edf7f5);
+  border: 1px solid #e1eaec;
+  border-radius: 12px;
+  color: #405468;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.74rem;
+  font-weight: 700;
+  gap: 6px;
+  justify-content: center;
+  line-height: 1.5;
+  margin: 14px 0 0;
+  padding: 9px 12px;
+  text-align: center;
 }
 
 #loginForm {
   display: grid;
   gap: 16px;
+  margin-top: 20px;
+}
+
+#loginForm label {
+  color: #405468;
+}
+
+#loginForm input {
+  border-radius: 12px;
+  padding: 12px 14px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+#loginForm input:focus {
+  border-color: var(--secondary);
+  box-shadow: 0 0 0 4px rgba(20, 127, 121, 0.12);
+  outline: none;
+}
+
+#loginForm .primary-button {
+  background: linear-gradient(135deg, var(--secondary), var(--primary));
+  border-radius: 12px;
+  box-shadow: 0 10px 20px rgba(20, 80, 91, 0.16);
+  padding: 13px 16px;
 }
 
 .login-hint {
-  margin-top: 18px;
+  background: #f7fafb;
+  border: 1px solid #e4ecee;
+  border-radius: 12px;
+  line-height: 1.55;
+  margin: 18px 0 0;
   font-size: 0.8rem;
   color: var(--muted);
+  padding: 12px 14px;
 }
 
 .hidden {
@@ -648,6 +762,19 @@ label {
 @media (max-width: 900px) {
   #app {
     display: block;
+  }
+
+  .topbar {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .topbar-actions {
+    width: 100%;
+  }
+
+  .filter-pill {
+    max-width: 100%;
   }
 
   .sidebar {
@@ -662,5 +789,19 @@ label {
 
   .main-panel {
     padding: 20px 16px 28px;
+  }
+
+  .login-screen {
+    padding: 16px;
+  }
+
+  .login-card {
+    max-height: calc(100vh - 32px);
+    padding: 26px 22px;
+  }
+
+  .login-brand .brand-mark.large {
+    width: 64px;
+    height: 64px;
   }
 }
