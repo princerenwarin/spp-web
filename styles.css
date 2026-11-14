@@ -116,11 +116,6 @@ select:focus-visible {
   line-height: 1.45;
 }
 
-.brand-partnership span {
-  color: var(--secondary);
-  font-weight: 800;
-}
-
 .eyebrow {
   color: var(--muted);
   margin: 0 0 4px;
@@ -703,10 +698,10 @@ label {
   box-shadow: 0 8px 20px rgba(16, 43, 61, 0.08);
 }
 
-.partner-separator {
+.partner-conjunction {
   color: var(--secondary);
-  font-size: 1.2rem;
-  font-weight: 800;
+  font-size: 0.72rem;
+  font-weight: 600;
 }
 
 .login-title-wrap {
