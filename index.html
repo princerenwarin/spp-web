@@ -105,14 +105,66 @@
         </section>
 
         <section class="page" id="siswaPage">
-          <div class="panel">
-            <div class="panel-header">
-              <h3>Data Siswa</h3>
-              <div class="search-box">
-                <input id="searchStudent" type="text" placeholder="Cari nama / ID / kelas" />
+          <div class="panel students-panel">
+            <div class="students-toolbar">
+              <div class="students-title">
+                <h3>Data Siswa</h3>
+                <span class="students-count" id="studentCount"></span>
+              </div>
+              <div class="search-field">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+                <input id="searchStudent" type="search" placeholder="Cari nama, ID, atau kelas" autocomplete="off" />
+              </div>
+              <div class="toolbar-actions admin-only" hidden>
+                <button type="button" class="primary-button small-button" data-open="studentFormSection">+ Siswa / Naik Kelas</button>
+                <button type="button" class="secondary-button small-button" data-open="arrearsTools">Tagihan Tahun Lalu</button>
+                <button type="button" class="secondary-button small-button" data-open="studentTools">Impor &amp; Log</button>
               </div>
             </div>
 
+            <div class="selection-bar admin-only" id="selectionBar" hidden>
+              <div class="selection-info">
+                <div class="selection-head">
+                  <strong><span id="selectedCount">0</span> siswa dipilih</strong>
+                  <button type="button" class="link-button" id="clearSelectionBtn">Kosongkan</button>
+                </div>
+                <div class="chip-list" id="selectedChips"></div>
+              </div>
+              <div class="selection-actions">
+                <div class="selection-action">
+                  <input id="bulkGiat" class="money-input" type="text" inputmode="numeric" placeholder="Nominal kegiatan" aria-label="Nominal kegiatan" />
+                  <button type="button" class="secondary-button small-button" id="bulkGiatBtn">Terapkan Kegiatan</button>
+                </div>
+                <div class="selection-action">
+                  <select id="bulkStaffMode" aria-label="Status anak guru">
+                    <option value="staff-hide">Anak guru - sembunyikan dari tagihan</option>
+                    <option value="staff-show">Anak guru - tetap tampil di tagihan</option>
+                    <option value="regular">Kembalikan ke siswa biasa</option>
+                  </select>
+                  <button type="button" class="secondary-button small-button" id="bulkStaffBtn">Terapkan Status</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="students-scroll">
+              <table class="students-table">
+                <thead>
+                  <tr>
+                    <th class="admin-only col-check" hidden><input type="checkbox" id="selectAllStudents" title="Pilih semua yang tampil" /></th>
+                    <th>Siswa</th>
+                    <th>Sekolah / Kelas</th>
+                    <th>Virtual Account</th>
+                    <th>Tagihan</th>
+                    <th>Status</th>
+                    <th>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="studentTableBody"></tbody>
+              </table>
+            </div>
+
+            <details class="fold admin-only" id="studentFormSection" hidden>
+              <summary>Tambah siswa baru / naik kelas</summary>
             <form id="studentForm" class="student-form">
               <div class="student-form-grid">
                 <label>
@@ -126,10 +178,14 @@
                   <span>Tahun Ajaran</span>
                   <input id="studentTahun" type="text" pattern="[0-9]{4}-[0-9]{4}" placeholder="2026-2027" required />
                 </label>
-                <label data-for="naik" hidden>
-                  <span>Siswa (ID)</span>
-                  <select id="studentExisting"></select>
-                </label>
+                <div class="field" data-for="naik" hidden>
+                  <span>Siswa</span>
+                  <div class="picker" data-picker="studentExisting">
+                    <input type="search" class="picker-input" placeholder="Ketik nama, ID, atau kelas" autocomplete="off" />
+                    <input type="hidden" id="studentExisting" />
+                    <div class="picker-results" hidden></div>
+                  </div>
+                </div>
                 <label>
                   <span>Nama Siswa</span>
                   <input id="studentNama" class="name-input" type="text" placeholder="Nama lengkap" />
@@ -182,48 +238,40 @@
                 <button type="button" class="secondary-button" id="studentResetBtn">Batal</button>
               </div>
             </form>
+            </details>
 
-            <div class="student-form admin-only" id="studentTools" hidden>
-              <div class="student-form-grid">
-                <label>
-                  <span>Kegiatan untuk siswa yang dicentang di tabel</span>
-                  <input id="bulkGiat" class="money-input" type="text" inputmode="numeric" placeholder="Nominal kegiatan" />
-                </label>
-                <label>
-                  <span>Status anak guru untuk siswa yang dicentang</span>
-                  <select id="bulkStaffMode">
-                    <option value="staff-hide">Tandai anak guru - sembunyikan dari tagihan</option>
-                    <option value="staff-show">Tandai anak guru - tetap tampil di tagihan</option>
-                    <option value="regular">Kembalikan ke siswa biasa</option>
-                  </select>
-                </label>
+            <details class="fold admin-only" id="studentTools" hidden>
+              <summary>Impor CSV &amp; log perubahan</summary>
+              <div class="fold-body">
+                <div class="form-actions">
+                  <button type="button" class="secondary-button" id="templateBtn">Unduh Template CSV</button>
+                  <label class="secondary-button">
+                    Upload CSV
+                    <input id="importFile" type="file" accept=".csv" hidden />
+                  </label>
+                  <button type="button" class="secondary-button" id="logBtn">Lihat Log Perubahan</button>
+                </div>
+                <div class="table-wrap" id="studentLogWrap" hidden>
+                  <table>
+                    <thead><tr><th>Waktu</th><th>Pengguna</th><th>Aksi</th><th>ID</th><th>Detail</th></tr></thead>
+                    <tbody id="studentLogBody"></tbody>
+                  </table>
+                </div>
               </div>
-              <p class="settings-description">Dicentang: <strong id="selectedCount">0</strong> siswa. Gunakan pencarian (misalnya kelas) lalu centang kotak di header tabel untuk memilih semua yang tampil.</p>
-              <div class="form-actions">
-                <button type="button" class="secondary-button" id="bulkGiatBtn">Terapkan Kegiatan</button>
-                <button type="button" class="secondary-button" id="bulkStaffBtn">Terapkan Status Anak Guru</button>
-                <button type="button" class="secondary-button" id="templateBtn">Unduh Template CSV</button>
-                <label class="secondary-button">
-                  Upload CSV
-                  <input id="importFile" type="file" accept=".csv" hidden />
-                </label>
-                <button type="button" class="secondary-button" id="logBtn">Lihat Log Perubahan</button>
-              </div>
-              <div class="table-wrap" id="studentLogWrap" hidden>
-                <table>
-                  <thead><tr><th>Waktu</th><th>Pengguna</th><th>Aksi</th><th>ID</th><th>Detail</th></tr></thead>
-                  <tbody id="studentLogBody"></tbody>
-                </table>
-              </div>
-            </div>
+            </details>
 
-            <div class="student-form admin-only" id="arrearsTools" hidden>
-              <h4>Tagihan Tahun Lalu (input manual)</h4>
+            <details class="fold admin-only" id="arrearsTools" hidden>
+              <summary>Tagihan tahun lalu (input manual)</summary>
+              <div class="fold-body">
               <div class="student-form-grid">
-                <label>
+                <div class="field">
                   <span>Siswa</span>
-                  <select id="arrearStudent"></select>
-                </label>
+                  <div class="picker" data-picker="arrearStudent">
+                    <input type="search" class="picker-input" placeholder="Ketik nama, ID, atau kelas" autocomplete="off" />
+                    <input type="hidden" id="arrearStudent" />
+                    <div class="picker-results" hidden></div>
+                  </div>
+                </div>
                 <label>
                   <span>Tahun Ajaran</span>
                   <input id="arrearTahun" type="text" pattern="[0-9]{4}-[0-9]{4}" placeholder="2025-2026" />
@@ -258,26 +306,8 @@
                   <tbody id="arrearsBody"></tbody>
                 </table>
               </div>
-            </div>
-
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th class="admin-only" hidden><input type="checkbox" id="selectAllStudents" title="Pilih semua yang tampil" /></th>
-                    <th>No. SPP</th>
-                    <th>Nama</th>
-                    <th>Sekolah</th>
-                    <th>Kelas</th>
-                    <th>Virtual Account</th>
-                    <th>Tagihan</th>
-                    <th>Status</th>
-                    <th>Aksi</th>
-                  </tr>
-                </thead>
-                <tbody id="studentTableBody"></tbody>
-              </table>
-            </div>
+              </div>
+            </details>
           </div>
         </section>
 

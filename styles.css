@@ -1080,3 +1080,305 @@ label {
     grid-template-columns: 1fr;
   }
 }
+
+/* ===== Halaman Data Siswa ===== */
+[hidden] { display: none !important; }
+
+.students-panel {
+  padding: 0;
+  overflow: visible;
+}
+
+.students-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+  border-radius: 18px 18px 0 0;
+}
+
+.students-title { display: flex; flex-direction: column; gap: 2px; min-width: 130px; }
+.students-title h3 { margin: 0; font-size: 1.05rem; letter-spacing: -0.01em; }
+.students-count { font-size: 0.78rem; color: var(--muted); }
+
+.search-field {
+  position: relative;
+  flex: 1 1 280px;
+  max-width: 520px;
+}
+
+.search-field svg {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  transform: translateY(-50%);
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+.search-field input {
+  width: 100%;
+  padding: 12px 14px 12px 42px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #f4f8f9;
+  font-size: 0.95rem;
+  color: var(--text);
+  transition: border-color .15s, box-shadow .15s, background .15s;
+}
+
+.search-field input:focus,
+.picker-input:focus {
+  outline: none;
+  background: #fff;
+  border-color: var(--secondary);
+  box-shadow: 0 0 0 4px rgba(20, 127, 121, 0.14);
+}
+
+.toolbar-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+
+.selection-bar {
+  display: none;
+  gap: 14px 24px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin: 12px 20px 0;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #eaf6f4, #f3f8fc);
+  border: 1px solid rgba(20, 127, 121, 0.28);
+  box-shadow: 0 10px 30px rgba(20, 127, 121, 0.12);
+  animation: sel-in .18s ease-out;
+}
+
+.selection-bar.has-selection:not([hidden]) { display: flex; }
+@keyframes sel-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+.selection-info { flex: 1 1 320px; min-width: 0; }
+.selection-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; color: var(--primary); }
+
+.link-button {
+  border: none;
+  background: none;
+  color: var(--secondary);
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.chip-list { display: flex; flex-wrap: wrap; gap: 6px; max-height: 92px; overflow-y: auto; padding-right: 4px; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px 5px 12px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid rgba(20, 127, 121, 0.3);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.chip button {
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: #e3eeee;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.chip button:hover { background: var(--danger); color: #fff; }
+
+.selection-actions { display: grid; gap: 8px; flex: 0 1 460px; }
+.selection-action { display: flex; gap: 8px; }
+.selection-action input,
+.selection-action select {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.students-scroll {
+  overflow: auto;
+  max-height: calc(100vh - 300px);
+  min-height: 320px;
+  margin-top: 8px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.students-table { min-width: 860px; }
+.students-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f7fafa;
+  padding: 11px 14px;
+}
+
+.students-table td { padding: 12px 14px; vertical-align: middle; }
+.students-table tbody tr { transition: background .12s; }
+.students-table tbody tr:hover { background: #f6fbfa; }
+.students-table tbody tr.is-selected { background: #e8f5f3; box-shadow: inset 3px 0 0 var(--secondary); }
+.col-check { width: 44px; }
+.col-check input { width: 18px; height: 18px; accent-color: var(--secondary); cursor: pointer; }
+
+.student-name { font-weight: 700; color: var(--text); }
+.student-sub { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+.badge-staff {
+  background: rgba(241, 174, 54, 0.16);
+  color: #9a6e06;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.row-actions { white-space: nowrap; }
+.row-actions .action-btn { background: #eef5f5; margin-right: 4px; }
+.row-actions .action-btn:hover { background: #dcecec; }
+
+.fold {
+  margin: 16px 20px 0;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.fold:last-child { margin-bottom: 20px; }
+
+.fold > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 14px 18px;
+  font-weight: 700;
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f7fafa;
+}
+
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg);
+  transition: transform .2s;
+}
+.fold[open] > summary::after { transform: rotate(-135deg); }
+.fold[open] > summary { border-bottom: 1px solid var(--border); }
+.fold .student-form { margin: 0; border: none; border-radius: 0; background: #fff; }
+.fold-body { padding: 18px; }
+
+.field { display: grid; gap: 8px; font-weight: 600; color: var(--muted); }
+
+.picker { position: relative; }
+.picker-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  color: var(--text);
+}
+
+.picker-results {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  max-height: 320px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 18px 40px rgba(16, 43, 66, 0.18);
+  padding: 6px;
+}
+
+.picker-option {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 9px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.picker-option:hover { background: #eaf6f4; }
+.picker-option strong { font-size: 0.92rem; }
+.picker-option span { font-size: 0.76rem; color: var(--muted); font-weight: 500; }
+.picker-empty { padding: 14px; text-align: center; color: var(--muted); font-size: 0.85rem; }
+
+@media (max-width: 760px) {
+  .students-toolbar { padding: 12px 14px; border-radius: 14px 14px 0 0; }
+  .search-field { flex-basis: 100%; max-width: none; order: 3; }
+  .toolbar-actions { margin-left: 0; width: 100%; }
+  .toolbar-actions .small-button { flex: 1 1 auto; }
+  .selection-bar { margin: 10px 12px 0; }
+  .selection-actions { flex-basis: 100%; }
+  .selection-action { flex-direction: column; }
+  .fold { margin: 12px 12px 0; }
+  .students-scroll { max-height: none; min-height: 0; }
+
+  .students-table { min-width: 0; }
+  .students-table thead { display: none; }
+  .students-table, .students-table tbody { display: block; }
+  .students-table tbody tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 12px;
+    margin: 10px 12px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: 0 6px 18px rgba(16, 43, 66, 0.06);
+  }
+  .students-table td { display: block; padding: 0; border: none; }
+  .students-table td::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin-bottom: 2px;
+  }
+  .students-table td.col-check { grid-column: 1 / -1; width: auto; }
+  .students-table td.col-check::before,
+  .students-table td.empty-state::before { display: none; }
+  .students-table td[data-label="Siswa"],
+  .students-table td[data-label="Virtual Account"],
+  .students-table td[data-label="Aksi"] { grid-column: 1 / -1; }
+  .students-table td[data-label="Siswa"]::before { display: none; }
+  .students-table td[data-label="Siswa"] .student-name { font-size: 1.02rem; }
+  .students-table tr.empty-row { display: block; }
+}

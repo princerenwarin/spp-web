@@ -98,6 +98,9 @@ const ui = {
   arrearKet: document.getElementById('arrearKet'),
   arrearsBody: document.getElementById('arrearsBody'),
   selectedCount: document.getElementById('selectedCount'),
+  selectionBar: document.getElementById('selectionBar'),
+  selectedChips: document.getElementById('selectedChips'),
+  studentCount: document.getElementById('studentCount'),
   selectAllStudents: document.getElementById('selectAllStudents'),
   bulkGiat: document.getElementById('bulkGiat'),
   bulkStaffMode: document.getElementById('bulkStaffMode'),
@@ -772,8 +775,9 @@ function getFilteredStudents() {
 
 function renderStudentTable() {
   const rows = getFilteredStudents();
+  ui.studentCount.textContent = `${rows.length} dari ${app.state.siswa.length} siswa`;
   if (!rows.length) {
-    ui.studentTableBody.innerHTML = '<tr><td colspan="9" class="empty-state">Tidak ada data siswa yang cocok.</td></tr>';
+    ui.studentTableBody.innerHTML = '<tr class="empty-row"><td colspan="7" class="empty-state">Tidak ada data siswa yang cocok.</td></tr>';
     updateSelectionUi(rows);
     return;
   }
@@ -794,21 +798,23 @@ function renderStudentTable() {
         <div><span>${escapeHtml(item.bankName)}</span><strong>${escapeHtml(item.number)}</strong></div>
       `).join('')}</div>`
       : '<span class="empty-state">Belum diatur</span>';
+    const selectable = /^\d+$/.test(row.id);
+    const selected = app.selectedStudents.has(row.id);
 
     return `
-      <tr>
-        <td class="admin-only" ${admin ? '' : 'hidden'}>${/^\d+$/.test(row.id) ? `<input type="checkbox" data-select-id="${escapeHtml(row.id)}" ${app.selectedStudents.has(row.id) ? 'checked' : ''} />` : ''}</td>
-        <td>${row.nospp}</td>
-        <td>${row.nama}</td>
-        <td>${escapeHtml(getSchoolName(row.kdsek))}</td>
-        <td>${row.kdkls}</td>
-        <td>${virtualAccountMarkup}</td>
-        <td>${row.isStaffChild && row.showInBilling === false ? 'Tidak ditagih' : formatRupiah(totalTagihan)}${arrearsTotal ? `<br><small>termasuk tunggakan ${formatRupiah(arrearsTotal)}</small>` : ''}</td>
-        <td><span class="status-pill ${status === 'Lunas' ? 'lunas' : 'belum'}">${status}</span></td>
-        <td>
-          ${canManageSettings() && row.tahunAjaran ? `
+      <tr class="${selected ? 'is-selected' : ''}">
+        <td class="admin-only col-check" ${admin ? '' : 'hidden'}>${selectable ? `<input type="checkbox" data-select-id="${escapeHtml(row.id)}" ${selected ? 'checked' : ''} aria-label="Pilih ${escapeHtml(row.nama)}" />` : ''}</td>
+        <td data-label="Siswa"><div class="student-name">${escapeHtml(row.nama)}</div><div class="student-sub">${escapeHtml(row.nospp)}${row.isStaffChild ? ' &middot; <span class="badge-staff">Anak guru</span>' : ''}</div></td>
+        <td data-label="Sekolah / Kelas"><div>${escapeHtml(getSchoolName(row.kdsek))}</div><div class="student-sub">Kelas ${escapeHtml(row.kdkls)}</div></td>
+        <td data-label="Virtual Account">${virtualAccountMarkup}</td>
+        <td data-label="Tagihan">${row.isStaffChild && row.showInBilling === false ? 'Tidak ditagih' : formatRupiah(totalTagihan)}${arrearsTotal ? `<div class="student-sub">termasuk tunggakan ${formatRupiah(arrearsTotal)}</div>` : ''}</td>
+        <td data-label="Status"><span class="status-pill ${status === 'Lunas' ? 'lunas' : 'belum'}">${status}</span></td>
+        <td data-label="Aksi" class="row-actions">
+          ${admin && row.tahunAjaran ? `
             <button class="action-btn edit" data-action="edit-student" data-nospp="${escapeHtml(row.nospp)}">Ubah SPP</button>
-          ` : '-'}
+          ` : ''}
+          ${admin && selectable ? `<button class="action-btn edit" data-action="arrear-student" data-id="${escapeHtml(row.id)}">Tunggakan</button>` : ''}
+          ${admin ? '' : '-'}
         </td>
       </tr>
     `;
@@ -818,8 +824,15 @@ function renderStudentTable() {
 
 function updateSelectionUi(rows) {
   const ids = rows.map((row) => row.id).filter((id) => /^\d+$/.test(id));
-  ui.selectedCount.textContent = String(app.selectedStudents.size);
+  const count = app.selectedStudents.size;
+  ui.selectedCount.textContent = String(count);
   ui.selectAllStudents.checked = ids.length > 0 && ids.every((id) => app.selectedStudents.has(id));
+  ui.selectionBar.classList.toggle('has-selection', count > 0);
+  const byId = new Map(app.state.siswa.map((item) => [String(item.id), item]));
+  ui.selectedChips.innerHTML = [...app.selectedStudents].map((id) => {
+    const student = byId.get(id);
+    return `<span class="chip">${escapeHtml(student ? `${student.nama} (${student.kdkls})` : id)}<button type="button" data-unselect-id="${escapeHtml(id)}" aria-label="Hapus dari pilihan">&times;</button></span>`;
+  }).join('');
 }
 
 function getSelectedStudentIds() {
@@ -1075,19 +1088,67 @@ function updateStudentFormMode() {
 }
 
 function populateExistingStudents() {
-  const options = app.state.siswa
-    .filter((item) => /^\d+$/.test(item.id))
-    .map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.id)} - ${escapeHtml(item.nama)} (${escapeHtml(item.kdkls)})</option>`);
-  ui.studentExisting.innerHTML = `<option value="">Pilih siswa</option>${options.join('')}`;
-  ui.arrearStudent.innerHTML = ui.studentExisting.innerHTML;
   if (!ui.arrearTahun.value) {
     const [start] = currentAcademicYear().split('-').map(Number);
     ui.arrearTahun.value = `${start - 1}-${start}`;
   }
 }
 
+function studentPickerLabel(item) {
+  return `${item.nama} - ${item.kdkls} (${item.id})`;
+}
+
+function setPickerValue(hiddenId, id) {
+  const hidden = document.getElementById(hiddenId);
+  const wrap = hidden.closest('.picker');
+  const input = wrap.querySelector('.picker-input');
+  const student = id ? app.state.siswa.find((item) => String(item.id) === String(id)) : null;
+  hidden.value = student ? String(student.id) : '';
+  input.value = student ? studentPickerLabel(student) : '';
+  wrap.querySelector('.picker-results').hidden = true;
+}
+
+function renderPickerResults(wrap) {
+  const input = wrap.querySelector('.picker-input');
+  const results = wrap.querySelector('.picker-results');
+  const keyword = input.value.trim().toLowerCase();
+  const matches = app.state.siswa
+    .filter((item) => /^\d+$/.test(item.id))
+    .filter((item) => !keyword || `${item.nama} ${item.id} ${item.kdkls} ${item.nospp}`.toLowerCase().includes(keyword))
+    .slice(0, 8);
+  results.innerHTML = matches.length
+    ? matches.map((item) => `
+      <button type="button" class="picker-option" data-pick-id="${escapeHtml(item.id)}">
+        <strong>${escapeHtml(item.nama)}</strong>
+        <span>${escapeHtml(getSchoolName(item.kdsek))} &middot; ${escapeHtml(item.kdkls)} &middot; ID ${escapeHtml(item.id)}</span>
+      </button>`).join('')
+    : '<div class="picker-empty">Siswa tidak ditemukan</div>';
+  results.hidden = false;
+}
+
+function setupStudentPickers() {
+  document.querySelectorAll('.picker').forEach((wrap) => {
+    const input = wrap.querySelector('.picker-input');
+    const hidden = wrap.querySelector('input[type="hidden"]');
+    const results = wrap.querySelector('.picker-results');
+    input.addEventListener('input', () => {
+      hidden.value = '';
+      renderPickerResults(wrap);
+    });
+    input.addEventListener('focus', () => renderPickerResults(wrap));
+    results.addEventListener('mousedown', (event) => {
+      const option = event.target.closest('[data-pick-id]');
+      if (!option) return;
+      event.preventDefault();
+      setPickerValue(hidden.id, option.dataset.pickId);
+    });
+    input.addEventListener('blur', () => { results.hidden = true; });
+  });
+}
+
 function resetStudentForm() {
   ui.studentForm.reset();
+  setPickerValue('studentExisting', '');
   ui.studentType.value = 'baru';
   ui.studentTahun.value = currentAcademicYear();
   ['studentDpp', 'studentDsp', 'studentSeragam', 'studentGiat', 'studentSpp', 'studentKomp'].forEach((key) => {
@@ -1143,6 +1204,10 @@ async function reloadStudentData() {
 
 async function addOrUpdateStudent(event) {
   event.preventDefault();
+  if (ui.studentType.value === 'naik' && !ui.studentExisting.value) {
+    alert('Pilih siswa dari daftar pencarian terlebih dahulu.');
+    return;
+  }
   try {
     const credentials = requireStudentRules();
     const row = buildStudentRow({
@@ -1703,7 +1768,26 @@ function setupEvents() {
     if (!id) return;
     if (event.target.checked) app.selectedStudents.add(id);
     else app.selectedStudents.delete(id);
+    event.target.closest('tr').classList.toggle('is-selected', event.target.checked);
     updateSelectionUi(getFilteredStudents());
+  });
+  setupStudentPickers();
+  document.querySelectorAll('[data-open]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const section = document.getElementById(button.dataset.open);
+      section.open = true;
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+  document.getElementById('clearSelectionBtn').addEventListener('click', () => {
+    app.selectedStudents.clear();
+    renderStudentTable();
+  });
+  ui.selectedChips.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-unselect-id]');
+    if (!button) return;
+    app.selectedStudents.delete(button.dataset.unselectId);
+    renderStudentTable();
   });
   ui.selectAllStudents.addEventListener('change', () => {
     getFilteredStudents()
@@ -1860,9 +1944,15 @@ function setupEvents() {
   ui.studentTableBody.addEventListener('click', (event) => {
     const target = event.target.closest('button');
     if (!target) return;
-    const { action, nospp } = target.dataset;
+    const { action, nospp, id } = target.dataset;
     if (action === 'edit-student') {
       changeStudentSpp(nospp);
+    }
+    if (action === 'arrear-student') {
+      setPickerValue('arrearStudent', id);
+      ui.arrearsTools.open = true;
+      ui.arrearsTools.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      ui.arrearNominal.focus();
     }
   });
 
