@@ -228,7 +228,7 @@
                 </label>
                 <label data-hide="ubah">
                   <span>Tahun Ajaran</span>
-                  <input id="studentTahun" type="text" pattern="[0-9]{4}-[0-9]{4}" placeholder="2026-2027" required />
+                  <select id="studentTahun" required></select>
                 </label>
                 <div class="field" data-for="naik" hidden>
                   <span>Siswa</span>
@@ -258,7 +258,7 @@
                 </label>
                 <label data-for="baru">
                   <span>Periode Masuk (SPP tidak ditagih)</span>
-                  <input id="studentPeriode" type="month" />
+                  <select id="studentPeriode" required></select>
                 </label>
                 <label data-for="baru ubah">
                   <span>Nominal DPP</span>
@@ -286,7 +286,7 @@
                 </label>
                 <label data-for="ubah">
                   <span>SPP &amp; Komputer berlaku mulai</span>
-                  <input id="studentEffective" type="month" />
+                  <select id="studentEffective"></select>
                   <small class="field-hint">Isi bila SPP/Komputer diubah. Bulan sebelumnya tidak berubah.</small>
                 </label>
               </div>
@@ -375,19 +375,21 @@
             </div>
             <p class="bank-payment-note">Bank VA aktif: <strong id="paymentBankName">Belum diatur</strong>. Nomor VA setiap siswa ditampilkan pada data siswa.</p>
             <form id="paymentForm">
-              <div class="form-grid">
-                <label>
-                  <span>No. SPP</span>
-                  <input name="nospp" type="text" required placeholder="contoh: M3B00342" />
-                </label>
-                <label>
+              <div class="form-grid payment-student-grid">
+                <div class="field">
                   <span>Nama Siswa</span>
-                  <input name="nama" class="name-input" type="text" placeholder="Nama siswa" />
-                </label>
+                  <div class="picker" data-picker="paymentStudent" data-value-field="nospp">
+                    <input type="search" class="picker-input" placeholder="Ketik nama siswa" autocomplete="off" />
+                    <input type="hidden" id="paymentNospp" name="nospp" required />
+                    <div class="picker-results" hidden></div>
+                  </div>
+                  <small class="field-hint">Pilih hasil yang sesuai dengan sekolah dan kelas.</small>
+                </div>
               </div>
+              <p class="payment-billing-status" id="paymentBillingStatus" role="status" aria-live="polite">Pilih siswa untuk melihat sisa tagihan dan urutan alokasi.</p>
               <fieldset class="payment-allocation">
                 <legend>Alokasi dalam satu penerimaan</legend>
-                <p class="muted-copy">Pisahkan nominal menurut komponen. SPP dan Komputer dapat dibayar untuk periode yang berbeda.</p>
+                <p class="muted-copy">Masukkan nominal per komponen. SPP dan Komputer otomatis dialokasikan mulai dari periode tertunggak paling lama.</p>
                 <div id="paymentComponentRows">
                   <div class="payment-component-row">
                     <label>
@@ -405,10 +407,10 @@
                         <option value="lainnya">Lainnya</option>
                       </select>
                     </label>
-                    <label class="payment-period-field">
-                      <span>Periode tagihan</span>
-                      <input class="payment-component-period" type="month" required />
-                    </label>
+                    <div class="payment-period-summary" hidden>
+                      <span>Periode alokasi</span>
+                      <strong>Otomatis dari tunggakan terlama</strong>
+                    </div>
                     <label>
                       <span>Nominal</span>
                       <input class="money-input payment-component-amount" type="text" inputmode="numeric" required />
@@ -425,6 +427,39 @@
                 <button type="submit" class="primary-button">Simpan Pembayaran</button>
               </div>
             </form>
+            <details class="fold payment-import-fold">
+              <summary>Impor pembayaran dari Excel / CSV</summary>
+              <div class="fold-body">
+                <p class="muted-copy">Gunakan template. Setiap baris akan dicocokkan dan dikonfirmasi per siswa; periode kosong akan disarankan dari tunggakan terlama.</p>
+                <div class="form-actions">
+                  <button type="button" class="secondary-button" id="downloadPaymentTemplate">Unduh Template Pembayaran</button>
+                  <label class="secondary-button">
+                    Pilih File Excel / CSV
+                    <input id="paymentImportFile" type="file" accept=".xlsx,.xls,.csv" hidden />
+                  </label>
+                </div>
+                <section id="paymentImportReview" class="payment-import-review" hidden aria-label="Pratinjau impor pembayaran">
+                  <p id="paymentImportStatus" class="muted-copy" role="status" aria-live="polite"></p>
+                  <div class="table-wrap payment-import-table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Nama dari file</th>
+                          <th>Siswa</th>
+                          <th>Komponen</th>
+                          <th>Periode mulai</th>
+                          <th>Tanggal</th>
+                          <th>Nominal</th>
+                          <th>Konfirmasi</th>
+                        </tr>
+                      </thead>
+                      <tbody id="paymentImportRows"></tbody>
+                    </table>
+                  </div>
+                  <button type="button" class="primary-button" id="importPaymentsBtn" disabled>Impor pembayaran terkonfirmasi</button>
+                </section>
+              </div>
+            </details>
           </div>
 
           <div class="panel payment-list-panel">
@@ -469,6 +504,10 @@
               </div>
             </div>
             <div class="report-filters">
+              <label>
+                <span>Sekolah</span>
+                <select id="reportSchoolFilter"></select>
+              </label>
               <label>
                 <span>Tahun ajaran</span>
                 <select id="reportYearFilter"></select>
@@ -618,6 +657,7 @@
 
     <div id="arrearsPrintSheet" hidden></div>
     <script src="./config.js"></script>
+    <script src="./vendor/xlsx.mini.min.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

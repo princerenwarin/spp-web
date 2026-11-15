@@ -62,6 +62,11 @@ const app = {
   server: false,
   years: [],
   usedSchools: new Set(),
+  selectedPaymentStudent: null,
+  paymentBilling: null,
+  paymentBillingError: '',
+  paymentBillingCache: new Map(),
+  paymentImportRows: [],
   paging: { students: 0, payments: 0 },
   totals: { students: 0, payments: 0 },
   dash: null,
@@ -148,6 +153,7 @@ const ui = {
   studentCloseBtn: document.getElementById('studentCloseBtn'),
   activityList: document.getElementById('activityList'),
   reportPeriod: document.getElementById('reportPeriod'),
+  reportSchoolFilter: document.getElementById('reportSchoolFilter'),
   reportYearFilter: document.getElementById('reportYearFilter'),
   reportPeriodFilter: document.getElementById('reportPeriodFilter'),
   reportClassFilter: document.getElementById('reportClassFilter'),
@@ -177,7 +183,14 @@ const ui = {
   paymentForm: document.getElementById('paymentForm'),
   paymentComponentRows: document.getElementById('paymentComponentRows'),
   paymentAllocationTotal: document.getElementById('paymentAllocationTotal'),
+  paymentBillingStatus: document.getElementById('paymentBillingStatus'),
   addPaymentComponent: document.getElementById('addPaymentComponent'),
+  paymentImportFile: document.getElementById('paymentImportFile'),
+  paymentImportReview: document.getElementById('paymentImportReview'),
+  paymentImportStatus: document.getElementById('paymentImportStatus'),
+  paymentImportRows: document.getElementById('paymentImportRows'),
+  importPaymentsBtn: document.getElementById('importPaymentsBtn'),
+  downloadPaymentTemplate: document.getElementById('downloadPaymentTemplate'),
   refreshRevenue: document.getElementById('refreshRevenue'),
   loginForm: document.getElementById('loginForm'),
   schoolSettingsForm: document.getElementById('schoolSettingsForm'),
@@ -1310,8 +1323,54 @@ function academicMonths(year) {
   });
 }
 
+function formatStudentId(id) {
+  const value = String(id ?? '');
+  return /^\d+$/.test(value) ? value.padStart(4, '0') : value;
+}
+
+function formatAcademicMonth(monthKey) {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(monthKey || ''));
+  if (!match) return String(monthKey || '');
+  return new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, 1)));
+}
+
+function populateStudentYearOptions(selectedYear = '') {
+  const currentStart = Number(currentAcademicYear().slice(0, 4));
+  const nextYear = `${currentStart + 1}-${currentStart + 2}`;
+  const years = [...new Set([...(app.years || []), currentAcademicYear(), nextYear, selectedYear])]
+    .filter((year) => /^\d{4}-\d{4}$/.test(String(year || '')))
+    .sort((a, b) => Number(b.slice(0, 4)) - Number(a.slice(0, 4)));
+  ui.studentTahun.innerHTML = years.map((year) => (
+    `<option value="${escapeHtml(year)}">${escapeHtml(year)}</option>`
+  )).join('');
+  ui.studentTahun.value = years.includes(selectedYear) ? selectedYear : currentAcademicYear();
+  populateStudentPeriodOptions();
+}
+
+function populateStudentPeriodOptions() {
+  const year = ui.studentTahun.value || currentAcademicYear();
+  const months = academicMonths(year);
+  const currentMonth = localMonthInputValue();
+  const populate = (select, preferred, fallback) => {
+    const previous = preferred || select.value;
+    select.innerHTML = months.map((month) => (
+      `<option value="${month.key}">${escapeHtml(formatAcademicMonth(month.key))}</option>`
+    )).join('');
+    select.value = months.some((month) => month.key === previous)
+      ? previous
+      : (months.some((month) => month.key === fallback) ? fallback : months[0].key);
+  };
+  populate(ui.studentPeriode, '', year === currentAcademicYear() ? currentMonth : months[0].key);
+  populate(ui.studentEffective, '', months[0].key);
+}
+
 function localMonthInputValue(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function localDateInputValue(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 function renderRevenueDashboard(rows, year) {
@@ -1572,10 +1631,22 @@ function populateReportFilters() {
     : (years.includes(currentAcademicYear()) ? currentAcademicYear() : years[0]);
   populateReportPeriods();
 
-  const school = currentSchoolScope();
+  const fixedSchool = app.user && app.user.role === 'unit' ? app.user.unit : '';
+  const schools = app.state.schools
+    .filter((item) => !fixedSchool || item.kdsek === fixedSchool)
+    .sort((a, b) => getSchoolName(a.kdsek).localeCompare(getSchoolName(b.kdsek), 'id'));
+  const previousSchool = ui.reportSchoolFilter.value;
+  ui.reportSchoolFilter.innerHTML = fixedSchool
+    ? schools.map((item) => `<option value="${escapeHtml(item.kdsek)}">${escapeHtml(item.nmsek)}</option>`).join('')
+    : '<option value="">Semua sekolah</option>' + schools.map((item) => (
+      `<option value="${escapeHtml(item.kdsek)}">${escapeHtml(item.nmsek)}</option>`
+    )).join('');
+  ui.reportSchoolFilter.disabled = Boolean(fixedSchool);
+  ui.reportSchoolFilter.value = fixedSchool || (schools.some((item) => item.kdsek === previousSchool) ? previousSchool : '');
+
+  const school = ui.reportSchoolFilter.value || null;
   const classes = app.state.classes
     .filter((item) => !school || item.kdsek === school)
-    .filter((item) => !app.user || app.user.role !== 'unit' || item.kdsek === app.user.unit)
     .sort((a, b) => a.kdkls.localeCompare(b.kdkls, 'id'))
     .filter((item, index, list) => list.findIndex((candidate) => (
       candidate.kdkls.toLowerCase() === item.kdkls.toLowerCase()
@@ -1752,7 +1823,7 @@ async function fetchArrearsReport(append = false) {
   const { data, error } = await app.supabase.rpc('spp_app_class_billing_v1', {
     p_tahun: year,
     p_periode: period,
-    p_kdsek: currentSchoolScope(),
+    p_kdsek: ui.reportSchoolFilter.value || null,
     p_kdkls: ui.reportClassFilter.value || null,
     p_limit: ARREARS_PAGE_SIZE,
     p_offset: app.arrearsOffset
@@ -1876,8 +1947,11 @@ function populateExistingStudents() {
   }
 }
 
-function studentPickerLabel(item) {
-  return `${item.nama} - ${item.kdkls} (${item.id})`;
+function studentPickerLabel(item, wrap) {
+  if (wrap.dataset.picker === 'paymentStudent') {
+    return `${item.nama} · ${getSchoolName(item.kdsek)} · Kelas ${item.kdkls} · No. SPP ${item.nospp}`;
+  }
+  return `${item.nama} · ${getSchoolName(item.kdsek)} · Kelas ${item.kdkls} · ID ${formatStudentId(item.id)}`;
 }
 
 function setPickerValue(hiddenId, id) {
@@ -1887,9 +1961,19 @@ function setPickerValue(hiddenId, id) {
   const student = id
     ? app.pickerCache.get(String(id)) || app.state.siswa.find((item) => String(item.id) === String(id))
     : null;
-  hidden.value = student ? String(student.id) : '';
-  input.value = student ? studentPickerLabel(student) : '';
+  hidden.value = student
+    ? String(wrap.dataset.valueField === 'nospp' ? student.nospp : student.id)
+    : '';
+  input.value = student ? studentPickerLabel(student, wrap) : '';
   wrap.querySelector('.picker-results').hidden = true;
+  if (wrap.dataset.picker === 'paymentStudent') {
+    app.selectedPaymentStudent = student;
+    app.paymentBilling = null;
+    app.paymentBillingError = '';
+    paymentBillingRequest += 1;
+    if (student) loadPaymentBilling(student);
+    else renderPaymentBillingStatus();
+  }
 }
 
 let pickerSeq = 0;
@@ -1901,15 +1985,20 @@ async function renderPickerResults(wrap) {
   let matches;
   if (app.server) {
     const seq = ++pickerSeq;
-    const { data } = await app.supabase.rpc('spp_app_search_students_v1', { p_q: cleanKeyword(keyword), p_limit: 8 });
+    const { data, error } = await app.supabase.rpc('spp_app_search_students_v1', { p_q: cleanKeyword(keyword), p_limit: 8 });
     if (seq !== pickerSeq) return;
+    if (error) {
+      results.innerHTML = `<div class="picker-empty">Pencarian gagal: ${escapeHtml(error.message)}</div>`;
+      results.hidden = false;
+      return;
+    }
     matches = (data || []).map((row) => ({
       id: String(row.id_siswa), nama: row.nama, kdsek: row.kdsek, kdkls: row.kdkls, nospp: row.nospp
     }));
     matches.forEach((item) => app.pickerCache.set(item.id, item));
   } else {
     matches = app.state.siswa
-      .filter((item) => /^\d+$/.test(item.id))
+      .filter((item) => wrap.dataset.picker === 'paymentStudent' || /^\d+$/.test(item.id))
       .filter((item) => !keyword || `${item.nama} ${item.id} ${item.kdkls} ${item.nospp}`.toLowerCase().includes(keyword))
       .slice(0, 8);
   }
@@ -1917,7 +2006,7 @@ async function renderPickerResults(wrap) {
     ? matches.map((item) => `
       <button type="button" class="picker-option" data-pick-id="${escapeHtml(item.id)}">
         <strong>${escapeHtml(item.nama)}</strong>
-        <span>${escapeHtml(getSchoolName(item.kdsek))} &middot; ${escapeHtml(item.kdkls)} &middot; ID ${escapeHtml(item.id)}</span>
+        <span>${escapeHtml(getSchoolName(item.kdsek))} &middot; Kelas ${escapeHtml(item.kdkls)} &middot; ID ${escapeHtml(formatStudentId(item.id))}${item.nospp ? ` &middot; ${escapeHtml(item.nospp)}` : ''}</span>
       </button>`).join('')
     : '<div class="picker-empty">Siswa tidak ditemukan</div>';
   results.hidden = false;
@@ -1931,6 +2020,13 @@ function setupStudentPickers() {
     const renderSoon = debounce(() => renderPickerResults(wrap), 200);
     input.addEventListener('input', () => {
       hidden.value = '';
+      if (wrap.dataset.picker === 'paymentStudent') {
+        app.selectedPaymentStudent = null;
+        app.paymentBilling = null;
+        app.paymentBillingError = '';
+        paymentBillingRequest += 1;
+        renderPaymentBillingStatus();
+      }
       renderSoon();
     });
     input.addEventListener('focus', () => renderPickerResults(wrap));
@@ -1948,7 +2044,7 @@ function resetStudentForm() {
   ui.studentForm.reset();
   setPickerValue('studentExisting', '');
   ui.studentType.value = 'baru';
-  ui.studentTahun.value = currentAcademicYear();
+  populateStudentYearOptions(currentAcademicYear());
   ['studentDpp', 'studentDsp', 'studentSeragam', 'studentGiat', 'studentSpp', 'studentKomp'].forEach((key) => {
     ui[key].value = formatRupiah(0);
   });
@@ -1994,6 +2090,7 @@ function requireStudentRules() {
 }
 
 async function reloadStudentData() {
+  app.paymentBillingCache.clear();
   if (app.server) {
     const { data } = await app.supabase.rpc('spp_app_years_v1');
     app.years = data || app.years;
@@ -2058,7 +2155,7 @@ async function changeStudentSpp(nospp) {
   }
   openStudentDialog('ubah');
   app.editingEnrollment = row;
-  ui.studentTahun.value = row.tahunAjaran;
+  populateStudentYearOptions(row.tahunAjaran);
   ui.studentDpp.value = formatRupiah(row.dpp || 0);
   ui.studentDsp.value = formatRupiah(row.dsp || 0);
   ui.studentSeragam.value = formatRupiah(row.seragam || 0);
@@ -2067,8 +2164,6 @@ async function changeStudentSpp(nospp) {
   ui.studentKomp.value = formatRupiah(row.komp || 0);
   const [start] = row.tahunAjaran.split('-').map(Number);
   ui.studentEffective.value = `${start}-07`;
-  ui.studentEffective.min = `${start}-07`;
-  ui.studentEffective.max = `${start + 1}-06`;
   ui.studentEditSummary.innerHTML = `
     <strong>${escapeHtml(row.nama)}</strong>
     <span>${escapeHtml(getSchoolName(row.kdsek))} &middot; Kelas ${escapeHtml(row.kdkls)} &middot; TA ${escapeHtml(row.tahunAjaran)}</span>
@@ -2280,6 +2375,389 @@ function parseCsv(text) {
   return rows;
 }
 
+function normalizeImportHeader(value) {
+  return String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function importDateValue(value) {
+  if (value === '' || value === null || value === undefined) return localDateInputValue();
+  let iso = '';
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    iso = `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+  } else if (typeof value === 'number' && window.XLSX?.SSF) {
+    const parsed = window.XLSX.SSF.parse_date_code(value);
+    if (parsed) iso = `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`;
+  } else {
+    const text = String(value).trim();
+    let match = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(text);
+    if (match) iso = `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
+    match = match || /^(\d{1,2})[/. -](\d{1,2})[/. -](\d{4})$/.exec(text);
+    if (match && !iso) {
+      let day = Number(match[1]);
+      let month = Number(match[2]);
+      if (month > 12 && day <= 12) [day, month] = [month, day];
+      iso = `${match[3]}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+    if (!iso) {
+      const parsed = new Date(text);
+      if (!Number.isNaN(parsed.getTime())) {
+        iso = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+      }
+    }
+  }
+  const [year, month, day] = iso.split('-').map(Number);
+  const parsedDate = new Date(year, month - 1, day);
+  if (!iso || Number.isNaN(parsedDate.getTime()) || parsedDate.getFullYear() !== year
+      || parsedDate.getMonth() !== month - 1 || parsedDate.getDate() !== day) {
+    throw new Error(`Tanggal "${value}" tidak dikenali. Gunakan format YYYY-MM-DD atau DD/MM/YYYY.`);
+  }
+  if (iso > localDateInputValue()) throw new Error(`Tanggal "${iso}" tidak boleh di masa depan.`);
+  return iso;
+}
+
+function importPeriodValue(value) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return `${String(value.getMonth() + 1).padStart(2, '0')}${value.getFullYear()}`;
+  }
+  const text = String(value || '').trim();
+  let match = /^(\d{4})-(\d{1,2})$/.exec(text);
+  if (!match) match = /^(\d{4})-(\d{1,2})-\d{1,2}$/.exec(text);
+  if (match) return `${match[2].padStart(2, '0')}${match[1]}`;
+  match = /^(\d{1,2})[/. -](\d{4})$/.exec(text);
+  if (match && Number(match[1]) >= 1 && Number(match[1]) <= 12) {
+    return `${match[1].padStart(2, '0')}${match[2]}`;
+  }
+  match = /^(0[1-9]|1[0-2])(\d{4})$/.exec(text);
+  if (match) return text;
+  return '';
+}
+
+function parseImportedAmount(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? Math.round(value) : 0;
+  const text = String(value || '').trim();
+  const digits = text.replace(/[^\d]/g, '');
+  const amount = Number(digits || 0);
+  return text.startsWith('-') ? -amount : amount;
+}
+
+async function parsePaymentImportFile(file) {
+  const extension = file.name.split('.').pop().toLowerCase();
+  let table;
+  if (extension === 'csv') {
+    table = parseCsv(await file.text());
+  } else {
+    if (!window.XLSX) throw new Error('Pembaca Excel tidak tersedia. Muat ulang aplikasi lalu coba lagi.');
+    const workbook = window.XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+    if (!firstSheet) throw new Error('File Excel tidak memiliki lembar kerja.');
+    table = window.XLSX.utils.sheet_to_json(firstSheet, { header: 1, raw: true, defval: '' });
+  }
+  const header = (table.shift() || []).map(normalizeImportHeader);
+  const findColumn = (...names) => header.findIndex((item) => names.includes(item));
+  const columns = {
+    nospp: findColumn('nosp', 'nomorspp'),
+    nama: findColumn('nama', 'namasiswa', 'siswa'),
+    nominal: findColumn('nominal', 'jumlah', 'jumlahbayar', 'amount', 'total'),
+    tanggal: findColumn('tanggal', 'tanggalbayar', 'tglbyr', 'date', 'transactiondate'),
+    periode: findColumn('periode', 'periodetagihan', 'bulan')
+  };
+  if (columns.nominal < 0 || (columns.nama < 0 && columns.nospp < 0)) {
+    throw new Error('File wajib memiliki kolom Nama atau No. SPP dan kolom Nominal. Unduh template untuk format lengkap.');
+  }
+  const records = table.map((cells, index) => {
+    const value = (column) => column < 0 ? '' : cells[column];
+    const nama = String(value(columns.nama) || '').trim();
+    const nospp = String(value(columns.nospp) || '').trim();
+    const nominal = parseImportedAmount(value(columns.nominal));
+    if (!nama && !nospp && nominal === 0) return null;
+    if ((!nama && !nospp) || nominal <= 0) {
+      throw new Error(`Baris ${index + 2}: Nama/No. SPP dan Nominal harus diisi.`);
+    }
+    return {
+      sourceRow: index + 2,
+      sourceName: nama,
+      sourceNoSpp: nospp,
+      nominal,
+      tglbyr: importDateValue(value(columns.tanggal)),
+      importedPeriod: importPeriodValue(value(columns.periode))
+    };
+  }).filter(Boolean);
+  if (!records.length) throw new Error('File tidak berisi baris pembayaran.');
+  if (records.length > 500) throw new Error('Maksimal 500 baris per file.');
+  return records;
+}
+
+async function searchPaymentStudents(query) {
+  if (app.server) {
+    const { data, error } = await app.supabase.rpc('spp_app_search_students_v1', {
+      p_q: cleanKeyword(query),
+      p_limit: 20
+    });
+    if (error) throw error;
+    return (data || []).map((row) => ({
+      id: String(row.id_siswa), nama: row.nama, kdsek: row.kdsek, kdkls: row.kdkls, nospp: String(row.nospp || '')
+    }));
+  }
+  return app.state.siswa
+    .filter((item) => !query || `${item.nama} ${item.id} ${item.nospp}`.toLowerCase().includes(query.toLowerCase()))
+    .slice(0, 8)
+    .map((item) => ({
+      id: String(item.id), nama: item.nama, kdsek: item.kdsek, kdkls: item.kdkls,
+      nospp: item.nospp, spp: item.spp, komp: item.komp, tahunAjaran: item.tahunAjaran
+    }));
+}
+
+async function mapWithConcurrency(items, limit, callback) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await callback(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+function oldestAnyDuePeriod(billing) {
+  return (billing?.periode_bulanan || []).find((item) => (
+    Number(item.spp?.sisa || 0) > 0 || Number(item.komp?.sisa || 0) > 0
+  ))?.periode || billing?.periode_aktif || '';
+}
+
+async function resolvePaymentImportRecord(record) {
+  const query = record.sourceNoSpp || record.sourceName;
+  let candidates = [];
+  let searchError = '';
+  try {
+    candidates = await searchPaymentStudents(query);
+  } catch (error) {
+    searchError = error.message || 'Pencarian siswa gagal.';
+  }
+  const exact = record.sourceNoSpp
+    ? candidates.find((item) => item.nospp.toLowerCase() === record.sourceNoSpp.toLowerCase())
+    : null;
+  const selectedStudent = exact || (!record.sourceNoSpp && candidates.length === 1 ? candidates[0] : null);
+  const row = {
+    ...record,
+    candidates,
+    searchQuery: record.sourceNoSpp || record.sourceName,
+    selectedId: selectedStudent?.id || '',
+    selectedStudent,
+    component: '',
+    period: record.importedPeriod,
+    billing: null,
+    billingError: searchError,
+    confirmed: false,
+    skipped: false
+  };
+  if (selectedStudent) await loadPaymentImportBilling(row);
+  return row;
+}
+
+async function loadPaymentImportBilling(row) {
+  row.billing = null;
+  row.billingError = '';
+  if (!row.selectedStudent) return;
+  try {
+    row.billing = await getPaymentBilling(row.selectedStudent);
+    const yearMonths = academicMonths(row.billing.tahun_ajaran).map((month) => toPeriode(month.key));
+    if (!yearMonths.includes(row.period)) row.period = oldestAnyDuePeriod(row.billing);
+  } catch (error) {
+    row.billingError = error.message || 'Tagihan tidak dapat dimuat.';
+  }
+}
+
+function renderPaymentImportRows() {
+  const rows = app.paymentImportRows;
+  const componentOptions = PAYMENT_COMPONENTS.map(([key, label]) => (
+    `<option value="${key}">${escapeHtml(label)}</option>`
+  )).join('');
+  ui.paymentImportRows.innerHTML = rows.map((row, index) => {
+    const year = row.billing?.tahun_ajaran || currentAcademicYear();
+    const periodOptions = academicMonths(year).map((month) => {
+      const value = toPeriode(month.key);
+      return `<option value="${value}">${escapeHtml(formatPeriodLabel(value))}</option>`;
+    }).join('');
+    const validPeriod = academicMonths(year).some((month) => toPeriode(month.key) === row.period);
+    const canConfirm = Boolean(row.selectedStudent?.nospp && row.component && row.nominal > 0
+      && ((row.component !== 'spp' && row.component !== 'komp')
+        || (row.billing && !row.billingError && validPeriod
+          && Number(row.billing.belum_dialokasikan || 0) === 0)));
+    const studentOptions = row.candidates.map((student) => (
+      `<option value="${escapeHtml(student.id)}" ${student.id === row.selectedId ? 'selected' : ''}>${escapeHtml(student.nama)} · ${escapeHtml(getSchoolName(student.kdsek))} · Kelas ${escapeHtml(student.kdkls)} · ${escapeHtml(student.nospp)}</option>`
+    )).join('');
+    const periodLabel = row.period
+      ? formatPeriodLabel(row.period)
+      : (row.billing ? 'Pilih periode' : (row.billingError ? 'Tagihan tidak tersedia' : 'Memuat...'));
+    return `<tr data-import-index="${index}" class="${row.skipped ? 'is-skipped' : ''}">
+      <td>${escapeHtml(row.sourceName || row.sourceNoSpp)}<small>Baris ${row.sourceRow}</small></td>
+      <td><input type="search" data-import-search value="${escapeHtml(row.searchQuery)}" placeholder="Cari nama atau No. SPP" aria-label="Cari siswa pada baris ${row.sourceRow}" />
+        <select data-import-student aria-label="Pilih siswa pada baris ${row.sourceRow}"><option value="">Pilih siswa</option>${studentOptions}</select>
+        <small>${row.selectedStudent ? `${escapeHtml(getSchoolName(row.selectedStudent.kdsek))} · Kelas ${escapeHtml(row.selectedStudent.kdkls)} · ${escapeHtml(row.selectedStudent.nospp)}` : escapeHtml(row.billingError || 'Pilih kecocokan yang benar.')}</small></td>
+      <td><select data-import-component aria-label="Pilih komponen pada baris ${row.sourceRow}"><option value="">Pilih komponen</option>${componentOptions}</select></td>
+      <td><select data-import-period aria-label="Pilih periode mulai pada baris ${row.sourceRow}" ${row.component === 'spp' || row.component === 'komp' ? '' : 'disabled'}>
+        <option value="">Periode terlama yang disarankan</option>${periodOptions}</select>
+        <small>${row.billing && Number(row.billing.belum_dialokasikan || 0) > 0 ? 'Rekonsiliasi pembayaran lama dahulu.' : periodLabel}</small></td>
+      <td>${escapeHtml(row.tglbyr)}${row.tglbyr === localDateInputValue() ? '<small>Tanggal file kosong: gunakan hari ini</small>' : ''}</td>
+      <td>${formatRupiah(row.nominal)}</td>
+      <td><label class="import-confirm"><input type="checkbox" data-import-confirm ${row.confirmed ? 'checked' : ''} ${canConfirm && !row.skipped ? '' : 'disabled'}>Konfirmasi</label>
+        <label class="import-skip"><input type="checkbox" data-import-skip ${row.skipped ? 'checked' : ''}>Lewati</label></td>
+    </tr>`;
+  }).join('');
+  rows.forEach((row, index) => {
+    const tr = ui.paymentImportRows.querySelector(`[data-import-index="${index}"]`);
+    const component = tr.querySelector('[data-import-component]');
+    const period = tr.querySelector('[data-import-period]');
+    component.value = row.component;
+    period.value = row.period || '';
+  });
+  const confirmed = rows.filter((row) => row.confirmed).length;
+  const skipped = rows.filter((row) => row.skipped).length;
+  ui.importPaymentsBtn.disabled = !app.server || !canAccessPayment() || !confirmed || confirmed + skipped !== rows.length;
+  ui.paymentImportStatus.textContent = `${rows.length} baris · ${confirmed} dikonfirmasi · ${skipped} dilewati.`
+    + (!app.server ? ' Impor memerlukan Supabase dan migration 017.' : '');
+}
+
+async function importPaymentFile(file) {
+  ui.paymentImportReview.hidden = false;
+  ui.paymentImportStatus.textContent = 'Membaca file pembayaran...';
+  ui.importPaymentsBtn.disabled = true;
+  try {
+    if (!canAccessPayment()) throw new Error('Hanya Admin KKMS yang dapat mengimpor pembayaran.');
+    const records = await parsePaymentImportFile(file);
+    app.paymentImportRows = await mapWithConcurrency(records, 4, resolvePaymentImportRecord);
+    renderPaymentImportRows();
+  } catch (error) {
+    app.paymentImportRows = [];
+    ui.paymentImportRows.replaceChildren();
+    ui.paymentImportStatus.textContent = error.message || 'File pembayaran tidak dapat dibaca.';
+  } finally {
+    ui.paymentImportFile.value = '';
+  }
+}
+
+function downloadPaymentTemplate() {
+  if (!window.XLSX) {
+    alert('Pembaca Excel tidak tersedia. Coba muat ulang aplikasi.');
+    return;
+  }
+  const workbook = window.XLSX.utils.book_new();
+  const template = window.XLSX.utils.aoa_to_sheet([
+    ['no_spp', 'nama', 'nominal', 'tanggal', 'periode'],
+    ['', '', '', '', '']
+  ]);
+  template['!cols'] = [{ wch: 20 }, { wch: 28 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
+  const instructions = window.XLSX.utils.aoa_to_sheet([
+    ['Panduan impor pembayaran'],
+    ['Isi Nama atau No. SPP dan Nominal.'],
+    ['Tanggal memakai format YYYY-MM-DD; boleh dikosongkan untuk memakai tanggal hari ini.'],
+    ['Periode opsional; jika kosong, aplikasi menyarankan periode tunggakan terlama.'],
+    ['Komponen dan siswa dikonfirmasi satu per satu setelah file dibaca.'],
+    ['Simpan satu transaksi pembayaran per baris. Maksimal 500 baris.']
+  ]);
+  window.XLSX.utils.book_append_sheet(workbook, template, 'Pembayaran');
+  window.XLSX.utils.book_append_sheet(workbook, instructions, 'Panduan');
+  window.XLSX.writeFile(workbook, 'template_impor_pembayaran.xlsx');
+}
+
+async function submitPaymentImport() {
+  const rows = app.paymentImportRows;
+  const confirmed = rows.filter((row) => row.confirmed && !row.skipped);
+  if (!confirmed.length || confirmed.length + rows.filter((row) => row.skipped).length !== rows.length) {
+    ui.paymentImportStatus.textContent = 'Konfirmasi atau lewati setiap baris sebelum impor.';
+    return;
+  }
+  if (!window.confirm(`Impor ${confirmed.length} transaksi yang sudah dikonfirmasi?`)) return;
+  ui.importPaymentsBtn.disabled = true;
+  ui.paymentImportStatus.textContent = 'Menyimpan transaksi...';
+  try {
+    const credentials = requireStudentRules();
+    const payload = confirmed.map((row) => {
+      let items;
+      if (row.component === 'spp' || row.component === 'komp') {
+        if (!row.billing) throw new Error(`Tagihan ${row.selectedStudent.nama} belum tersedia.`);
+        items = allocateMonthlyPayment(row.component, row.nominal, row.billing, row.period);
+      } else {
+        items = [{ component: row.component, periode: '', nominal: row.nominal }];
+      }
+      return { nospp: row.selectedStudent.nospp, tglbyr: row.tglbyr, items };
+    });
+    const { data, error } = await app.supabase.rpc('import_payment_components_v1', {
+      ...credentials,
+      p_rows: payload
+    });
+    if (error) throw error;
+    const importedCount = Number(data || 0);
+    app.paymentImportRows = [];
+    ui.paymentImportReview.hidden = true;
+    await reloadStudentData();
+    alert(`${confirmed.length} transaksi berhasil diimpor (${importedCount} alokasi).`);
+  } catch (error) {
+    ui.paymentImportStatus.textContent = `Impor gagal: ${error.message || 'Kesalahan tidak diketahui.'}`;
+    ui.importPaymentsBtn.disabled = false;
+  }
+}
+
+async function handlePaymentImportChange(event) {
+  const control = event.target;
+  const tr = control.closest('[data-import-index]');
+  if (!tr) return;
+  const row = app.paymentImportRows[Number(tr.dataset.importIndex)];
+  if (!row) return;
+
+  if (control.matches('[data-import-search]')) {
+    row.searchQuery = control.value.trim();
+    row.billingError = '';
+    try {
+      row.candidates = await searchPaymentStudents(row.searchQuery);
+      const exact = row.sourceNoSpp
+        ? row.candidates.find((student) => student.nospp.toLowerCase() === row.sourceNoSpp.toLowerCase())
+        : null;
+      const matched = exact || (row.candidates.length === 1 ? row.candidates[0] : null);
+      row.selectedId = matched?.id || '';
+      row.selectedStudent = matched;
+      row.period = row.importedPeriod;
+      row.confirmed = false;
+      row.skipped = false;
+      if (matched) await loadPaymentImportBilling(row);
+    } catch (error) {
+      row.candidates = [];
+      row.selectedId = '';
+      row.selectedStudent = null;
+      row.billingError = error.message || 'Pencarian siswa gagal.';
+    }
+  } else if (control.matches('[data-import-student]')) {
+    row.selectedId = control.value;
+    row.selectedStudent = row.candidates.find((student) => student.id === row.selectedId) || null;
+    row.confirmed = false;
+    row.skipped = false;
+    row.period = row.importedPeriod;
+    await loadPaymentImportBilling(row);
+  } else if (control.matches('[data-import-component]')) {
+    row.component = control.value;
+    row.confirmed = false;
+    row.skipped = false;
+    if ((row.component === 'spp' || row.component === 'komp') && row.billing && !row.period) {
+      row.period = oldestDuePeriod(row.billing, row.component) || oldestAnyDuePeriod(row.billing);
+    }
+  } else if (control.matches('[data-import-period]')) {
+    row.period = control.value;
+    row.confirmed = false;
+    row.skipped = false;
+  } else if (control.matches('[data-import-confirm]')) {
+    row.confirmed = control.checked;
+    if (control.checked) row.skipped = false;
+  } else if (control.matches('[data-import-skip]')) {
+    row.skipped = control.checked;
+    if (control.checked) row.confirmed = false;
+  }
+  renderPaymentImportRows();
+}
+
 async function importStudentsFile(file) {
   try {
     const credentials = requireStudentRules();
@@ -2348,17 +2826,159 @@ async function deletePayment(id) {
   renderReport();
 }
 
+function paymentBillingCutoff(year) {
+  const start = Number(String(year || '').slice(0, 4));
+  const currentStart = Number(currentAcademicYear().slice(0, 4));
+  if (start > currentStart) return '';
+  return start === currentStart ? localMonthInputValue() : `${start + 1}-06`;
+}
+
+function buildLocalPaymentBilling(student, year, cutoff) {
+  const months = academicMonths(year).filter((month) => month.key <= cutoff);
+  const transactions = app.state.transaksi.filter((item) => item.nospp === student.nospp);
+  let sppCredit = 0;
+  let kompCredit = 0;
+  let sppTotal = 0;
+  let kompTotal = 0;
+  const periods = months.map((month) => {
+    const period = toPeriode(month.key);
+    const sppTarget = Number(student.spp || 0);
+    const kompTarget = Number(student.komp || 0);
+    const sppPaid = transactions.filter((item) => item.component === 'spp' && item.periode === period)
+      .reduce((sum, item) => sum + Number(item.nominal || 0), 0);
+    const kompPaid = transactions.filter((item) => item.component === 'komp' && item.periode === period)
+      .reduce((sum, item) => sum + Number(item.nominal || 0), 0);
+    const sppRemaining = Math.max(sppTarget - sppPaid - sppCredit, 0);
+    const kompRemaining = Math.max(kompTarget - kompPaid - kompCredit, 0);
+    sppCredit = Math.max(sppPaid + sppCredit - sppTarget, 0);
+    kompCredit = Math.max(kompPaid + kompCredit - kompTarget, 0);
+    sppTotal += sppRemaining;
+    kompTotal += kompRemaining;
+    return {
+      periode: period,
+      spp: { sisa: sppRemaining },
+      komp: { sisa: kompRemaining }
+    };
+  });
+  const legacy = transactions.filter((item) => item.component === 'legacy')
+    .reduce((sum, item) => sum + Number(item.nominal || 0), 0);
+  return {
+    id_siswa: student.id,
+    tahun_ajaran: year,
+    periode_aktif: periods[periods.length - 1]?.periode || toPeriode(cutoff),
+    periode_bulanan: periods,
+    sisa_spp: sppTotal,
+    sisa_komp: kompTotal,
+    sisa_satu_kali: 0,
+    sisa_total: sppTotal + kompTotal,
+    belum_dialokasikan: legacy
+  };
+}
+
+async function getPaymentBilling(student) {
+  let year = student.tahunAjaran || '';
+  if (app.server && !year) {
+    const { data, error } = await app.supabase.from('spp_app_student_overview')
+      .select('tahun_ajaran')
+      .eq('id_siswa', student.id)
+      .order('tahun_ajaran', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    year = data?.tahun_ajaran || '';
+  }
+  year = year || currentAcademicYear();
+  const cutoff = paymentBillingCutoff(year);
+  if (!cutoff) throw new Error(`Tagihan bulanan untuk tahun ajaran ${year} belum aktif.`);
+  const period = toPeriode(cutoff);
+  const cacheKey = `${student.id}|${year}|${period}`;
+  if (app.paymentBillingCache.has(cacheKey)) return app.paymentBillingCache.get(cacheKey);
+
+  let billing;
+  if (app.server) {
+    const { data, error } = await app.supabase.rpc('spp_app_student_billing_v1', {
+      p_id_siswa: String(student.id),
+      p_tahun: year,
+      p_periode: period
+    });
+    if (error) throw error;
+    if (!data) throw new Error(`Tagihan tahun ajaran ${year} tidak ditemukan untuk siswa ini.`);
+    billing = data;
+  } else {
+    billing = buildLocalPaymentBilling(student, year, cutoff);
+  }
+  billing.tahun_ajaran = billing.tahun_ajaran || year;
+  app.paymentBillingCache.set(cacheKey, billing);
+  return billing;
+}
+
+function oldestDuePeriod(billing, component) {
+  const period = (billing?.periode_bulanan || []).find((item) => Number(item[component]?.sisa || 0) > 0);
+  return period?.periode || billing?.periode_aktif || '';
+}
+
+function renderPaymentBillingStatus() {
+  const student = app.selectedPaymentStudent;
+  const billing = app.paymentBilling;
+  if (!student) {
+    ui.paymentBillingStatus.classList.remove('is-warning');
+    ui.paymentBillingStatus.textContent = 'Pilih siswa untuk melihat sisa tagihan dan urutan alokasi.';
+    return;
+  }
+  if (app.paymentBillingError) {
+    ui.paymentBillingStatus.classList.add('is-warning');
+    ui.paymentBillingStatus.textContent = `Tagihan bulanan belum dapat dihitung: ${app.paymentBillingError}`;
+    return;
+  }
+  if (!billing) {
+    ui.paymentBillingStatus.classList.remove('is-warning');
+    ui.paymentBillingStatus.textContent = 'Memuat tagihan siswa...';
+    return;
+  }
+  const oldest = [oldestDuePeriod(billing, 'spp'), oldestDuePeriod(billing, 'komp')]
+    .filter(Boolean)
+    .sort((a, b) => {
+      const dateA = new Date(Number(a.slice(2)), Number(a.slice(0, 2)) - 1, 1);
+      const dateB = new Date(Number(b.slice(2)), Number(b.slice(0, 2)) - 1, 1);
+      return dateA - dateB;
+    })[0];
+  const legacy = Number(billing.belum_dialokasikan || 0);
+  ui.paymentBillingStatus.classList.toggle('is-warning', legacy > 0);
+  ui.paymentBillingStatus.textContent = `Sisa terhitung ${formatRupiah(billing.sisa_total || 0)}`
+    + (oldest ? ` · Periode tertua ${formatPeriodLabel(oldest)}` : '')
+    + (legacy > 0 ? ` · Ada ${formatRupiah(legacy)} pembayaran lama yang belum dialokasikan; alokasi otomatis ditahan sampai direkonsiliasi.` : '');
+}
+
+let paymentBillingRequest = 0;
+
+async function loadPaymentBilling(student) {
+  const request = ++paymentBillingRequest;
+  app.paymentBilling = null;
+  app.paymentBillingError = '';
+  renderPaymentBillingStatus();
+  updatePaymentAllocationRows();
+  try {
+    const billing = await getPaymentBilling(student);
+    if (request !== paymentBillingRequest) return;
+    app.paymentBilling = billing;
+  } catch (error) {
+    if (request !== paymentBillingRequest) return;
+    app.paymentBillingError = error.message || 'Rincian tagihan tidak tersedia.';
+  }
+  renderPaymentBillingStatus();
+  updatePaymentAllocationRows();
+}
+
 function updatePaymentPeriodVisibility(row) {
   const component = row.querySelector('.payment-component').value;
+  const summary = row.querySelector('.payment-period-summary');
   const isMonthly = component === 'spp' || component === 'komp';
-  const periodField = row.querySelector('.payment-period-field');
-  const periodInput = row.querySelector('.payment-component-period');
-  periodField.hidden = !isMonthly;
-  periodInput.required = isMonthly;
-  if (!isMonthly) periodInput.value = '';
-  if (isMonthly && !periodInput.value) {
-    periodInput.value = localMonthInputValue();
-  }
+  summary.hidden = !isMonthly;
+  if (!isMonthly) return;
+  const period = app.paymentBilling ? oldestDuePeriod(app.paymentBilling, component) : '';
+  summary.querySelector('strong').textContent = period
+    ? `Mulai ${formatPeriodLabel(period)}`
+    : 'Otomatis dari tunggakan terlama';
 }
 
 function makePaymentComponentRow() {
@@ -2372,16 +2992,15 @@ function makePaymentComponentRow() {
       <span>Komponen</span>
       <select class="payment-component" aria-label="Komponen pembayaran">${options}</select>
     </label>
-    <label class="payment-period-field">
-      <span>Periode tagihan</span>
-      <input class="payment-component-period" type="month" required />
-    </label>
+    <div class="payment-period-summary" hidden>
+      <span>Periode alokasi</span>
+      <strong>Otomatis dari tunggakan terlama</strong>
+    </div>
     <label>
       <span>Nominal</span>
       <input class="money-input payment-component-amount" type="text" inputmode="numeric" required />
     </label>
     <button type="button" class="action-btn delete payment-remove" aria-label="Hapus komponen">Hapus</button>`;
-  wrapper.querySelector('.payment-component-period').value = localMonthInputValue();
   updatePaymentPeriodVisibility(wrapper);
   return wrapper;
 }
@@ -2406,33 +3025,76 @@ function resetPaymentAllocationForm() {
   updatePaymentAllocationRows();
 }
 
-function collectPaymentItems() {
+function allocateMonthlyPayment(component, amount, billing, startPeriod = '') {
+  const periods = billing?.periode_bulanan || [];
+  if (!periods.length) throw new Error('Belum ada periode tagihan yang dapat dialokasikan.');
+  if (Number(billing.belum_dialokasikan || 0) > 0) {
+    throw new Error('Rekonsiliasi pembayaran lama yang belum dialokasikan sebelum memakai alokasi otomatis.');
+  }
+
+  let startIndex = startPeriod ? periods.findIndex((item) => item.periode === startPeriod) : -1;
+  if (startIndex < 0 && startPeriod) {
+    const activeDate = new Date(Number(startPeriod.slice(2)), Number(startPeriod.slice(0, 2)) - 1, 1);
+    const lastDate = new Date(Number(periods[periods.length - 1].periode.slice(2)),
+      Number(periods[periods.length - 1].periode.slice(0, 2)) - 1, 1);
+    if (activeDate > lastDate) return [{ component, periode: startPeriod, nominal: amount }];
+    startIndex = 0;
+  }
+  if (startIndex < 0) {
+    startIndex = periods.findIndex((item) => Number(item[component]?.sisa || 0) > 0);
+  }
+  if (startIndex < 0) {
+    startIndex = periods.findIndex((item) => item.periode === billing.periode_aktif);
+  }
+  if (startIndex < 0) startIndex = periods.length - 1;
+
+  let remaining = amount;
+  const allocations = [];
+  for (let index = startIndex; index < periods.length && remaining > 0; index += 1) {
+    const period = periods[index];
+    const due = Number(period[component]?.sisa || 0);
+    const applied = Math.min(due, remaining);
+    if (applied > 0) {
+      allocations.push({ component, periode: period.periode, nominal: applied });
+      remaining -= applied;
+    }
+  }
+  if (remaining > 0) {
+    const lastPeriod = periods[periods.length - 1].periode;
+    const existing = allocations.find((item) => item.periode === lastPeriod);
+    if (existing) existing.nominal += remaining;
+    else allocations.push({ component, periode: lastPeriod, nominal: remaining });
+  }
+  return allocations;
+}
+
+async function collectPaymentItems() {
   const rows = [...ui.paymentComponentRows.querySelectorAll('.payment-component-row')];
   if (!rows.length || rows.length > 12) {
     throw new Error('Satu penerimaan harus memiliki 1 sampai 12 rincian komponen.');
   }
 
-  const items = rows.map((row) => {
+  const items = [];
+  for (const row of rows) {
     const component = row.querySelector('.payment-component').value;
-    const monthValue = row.querySelector('.payment-component-period').value;
     const amount = parseMoney(row.querySelector('.payment-component-amount').value);
-    const period = component === 'spp' || component === 'komp' ? toPeriode(monthValue) : '';
     if (amount <= 0) throw new Error('Nominal setiap komponen harus lebih dari 0.');
-    if ((component === 'spp' || component === 'komp') && !period) {
-      throw new Error('Pilih periode untuk pembayaran SPP atau Komputer bulanan.');
+    if (component === 'spp' || component === 'komp') {
+      if (!app.paymentBilling) throw new Error('Pilih siswa yang tagihannya berhasil dimuat terlebih dahulu.');
+      items.push(...allocateMonthlyPayment(component, amount, app.paymentBilling));
+    } else {
+      items.push({ component, periode: '', nominal: amount });
     }
-    return { component, periode: period, nominal: amount };
-  });
-
-  const uniquePeriods = new Set();
-  for (const item of items) {
-    const key = `${item.component}|${item.periode}`;
-    if (uniquePeriods.has(key)) {
-      throw new Error('Gabungkan nominal komponen dan periode yang sama dalam satu baris.');
-    }
-    uniquePeriods.add(key);
   }
-  return items;
+  if (items.length > 36) throw new Error('Alokasi pembayaran melebihi 36 rincian. Pisahkan penerimaan menjadi dua transaksi.');
+  const merged = new Map();
+  items.forEach((item) => {
+    const key = `${item.component}|${item.periode}`;
+    const current = merged.get(key);
+    if (current) current.nominal += item.nominal;
+    else merged.set(key, { ...item });
+  });
+  return [...merged.values()];
 }
 
 async function handlePaymentSubmit(event) {
@@ -2445,10 +3107,10 @@ async function handlePaymentSubmit(event) {
   const form = event.currentTarget;
   const formData = new FormData(form);
   const nospp = String(formData.get('nospp') || '').trim();
-  const nama = String(formData.get('nama') || '').trim();
+  const nama = app.selectedPaymentStudent?.nama || '';
   let items;
   try {
-    items = collectPaymentItems();
+    items = await collectPaymentItems();
   } catch (error) {
     alert(error.message);
     return;
@@ -2469,6 +3131,7 @@ async function handlePaymentSubmit(event) {
       });
       if (error) throw error;
       form.reset();
+      setPickerValue('paymentNospp', '');
       resetPaymentAllocationForm();
       app.paging.payments = 0;
       await reloadStudentData();
@@ -2476,7 +3139,7 @@ async function handlePaymentSubmit(event) {
     } catch (error) {
       const message = error.message || 'Pembayaran gagal disimpan.';
       const migrationHint = /function.*not found|schema cache/i.test(message)
-        ? ' Jalankan migration 016, lalu perbarui schema Supabase.'
+        ? ' Jalankan migration 016 dan 017, lalu perbarui schema Supabase.'
         : '';
       alert(`${message}${migrationHint}`);
     }
@@ -2501,6 +3164,7 @@ async function handlePaymentSubmit(event) {
   });
   saveLocalData();
   event.currentTarget.reset();
+  setPickerValue('paymentNospp', '');
   resetPaymentAllocationForm();
   renderDashboard();
   renderPaymentList();
@@ -2799,6 +3463,11 @@ function setupEvents() {
     app.arrearsOffset = 0;
     fetchArrearsReport();
   });
+  ui.reportSchoolFilter.addEventListener('change', () => {
+    populateReportFilters();
+    app.arrearsOffset = 0;
+    fetchArrearsReport();
+  });
   ui.reportPeriodFilter.addEventListener('change', () => {
     app.arrearsOffset = 0;
     fetchArrearsReport();
@@ -2807,6 +3476,7 @@ function setupEvents() {
     app.arrearsOffset = 0;
     fetchArrearsReport();
   });
+  ui.studentTahun.addEventListener('change', populateStudentPeriodOptions);
   ui.loadMoreArrears.addEventListener('click', () => fetchArrearsReport(true));
   ui.refreshRevenue.addEventListener('click', fetchDashboard);
   ui.arrearsReportTable.addEventListener('click', (event) => {
@@ -2919,6 +3589,12 @@ function setupEvents() {
   ui.importFile.addEventListener('change', () => {
     if (ui.importFile.files[0]) importStudentsFile(ui.importFile.files[0]);
   });
+  ui.paymentImportFile.addEventListener('change', () => {
+    if (ui.paymentImportFile.files[0]) importPaymentFile(ui.paymentImportFile.files[0]);
+  });
+  ui.paymentImportRows.addEventListener('change', handlePaymentImportChange);
+  ui.downloadPaymentTemplate.addEventListener('click', downloadPaymentTemplate);
+  ui.importPaymentsBtn.addEventListener('click', submitPaymentImport);
   ui.paymentForm.addEventListener('submit', handlePaymentSubmit);
   ui.schoolSettingsForm.addEventListener('submit', handleSchoolSettingsSubmit);
   ui.bankSettingsForm.addEventListener('submit', handleBankSettingsSubmit);
@@ -3115,7 +3791,7 @@ function renderAll() {
   populateSchoolSelect();
   populateYearFilter();
   populateExistingStudents();
-  if (!ui.studentTahun.value) ui.studentTahun.value = currentAcademicYear();
+  populateStudentYearOptions(currentAcademicYear());
   updateStudentFormMode();
   renderDashboard();
   renderStudentTable();

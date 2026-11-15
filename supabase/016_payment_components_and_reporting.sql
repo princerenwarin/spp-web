@@ -83,8 +83,8 @@ BEGIN
   IF p_items IS NULL OR jsonb_typeof(p_items) <> 'array' THEN
     RAISE EXCEPTION 'Isi pembayaran harus berupa daftar komponen.' USING ERRCODE = '22023';
   END IF;
-  IF jsonb_array_length(p_items) NOT BETWEEN 1 AND 12 THEN
-    RAISE EXCEPTION 'Isi 1 sampai 12 rincian pembayaran.' USING ERRCODE = '22023';
+  IF jsonb_array_length(p_items) NOT BETWEEN 1 AND 36 THEN
+    RAISE EXCEPTION 'Isi 1 sampai 36 rincian pembayaran.' USING ERRCODE = '22023';
   END IF;
 
   SELECT * INTO v_enr
@@ -394,9 +394,10 @@ BEGIN
       AND NOT (s.is_staff_child AND NOT s.show_in_billing)
   ),
   owing AS (
-    SELECT * FROM candidates
-    WHERE COALESCE((billing->>'sisa_total')::numeric, 0) > 0
-       OR COALESCE((billing->>'belum_dialokasikan')::numeric, 0) > 0
+    SELECT candidates.*
+    FROM candidates
+    WHERE COALESCE((candidates.billing->>'sisa_total')::numeric, 0) > 0
+       OR COALESCE((candidates.billing->>'belum_dialokasikan')::numeric, 0) > 0
   )
   SELECT owing.id_siswa, owing.nospp, owing.nama, owing.kdsek, owing.kdkls,
     owing.no_wa, owing.billing, count(*) OVER ()
