@@ -258,9 +258,14 @@ select:focus-visible {
   border-radius: 999px;
 }
 
+.filter-pill[hidden] {
+  display: none;
+}
+
 .filter-pill label {
   font-size: 0.8rem;
   color: var(--muted);
+  white-space: nowrap;
 }
 
 .filter-pill select {
