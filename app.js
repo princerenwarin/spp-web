@@ -54,7 +54,8 @@ const app = {
   currentPage: 'dashboard',
   useSupabase: false,
   settingsReady: false,
-  adminCredentials: null
+  adminCredentials: null,
+  selectedStudents: new Set()
 };
 
 const pageMap = {
@@ -89,6 +90,15 @@ const ui = {
   studentSpp: document.getElementById('studentSpp'),
   studentKomp: document.getElementById('studentKomp'),
   studentTools: document.getElementById('studentTools'),
+  arrearsTools: document.getElementById('arrearsTools'),
+  arrearStudent: document.getElementById('arrearStudent'),
+  arrearTahun: document.getElementById('arrearTahun'),
+  arrearJenis: document.getElementById('arrearJenis'),
+  arrearNominal: document.getElementById('arrearNominal'),
+  arrearKet: document.getElementById('arrearKet'),
+  arrearsBody: document.getElementById('arrearsBody'),
+  selectedCount: document.getElementById('selectedCount'),
+  selectAllStudents: document.getElementById('selectAllStudents'),
   bulkGiat: document.getElementById('bulkGiat'),
   bulkStaffMode: document.getElementById('bulkStaffMode'),
   importFile: document.getElementById('importFile'),
@@ -329,7 +339,7 @@ async function loadSupabaseData() {
   }
 
   try {
-    const [schoolsRes, mastankRes, mastsppRes, pembayaranRes, bankSettingsRes, schoolSettingsRes, schoolClassesRes, vaSettingsRes, appStudentsRes, appEnrollmentsRes] = await Promise.all([
+    const [schoolsRes, mastankRes, mastsppRes, pembayaranRes, bankSettingsRes, schoolSettingsRes, schoolClassesRes, vaSettingsRes, appStudentsRes, appEnrollmentsRes, arrearsRes] = await Promise.all([
       app.supabase.from('mastsek').select('*'),
       app.supabase.from('mastank').select('*'),
       app.supabase.from('mastspp').select('*'),
@@ -339,7 +349,8 @@ async function loadSupabaseData() {
       app.supabase.from('spp_app_school_classes').select('school_code, class_name, is_active'),
       app.supabase.from('spp_app_va_settings').select('config_id, bank_name, va_prefix, is_active'),
       app.supabase.from('spp_app_students').select('*'),
-      app.supabase.from('spp_app_enrollments').select('*')
+      app.supabase.from('spp_app_enrollments').select('*'),
+      app.supabase.from('spp_app_arrears').select('*').order('id')
     ]);
     const studentRulesRes = { students: appStudentsRes.data, enrollments: appEnrollmentsRes.data };
     app.studentRulesReady = !appStudentsRes.error && !appEnrollmentsRes.error;
@@ -420,6 +431,14 @@ async function loadSupabaseData() {
       ),
       users: [],
       siswa: fallbackSiswa,
+      arrears: arrearsRes.error ? [] : (arrearsRes.data || []).map((row) => ({
+        id: row.id,
+        idSiswa: String(row.id_siswa),
+        tahunAjaran: row.tahun_ajaran,
+        jenis: row.jenis,
+        keterangan: row.keterangan || '',
+        nominal: Number(row.nominal || 0)
+      })),
       transaksi: fallbackTransaksi
     };
   } catch (error) {
@@ -684,6 +703,7 @@ function applyUserAccess() {
   }
   ui.studentForm.hidden = !canManageSettings();
   ui.studentTools.hidden = !canManageSettings();
+  ui.arrearsTools.hidden = !canManageSettings();
   document.querySelectorAll('.admin-only').forEach((button) => {
     button.hidden = !canManageSettings();
   });
@@ -753,12 +773,17 @@ function getFilteredStudents() {
 function renderStudentTable() {
   const rows = getFilteredStudents();
   if (!rows.length) {
-    ui.studentTableBody.innerHTML = '<tr><td colspan="8" class="empty-state">Tidak ada data siswa yang cocok.</td></tr>';
+    ui.studentTableBody.innerHTML = '<tr><td colspan="9" class="empty-state">Tidak ada data siswa yang cocok.</td></tr>';
+    updateSelectionUi(rows);
     return;
   }
 
+  const admin = canManageSettings();
   ui.studentTableBody.innerHTML = rows.map((row) => {
-    const totalTagihan = Number(row.spp || 0) + Number(row.komp || 0);
+    const arrearsTotal = (app.state.arrears || [])
+      .filter((item) => item.idSiswa === String(row.id))
+      .reduce((sum, item) => sum + item.nominal, 0);
+    const totalTagihan = Number(row.spp || 0) + Number(row.komp || 0) + arrearsTotal;
     const totalBayar = app.state.transaksi
       .filter((tx) => tx.nospp === row.nospp)
       .reduce((sum, tx) => sum + Number(tx.nominal || 0), 0);
@@ -772,12 +797,13 @@ function renderStudentTable() {
 
     return `
       <tr>
+        <td class="admin-only" ${admin ? '' : 'hidden'}>${/^\d+$/.test(row.id) ? `<input type="checkbox" data-select-id="${escapeHtml(row.id)}" ${app.selectedStudents.has(row.id) ? 'checked' : ''} />` : ''}</td>
         <td>${row.nospp}</td>
         <td>${row.nama}</td>
         <td>${escapeHtml(getSchoolName(row.kdsek))}</td>
         <td>${row.kdkls}</td>
         <td>${virtualAccountMarkup}</td>
-        <td>${row.isStaffChild && row.showInBilling === false ? 'Tidak ditagih' : formatRupiah(totalTagihan)}</td>
+        <td>${row.isStaffChild && row.showInBilling === false ? 'Tidak ditagih' : formatRupiah(totalTagihan)}${arrearsTotal ? `<br><small>termasuk tunggakan ${formatRupiah(arrearsTotal)}</small>` : ''}</td>
         <td><span class="status-pill ${status === 'Lunas' ? 'lunas' : 'belum'}">${status}</span></td>
         <td>
           ${canManageSettings() && row.tahunAjaran ? `
@@ -787,6 +813,88 @@ function renderStudentTable() {
       </tr>
     `;
   }).join('');
+  updateSelectionUi(rows);
+}
+
+function updateSelectionUi(rows) {
+  const ids = rows.map((row) => row.id).filter((id) => /^\d+$/.test(id));
+  ui.selectedCount.textContent = String(app.selectedStudents.size);
+  ui.selectAllStudents.checked = ids.length > 0 && ids.every((id) => app.selectedStudents.has(id));
+}
+
+function getSelectedStudentIds() {
+  return [...app.selectedStudents];
+}
+
+function titleCase(value) {
+  return value.toLowerCase().replace(/(^|[\s.'-])(\p{L})/gu, (_, sep, letter) => sep + letter.toUpperCase());
+}
+
+function applyNameCase(input) {
+  const { selectionStart, selectionEnd } = input;
+  const next = titleCase(input.value);
+  if (next !== input.value) {
+    input.value = next;
+    input.setSelectionRange(selectionStart, selectionEnd);
+  }
+}
+
+function renderArrears() {
+  const students = new Map(app.state.siswa.map((item) => [String(item.id), item]));
+  const rows = app.state.arrears || [];
+  ui.arrearsBody.innerHTML = rows.length
+    ? rows.map((item) => {
+      const student = students.get(item.idSiswa);
+      return `
+        <tr>
+          <td>${escapeHtml(student ? student.nama : item.idSiswa)} (${escapeHtml(item.idSiswa)})</td>
+          <td>${escapeHtml(item.tahunAjaran)}</td>
+          <td>${escapeHtml(item.jenis)}</td>
+          <td>${escapeHtml(item.keterangan)}</td>
+          <td>${formatRupiah(item.nominal)}</td>
+          <td><button type="button" class="action-btn delete" data-arrear-delete="${item.id}">Hapus</button></td>
+        </tr>`;
+    }).join('')
+    : '<tr><td colspan="6" class="empty-state">Belum ada tagihan tahun lalu.</td></tr>';
+}
+
+async function addArrear() {
+  const idSiswa = ui.arrearStudent.value;
+  const nominal = parseMoney(ui.arrearNominal.value);
+  const tahun = ui.arrearTahun.value.trim();
+  if (!idSiswa || !/^\d{4}-\d{4}$/.test(tahun) || nominal <= 0) {
+    alert('Pilih siswa, isi tahun ajaran (contoh 2025-2026) dan nominal lebih dari 0.');
+    return;
+  }
+  try {
+    const credentials = requireStudentRules();
+    const { error } = await app.supabase.rpc('add_student_arrear_v1', {
+      ...credentials,
+      p_id_siswa: idSiswa,
+      p_tahun_ajaran: tahun,
+      p_jenis: ui.arrearJenis.value,
+      p_nominal: nominal,
+      p_keterangan: ui.arrearKet.value.trim()
+    });
+    if (error) throw error;
+    ui.arrearNominal.value = formatRupiah(0);
+    ui.arrearKet.value = '';
+    await reloadStudentData();
+  } catch (error) {
+    alert(error.message || 'Tagihan tahun lalu gagal disimpan. Pastikan migration 011 sudah dijalankan.');
+  }
+}
+
+async function deleteArrear(id) {
+  if (!window.confirm('Hapus tagihan tahun lalu ini?')) return;
+  try {
+    const credentials = requireStudentRules();
+    const { error } = await app.supabase.rpc('delete_student_arrear_v1', { ...credentials, p_id: Number(id) });
+    if (error) throw error;
+    await reloadStudentData();
+  } catch (error) {
+    alert(error.message || 'Tagihan gagal dihapus.');
+  }
 }
 
 function renderPaymentList() {
@@ -971,6 +1079,11 @@ function populateExistingStudents() {
     .filter((item) => /^\d+$/.test(item.id))
     .map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.id)} - ${escapeHtml(item.nama)} (${escapeHtml(item.kdkls)})</option>`);
   ui.studentExisting.innerHTML = `<option value="">Pilih siswa</option>${options.join('')}`;
+  ui.arrearStudent.innerHTML = ui.studentExisting.innerHTML;
+  if (!ui.arrearTahun.value) {
+    const [start] = currentAcademicYear().split('-').map(Number);
+    ui.arrearTahun.value = `${start - 1}-${start}`;
+  }
 }
 
 function resetStudentForm() {
@@ -991,7 +1104,7 @@ function buildStudentRow(source) {
     jenis: source.jenis,
     tahun_ajaran: source.tahun_ajaran,
     id_siswa: source.id_siswa || '',
-    nama: source.nama || '',
+    nama: titleCase(String(source.nama || '').trim()),
     no_wa: source.no_wa || '',
     kdsek: source.kdsek,
     kdkls: source.kdkls,
@@ -1020,9 +1133,10 @@ function requireStudentRules() {
 
 async function reloadStudentData() {
   const data = await loadSupabaseData();
-  if (data) app.state = { ...app.state, siswa: data.siswa, transaksi: data.transaksi };
+  if (data) app.state = { ...app.state, siswa: data.siswa, transaksi: data.transaksi, arrears: data.arrears };
   populateExistingStudents();
   renderStudentTable();
+  renderArrears();
   renderDashboard();
   renderReport();
 }
@@ -1086,38 +1200,43 @@ async function changeStudentSpp(nospp) {
 
 async function applyBulkActivity() {
   const giat = parseMoney(ui.bulkGiat.value);
-  const schoolFilter = ui.schoolFilter.value === 'all' ? '' : ui.schoolFilter.value;
+  const ids = getSelectedStudentIds();
   const tahun = ui.studentTahun.value.trim();
+  if (!ids.length) {
+    alert('Centang siswa di tabel terlebih dahulu.');
+    return;
+  }
   if (ui.bulkGiat.value === '' || !(giat >= 0)) {
     alert('Isi nominal kegiatan.');
     return;
   }
-  if (!window.confirm(`Set kegiatan ${formatRupiah(giat)} untuk semua siswa ${tahun}${schoolFilter ? ` di sekolah ${schoolFilter}` : ''}?`)) return;
+  if (!window.confirm(`Set kegiatan ${formatRupiah(giat)} untuk ${ids.length} siswa terpilih (tahun ajaran ${tahun})?`)) return;
   try {
     const credentials = requireStudentRules();
-    const { data, error } = await app.supabase.rpc('bulk_set_activity_fee_v1', {
-      ...credentials, p_tahun_ajaran: tahun, p_kdsek: schoolFilter, p_kdkls: '', p_giat: giat
+    const { data, error } = await app.supabase.rpc('bulk_set_activity_fee_ids_v1', {
+      ...credentials, p_tahun_ajaran: tahun, p_ids: ids, p_giat: giat
     });
     if (error) throw error;
+    await reloadStudentData();
     alert(`${data} siswa diperbarui.`);
   } catch (error) {
-    alert(error.message || 'Kegiatan massal gagal.');
+    alert(error.message || 'Kegiatan gagal diterapkan. Pastikan migration 011 sudah dijalankan.');
   }
 }
 
 async function applyBulkStaff() {
-  const rows = getFilteredStudents().filter((item) => /^\d+$/.test(item.id));
-  if (!rows.length) {
-    alert('Tidak ada siswa pada filter saat ini.');
+  const ids = getSelectedStudentIds();
+  if (!ids.length) {
+    alert('Centang siswa di tabel terlebih dahulu.');
     return;
   }
   const mode = ui.bulkStaffMode.value;
-  if (!window.confirm(`Terapkan ke ${rows.length} siswa yang tampil?`)) return;
+  if (!window.confirm(`Terapkan ke ${ids.length} siswa terpilih?`)) return;
   try {
     const credentials = requireStudentRules();
     const { error } = await app.supabase.rpc('bulk_set_staff_child_v1', {
       ...credentials,
-      p_ids: rows.map((item) => item.id),
+      p_ids: ids,
       p_is_staff_child: mode !== 'regular',
       p_show_in_billing: mode !== 'staff-hide'
     });
@@ -1574,6 +1693,28 @@ function setupEvents() {
   document.getElementById('bulkStaffBtn').addEventListener('click', applyBulkStaff);
   document.getElementById('templateBtn').addEventListener('click', downloadImportTemplate);
   document.getElementById('backupBtn').addEventListener('click', backupData);
+  document.getElementById('arrearAddBtn').addEventListener('click', addArrear);
+  ui.arrearsBody.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-arrear-delete]');
+    if (button) deleteArrear(button.dataset.arrearDelete);
+  });
+  ui.studentTableBody.addEventListener('change', (event) => {
+    const id = event.target.dataset && event.target.dataset.selectId;
+    if (!id) return;
+    if (event.target.checked) app.selectedStudents.add(id);
+    else app.selectedStudents.delete(id);
+    updateSelectionUi(getFilteredStudents());
+  });
+  ui.selectAllStudents.addEventListener('change', () => {
+    getFilteredStudents()
+      .map((row) => row.id)
+      .filter((id) => /^\d+$/.test(id))
+      .forEach((id) => (ui.selectAllStudents.checked ? app.selectedStudents.add(id) : app.selectedStudents.delete(id)));
+    renderStudentTable();
+  });
+  document.addEventListener('input', (event) => {
+    if (event.target.classList && event.target.classList.contains('name-input')) applyNameCase(event.target);
+  });
   document.addEventListener('input', (event) => {
     if (event.target.classList && event.target.classList.contains('money-input')) formatMoneyInput(event.target);
   });
@@ -1771,6 +1912,7 @@ function renderAll() {
   updateStudentFormMode();
   renderDashboard();
   renderStudentTable();
+  renderArrears();
   renderPaymentList();
   renderReport();
   renderSettings();

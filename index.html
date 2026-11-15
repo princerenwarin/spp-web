@@ -132,7 +132,7 @@
                 </label>
                 <label>
                   <span>Nama Siswa</span>
-                  <input id="studentNama" type="text" placeholder="Nama lengkap" />
+                  <input id="studentNama" class="name-input" type="text" placeholder="Nama lengkap" />
                 </label>
                 <label>
                   <span>WhatsApp</span>
@@ -186,11 +186,11 @@
             <div class="student-form admin-only" id="studentTools" hidden>
               <div class="student-form-grid">
                 <label>
-                  <span>Kegiatan massal (siswa yang tampil di filter)</span>
+                  <span>Kegiatan untuk siswa yang dicentang di tabel</span>
                   <input id="bulkGiat" class="money-input" type="text" inputmode="numeric" placeholder="Nominal kegiatan" />
                 </label>
                 <label>
-                  <span>Anak guru / karyawan</span>
+                  <span>Status anak guru untuk siswa yang dicentang</span>
                   <select id="bulkStaffMode">
                     <option value="staff-hide">Tandai anak guru - sembunyikan dari tagihan</option>
                     <option value="staff-show">Tandai anak guru - tetap tampil di tagihan</option>
@@ -198,6 +198,7 @@
                   </select>
                 </label>
               </div>
+              <p class="settings-description">Dicentang: <strong id="selectedCount">0</strong> siswa. Gunakan pencarian (misalnya kelas) lalu centang kotak di header tabel untuk memilih semua yang tampil.</p>
               <div class="form-actions">
                 <button type="button" class="secondary-button" id="bulkGiatBtn">Terapkan Kegiatan</button>
                 <button type="button" class="secondary-button" id="bulkStaffBtn">Terapkan Status Anak Guru</button>
@@ -216,10 +217,54 @@
               </div>
             </div>
 
+            <div class="student-form admin-only" id="arrearsTools" hidden>
+              <h4>Tagihan Tahun Lalu (input manual)</h4>
+              <div class="student-form-grid">
+                <label>
+                  <span>Siswa</span>
+                  <select id="arrearStudent"></select>
+                </label>
+                <label>
+                  <span>Tahun Ajaran</span>
+                  <input id="arrearTahun" type="text" pattern="[0-9]{4}-[0-9]{4}" placeholder="2025-2026" />
+                </label>
+                <label>
+                  <span>Jenis</span>
+                  <select id="arrearJenis">
+                    <option value="spp">SPP</option>
+                    <option value="dpp">DPP</option>
+                    <option value="dsp">DPS</option>
+                    <option value="seragam">Seragam</option>
+                    <option value="kegiatan">Kegiatan</option>
+                    <option value="komputer">Komputer</option>
+                    <option value="lainnya">Lainnya</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Nominal</span>
+                  <input id="arrearNominal" class="money-input" type="text" inputmode="numeric" value="0" />
+                </label>
+                <label>
+                  <span>Keterangan</span>
+                  <input id="arrearKet" type="text" maxlength="200" placeholder="contoh: SPP Mei-Juni 2026" />
+                </label>
+              </div>
+              <div class="form-actions">
+                <button type="button" class="secondary-button" id="arrearAddBtn">Tambah Tagihan Tahun Lalu</button>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Siswa</th><th>Tahun Ajaran</th><th>Jenis</th><th>Keterangan</th><th>Nominal</th><th>Aksi</th></tr></thead>
+                  <tbody id="arrearsBody"></tbody>
+                </table>
+              </div>
+            </div>
+
             <div class="table-wrap">
               <table>
                 <thead>
                   <tr>
+                    <th class="admin-only" hidden><input type="checkbox" id="selectAllStudents" title="Pilih semua yang tampil" /></th>
                     <th>No. SPP</th>
                     <th>Nama</th>
                     <th>Sekolah</th>
@@ -250,7 +295,7 @@
                 </label>
                 <label>
                   <span>Nama Siswa</span>
-                  <input name="nama" type="text" placeholder="Nama siswa" />
+                  <input name="nama" class="name-input" type="text" placeholder="Nama siswa" />
                 </label>
                 <label>
                   <span>Periode</span>

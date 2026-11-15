@@ -30,5 +30,6 @@ Aplikasi ini adalah starter web yang menggunakan Supabase sebagai backend untuk 
 - Untuk sistem produksi lebih aman, sebaiknya migrasikan ke auth Supabase dan hapus password plaintext dari tabel legacy.
 - Data sekolah dibaca dari `mastsek`, data siswa dari `mastspp`/`mastank`, dan transaksi dari `pembayaran`.
 - Jalankan `./supabase/010_student_rules.sql` setelah 009 (backup dulu). Migration ini menyimpan data siswa (baru/naik kelas, no. SPP otomatis, riwayat SPP, log, import CSV) lewat RPC khusus Admin. Data siswa tetap terbaca dengan anon key.
+- Jalankan `./supabase/011_student_selection_arrears.sql` setelah 010. Uang kegiatan/anak guru kini berlaku untuk siswa yang dicentang, dan ada input manual tagihan tahun lalu (tunggakan).
 - Form siswa, Ubah SPP, kegiatan massal, anak guru, dan import CSV (bukan .xlsx) hanya untuk Admin dan ditulis ke Supabase. Login ulang sebagai Admin setelah deploy.
 - Perubahan pembayaran saat ini masih hanya disimpan di browser, bukan ditulis ke Supabase.
