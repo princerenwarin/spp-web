@@ -6,7 +6,7 @@
     <title>Sistem SPP - Supabase</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="./styles.css" />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.js"></script>
   </head>
@@ -16,19 +16,23 @@
         <div class="brand-box">
           <img class="brand-mark" src="./assets/kombinasi.png" alt="Logo Yayasan Santo Dominikus dan KSP. CU Karsa Kencana Mitra Sejahtera" />
           <div class="brand-copy">
-            <p class="eyebrow">Portal kolaborasi</p>
             <h1>Laporan SPP</h1>
+            <p class="eyebrow">Portal kolaborasi</p>
             <p class="brand-partnership">Yayasan Santo Dominikus dan KSP. CU Karsa Kencana Mitra Sejahtera</p>
           </div>
         </div>
 
-        <nav class="menu">
-          <button class="nav active" data-page="dashboard">Dashboard</button>
-          <button class="nav" data-page="siswa">Data Siswa</button>
-          <button class="nav" data-page="pembayaran">Pembayaran</button>
-          <button class="nav" data-page="laporan">Laporan</button>
-          <button class="nav admin-only" data-page="sekolah" hidden>Sekolah</button>
-          <button class="nav admin-only" data-page="bank" hidden>Bank</button>
+        <nav class="menu" aria-label="Tahap utama dan pengaturan admin">
+          <div class="workflow-path">
+            <button class="nav active" data-stage data-page="dashboard" aria-current="page">Dashboard</button>
+            <button class="nav" data-stage data-page="siswa">Data Siswa</button>
+            <button class="nav" data-stage data-page="pembayaran">Pembayaran</button>
+            <button class="nav" data-stage data-page="laporan">Laporan</button>
+          </div>
+          <div class="admin-nav">
+            <button class="nav admin-only" data-page="sekolah" hidden>Sekolah</button>
+            <button class="nav admin-only" data-page="bank" hidden>Bank</button>
+          </div>
         </nav>
 
         <div class="sidebar-footer">
@@ -44,7 +48,6 @@
       <main class="main-panel">
         <header class="topbar">
           <div>
-            <p class="eyebrow">Dashboard</p>
             <h2 id="pageTitle">Overview</h2>
           </div>
           <div class="topbar-actions">
@@ -388,8 +391,8 @@
         <section class="page" id="laporanPage">
           <div class="report-hero">
             <div>
-              <p class="eyebrow report-eyebrow">Ringkasan</p>
               <h3>Laporan Pembayaran SPP</h3>
+              <p class="report-eyebrow">Ringkasan</p>
             </div>
             <div class="report-pill">Periode: <strong id="reportPeriod">2026</strong></div>
           </div>
@@ -546,8 +549,8 @@
         </div>
 
         <div class="login-title-wrap">
-          <p class="eyebrow login-eyebrow">Portal kolaborasi antarlembaga</p>
           <h1>Laporan SPP</h1>
+          <p class="login-context">Portal kolaborasi antarlembaga</p>
           <p class="login-subtitle">Satu portal layanan untuk pengelolaan dan pemantauan SPP.</p>
           <p class="login-partnership">
             <span>Yayasan Santo Dominikus Cimahi</span>

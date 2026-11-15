@@ -697,8 +697,15 @@ function setPage(pageName) {
   });
 
   document.querySelectorAll('.nav').forEach((button) => {
-    button.classList.toggle('active', button.dataset.page === pageName);
+    const isCurrentPage = button.dataset.page === pageName;
+    button.classList.toggle('active', isCurrentPage);
+    if (isCurrentPage) {
+      button.setAttribute('aria-current', 'page');
+    } else {
+      button.removeAttribute('aria-current');
+    }
   });
+  requestAnimationFrame(updateCourseIndicator);
 
   ui.pageTitle.textContent = {
     dashboard: 'Overview',
@@ -738,10 +745,41 @@ function canAccessAllReports() {
   return !!app.user && (app.user.role === 'superadmin' || app.user.role === 'yayasan');
 }
 
+function updateCourseIndicator() {
+  const workflowPath = document.querySelector('.workflow-path');
+  if (!workflowPath) return;
+
+  const stages = Array.from(workflowPath.querySelectorAll('.nav[data-stage]'))
+    .filter((button) => !button.hidden && button.getClientRects().length > 0);
+  if (!stages.length) return;
+
+  const trackRect = workflowPath.getBoundingClientRect();
+  const firstRect = stages[0].getBoundingClientRect();
+  const lastRect = stages[stages.length - 1].getBoundingClientRect();
+  const activeStage = stages.find((button) => button.classList.contains('active'));
+  const activeRect = activeStage ? activeStage.getBoundingClientRect() : firstRect;
+  const center = (rect) => rect.left - trackRect.left + rect.width / 2;
+  const courseStart = center(firstRect);
+  const courseEnd = center(activeRect);
+  const courseTrackEnd = center(lastRect);
+
+  workflowPath.style.setProperty('--course-start', `${courseStart}px`);
+  workflowPath.style.setProperty('--course-end', `${courseEnd}px`);
+  workflowPath.style.setProperty('--course-track-end', `${courseTrackEnd}px`);
+  workflowPath.style.setProperty(
+    '--course-progress',
+    String(courseTrackEnd > courseStart ? (courseEnd - courseStart) / (courseTrackEnd - courseStart) : 0)
+  );
+  workflowPath.classList.toggle('has-active-stage', !!activeStage);
+}
+
+window.addEventListener('resize', updateCourseIndicator);
+document.fonts.ready.then(updateCourseIndicator);
+
 function applyUserAccess() {
   const paymentNav = document.querySelector('.nav[data-page="pembayaran"]');
   if (paymentNav) {
-    paymentNav.style.display = canAccessPayment() ? 'block' : 'none';
+    paymentNav.hidden = !canAccessPayment();
   }
   ui.studentForm.hidden = !canManageSettings();
   ui.studentTools.hidden = !canManageSettings();
@@ -749,6 +787,7 @@ function applyUserAccess() {
   document.querySelectorAll('.admin-only').forEach((button) => {
     button.hidden = !canManageSettings();
   });
+  requestAnimationFrame(updateCourseIndicator);
 
   const allowedSchools = app.state.schools.filter((school) => getAllowedSchoolCodes().includes(school.kdsek));
   const schoolFilterOptions = ['<option value="all">Semua</option>']
