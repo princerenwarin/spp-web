@@ -55,19 +55,37 @@ const app = {
   useSupabase: false,
   settingsReady: false,
   adminCredentials: null,
+  dashboardCredentials: null,
   selectedStudents: new Set(),
   selectedNames: new Map(),
   pickerCache: new Map(),
   server: false,
   years: [],
   usedSchools: new Set(),
-  paging: { students: 0, payments: 0, detail: 0 },
-  totals: { students: 0, payments: 0, detail: 0 },
+  paging: { students: 0, payments: 0 },
+  totals: { students: 0, payments: 0 },
   dash: null,
-  reportRows: null
+  reportRows: null,
+  arrearsOffset: 0,
+  arrearsTotal: 0,
+  arrearsRows: []
 };
 
 const PAGE_SIZE = 25;
+const ARREARS_PAGE_SIZE = 100;
+const PAYMENT_COMPONENTS = [
+  ['spp', 'SPP bulanan'],
+  ['komp', 'Komputer bulanan'],
+  ['giat', 'Kegiatan'],
+  ['dpp', 'DPP'],
+  ['dpp_tl', 'DPP tahun lalu'],
+  ['dsp', 'DSP'],
+  ['seragam', 'Seragam'],
+  ['spp_tl', 'SPP tahun lalu'],
+  ['komp_tl', 'Komputer tahun lalu'],
+  ['lainnya', 'Lainnya']
+];
+const REVENUE_COLORS = ['#176b55', '#4968d4', '#b26b1c', '#7652a8', '#c34c5b', '#267d91', '#7b7f25', '#a05083'];
 
 const pageMap = {
   dashboard: document.getElementById('dashboardPage'),
@@ -129,23 +147,38 @@ const ui = {
   studentResetBtn: document.getElementById('studentResetBtn'),
   studentCloseBtn: document.getElementById('studentCloseBtn'),
   activityList: document.getElementById('activityList'),
-  reportList: document.getElementById('reportList'),
-  reportTable: document.getElementById('reportTable'),
-  detailReportTable: document.getElementById('detailReportTable'),
   reportPeriod: document.getElementById('reportPeriod'),
-  reportSummaryStudents: document.getElementById('reportSummaryStudents'),
-  reportSummaryStudentsMeta: document.getElementById('reportSummaryStudentsMeta'),
-  reportSummaryTagihan: document.getElementById('reportSummaryTagihan'),
-  reportSummaryTerbayar: document.getElementById('reportSummaryTerbayar'),
-  reportSummaryBelum: document.getElementById('reportSummaryBelum'),
+  reportYearFilter: document.getElementById('reportYearFilter'),
+  reportPeriodFilter: document.getElementById('reportPeriodFilter'),
+  reportClassFilter: document.getElementById('reportClassFilter'),
+  arrearsReportTable: document.getElementById('arrearsReportTable'),
+  arrearsReportCount: document.getElementById('arrearsReportCount'),
+  arrearsPageInfo: document.getElementById('arrearsPageInfo'),
+  loadMoreArrears: document.getElementById('loadMoreArrears'),
+  legacyPaymentNote: document.getElementById('legacyPaymentNote'),
+  arrearsPrintSheet: document.getElementById('arrearsPrintSheet'),
   paymentList: document.getElementById('paymentList'),
   totalSiswa: document.getElementById('totalSiswa'),
   totalTagihan: document.getElementById('totalTagihan'),
   paymentThisMonth: document.getElementById('paymentThisMonth'),
   totalTransaksi: document.getElementById('totalTransaksi'),
+  financeDashboard: document.getElementById('financeDashboard'),
+  unitDashboard: document.getElementById('unitDashboard'),
+  unitDashboardYear: document.getElementById('unitDashboardYear'),
+  unitDashboardStudents: document.getElementById('unitDashboardStudents'),
+  unitDashboardStatus: document.getElementById('unitDashboardStatus'),
+  revenueLegend: document.getElementById('revenueLegend'),
+  revenueChart: document.getElementById('revenueChart'),
+  revenueTableHead: document.getElementById('revenueTableHead'),
+  revenueTableBody: document.getElementById('revenueTableBody'),
+  priorYearRevenueBody: document.getElementById('priorYearRevenueBody'),
   paymentBankName: document.getElementById('paymentBankName'),
   searchStudent: document.getElementById('searchStudent'),
   paymentForm: document.getElementById('paymentForm'),
+  paymentComponentRows: document.getElementById('paymentComponentRows'),
+  paymentAllocationTotal: document.getElementById('paymentAllocationTotal'),
+  addPaymentComponent: document.getElementById('addPaymentComponent'),
+  refreshRevenue: document.getElementById('refreshRevenue'),
   loginForm: document.getElementById('loginForm'),
   schoolSettingsForm: document.getElementById('schoolSettingsForm'),
   schoolSettingsTableBody: document.getElementById('schoolSettingsTableBody'),
@@ -349,6 +382,7 @@ function normalizeSupabaseTransaction(row) {
     kdsek: String(kdsek),
     periode: row.periode || row.tglbyr || '',
     nominal: Number(row.nominal || row.jumlah_bayar || 0),
+    component: row.component || 'legacy',
     tglbyr: row.tglbyr || row.tanggal_bayar || new Date().toISOString().slice(0, 10),
     idpemakai: row.idpemakai || row.id_pengguna || 'admin',
     ket: row.ket || row.keterangan || 'Pembayaran via web'
@@ -678,6 +712,15 @@ function formatRupiah(value) {
   }).format(amount);
 }
 
+function formatRupiahCompact(value) {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    notation: 'compact',
+    maximumFractionDigits: 1
+  }).format(Number(value || 0));
+}
+
 function setPage(pageName) {
   if (!pageMap[pageName]) return;
 
@@ -739,10 +782,6 @@ function canAccessPayment() {
 
 function canManageSettings() {
   return canAccessPayment();
-}
-
-function canAccessAllReports() {
-  return !!app.user && (app.user.role === 'superadmin' || app.user.role === 'yayasan');
 }
 
 function updateCourseIndicator() {
@@ -1188,7 +1227,7 @@ let paymentFetchSeq = 0;
 async function fetchPaymentPage() {
   if (!app.user) return;
   const seq = ++paymentFetchSeq;
-  ui.paymentList.innerHTML = skeletonRows(6);
+  ui.paymentList.innerHTML = skeletonRows(7);
   let query = app.supabase.from('spp_app_payment_list').select('*', { count: 'exact' });
   const school = currentSchoolScope();
   const keyword = cleanKeyword(ui.paymentSearch.value);
@@ -1200,7 +1239,7 @@ async function fetchPaymentPage() {
     .range(from, from + PAGE_SIZE - 1);
   if (seq !== paymentFetchSeq) return;
   if (error) {
-    ui.paymentList.innerHTML = `<tr><td colspan="6" class="empty-state">Data gagal dimuat: ${escapeHtml(error.message)}</td></tr>`;
+    ui.paymentList.innerHTML = `<tr><td colspan="7" class="empty-state">Data gagal dimuat: ${escapeHtml(error.message)}</td></tr>`;
     return;
   }
   app.state.transaksi = (data || []).map(normalizeSupabaseTransaction);
@@ -1222,7 +1261,7 @@ function drawPaymentList() {
   if (app.server) renderPager('payments', app.totals.payments);
 
   if (!rows.length) {
-    ui.paymentList.innerHTML = '<tr><td colspan="6" class="empty-state">Belum ada riwayat pembayaran.</td></tr>';
+    ui.paymentList.innerHTML = '<tr><td colspan="7" class="empty-state">Belum ada riwayat pembayaran.</td></tr>';
     return;
   }
 
@@ -1230,6 +1269,7 @@ function drawPaymentList() {
     <tr>
       <td>${escapeHtml(row.nospp)}</td>
       <td>${escapeHtml(row.nama || '-')}</td>
+      <td>${escapeHtml(getPaymentComponentLabel(row.component))}</td>
       <td>${escapeHtml(row.periode || '-')}</td>
       <td>${escapeHtml(row.tglbyr)}</td>
       <td>${formatRupiah(row.nominal)}</td>
@@ -1254,216 +1294,530 @@ function getAccessibleTransactionRows() {
   return app.state.transaksi.filter((row) => row.kdsek === app.user.unit);
 }
 
+function getPaymentComponentLabel(component) {
+  if (component === 'legacy' || !component) return 'Belum dialokasikan';
+  return PAYMENT_COMPONENTS.find(([key]) => key === component)?.[1] || 'Lainnya';
+}
+
+function academicMonths(year) {
+  const start = Number(String(year || currentAcademicYear()).slice(0, 4));
+  return Array.from({ length: 12 }, (_, index) => {
+    const date = new Date(Date.UTC(start, 6 + index, 1));
+    return {
+      key: date.toISOString().slice(0, 7),
+      label: new Intl.DateTimeFormat('id-ID', { month: 'short', timeZone: 'UTC' }).format(date)
+    };
+  });
+}
+
+function localMonthInputValue(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function renderRevenueDashboard(rows, year) {
+  const monthlyRows = Array.isArray(rows) ? rows : [];
+  const monthList = academicMonths(year);
+  const schoolCodes = [...new Set(monthlyRows.map((row) => String(row.kdsek || '')).filter(Boolean))]
+    .sort((a, b) => getSchoolName(a).localeCompare(getSchoolName(b), 'id'));
+  const schoolColors = new Map(schoolCodes.map((code, index) => [code, REVENUE_COLORS[index % REVENUE_COLORS.length]]));
+  const values = new Map();
+  monthlyRows.forEach((row) => {
+    const monthKey = String(row.bulan || '').slice(0, 7);
+    values.set(`${row.kdsek}|${monthKey}`, {
+      amount: Number(row.pemasukan || 0),
+      transactions: Number(row.transaksi || 0)
+    });
+  });
+
+  const maximum = Math.max(0, ...monthlyRows.map((row) => Number(row.pemasukan || 0)));
+  ui.revenueLegend.innerHTML = schoolCodes.map((code) => `
+    <span class="revenue-legend-item">
+      <i style="--legend-color:${schoolColors.get(code)}" aria-hidden="true"></i>
+      ${escapeHtml(getSchoolName(code))}
+    </span>
+  `).join('') || '<span class="empty-state">Belum ada pemasukan pada tahun ajaran ini.</span>';
+
+  ui.revenueChart.innerHTML = monthList.map((month) => {
+    const bars = schoolCodes.map((code) => {
+      const value = values.get(`${code}|${month.key}`)?.amount || 0;
+      const height = maximum > 0 && value > 0 ? Math.max(3, value / maximum * 100) : 0;
+      return `<span class="revenue-bar" style="--bar-height:${height}%;--bar-color:${schoolColors.get(code)}" title="${escapeHtml(getSchoolName(code))}: ${escapeHtml(formatRupiah(value))}"></span>`;
+    }).join('');
+    const monthTotal = schoolCodes.reduce((sum, code) => sum + (values.get(`${code}|${month.key}`)?.amount || 0), 0);
+    return `<div class="revenue-month">
+      <strong>${formatRupiahCompact(monthTotal)}</strong>
+      <div class="revenue-bars" aria-hidden="true">${bars || '<span class="revenue-bar empty"></span>'}</div>
+      <span>${escapeHtml(month.label)}</span>
+    </div>`;
+  }).join('');
+
+  ui.revenueTableHead.innerHTML = `<tr><th>Bulan</th>${schoolCodes.map((code) => (
+    `<th>${escapeHtml(getSchoolName(code))}</th>`
+  )).join('')}<th>Total</th></tr>`;
+  ui.revenueTableBody.innerHTML = monthList.map((month) => {
+    const total = schoolCodes.reduce((sum, code) => sum + (values.get(`${code}|${month.key}`)?.amount || 0), 0);
+    return `<tr><th scope="row">${escapeHtml(month.label)}</th>${schoolCodes.map((code) => (
+      `<td>${formatRupiah(values.get(`${code}|${month.key}`)?.amount || 0)}</td>`
+    )).join('')}<td><strong>${formatRupiah(total)}</strong></td></tr>`;
+  }).join('');
+
+  return {
+    totalRevenue: monthlyRows.reduce((sum, row) => sum + Number(row.pemasukan || 0), 0),
+    totalTransactions: monthlyRows.reduce((sum, row) => sum + Number(row.transaksi || 0), 0),
+    currentMonthRevenue: monthlyRows
+      .filter((row) => String(row.bulan || '').slice(0, 7) === localMonthInputValue())
+      .reduce((sum, row) => sum + Number(row.pemasukan || 0), 0)
+  };
+}
+
+function renderActivityList(rows) {
+  ui.activityList.innerHTML = (rows || []).map((item) => `
+    <li>
+      <div>
+        <strong>${escapeHtml(item.nospp || '-')}</strong>
+        <small>${escapeHtml(item.nama || 'Siswa')} &bull; ${escapeHtml(item.tglbyr || '-')}</small>
+      </div>
+      <strong>${formatRupiah(Number(item.nominal || 0))}</strong>
+    </li>
+  `).join('') || '<li class="empty-state">Belum ada aktivitas pembayaran.</li>';
+}
+
+function renderPriorYearRevenue(rows) {
+  ui.priorYearRevenueBody.innerHTML = (rows || []).map((row) => {
+    const dppDue = Number(row.dpp_tagihan || 0);
+    const dppPaid = Number(row.dpp_terbayar || 0);
+    const sppDue = Number(row.spp_tl_tagihan || 0);
+    const sppPaid = Number(row.spp_tl_terbayar || 0);
+    const remaining = Math.max(dppDue - dppPaid, 0) + Math.max(sppDue - sppPaid, 0);
+    return `<tr>
+      <th scope="row">${escapeHtml(getSchoolName(row.kdsek))}</th>
+      <td>${formatRupiah(dppDue)}</td>
+      <td>${formatRupiah(dppPaid)}</td>
+      <td>${formatRupiah(sppDue)}</td>
+      <td>${formatRupiah(sppPaid)}</td>
+      <td><strong>${formatRupiah(remaining)}</strong></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" class="empty-state">Tidak ada tagihan DPP/SPP tahun lalu pada unit ini.</td></tr>';
+}
+
+let dashboardFetchSeq = 0;
+
+function showRevenueLoadError(message) {
+  ui.revenueChart.innerHTML = `<p class="empty-state">Dashboard gagal dimuat: ${escapeHtml(message)}. Pastikan migration 016 sudah dijalankan dan schema Supabase sudah diperbarui.</p>`;
+  ui.revenueLegend.innerHTML = '';
+  ui.revenueTableHead.innerHTML = '';
+  ui.revenueTableBody.innerHTML = '';
+  ui.priorYearRevenueBody.innerHTML = `<tr><td colspan="6" class="empty-state">${escapeHtml(message)}</td></tr>`;
+  ui.totalSiswa.textContent = '-';
+  ui.totalTagihan.textContent = '-';
+  ui.paymentThisMonth.textContent = '-';
+  ui.totalTransaksi.textContent = '-';
+  ui.activityList.innerHTML = '<li class="empty-state">Aktivitas tidak dapat dimuat.</li>';
+}
+
 async function fetchDashboard() {
   if (!app.user) return;
-  const { data, error } = await app.supabase.rpc('spp_app_dashboard_v1', {
-    p_tahun: currentYearScope(),
-    p_kdsek: currentSchoolScope()
-  });
-  if (error || !data) return;
-  ui.totalSiswa.textContent = Number(data.siswa || 0).toLocaleString('id-ID');
-  ui.totalTagihan.textContent = formatRupiah(Number(data.tagihan || 0));
-  ui.paymentThisMonth.textContent = formatRupiah(Number(data.bulan_ini || 0));
-  ui.totalTransaksi.textContent = Number(data.transaksi || 0).toLocaleString('id-ID');
-  ui.activityList.innerHTML = (data.terbaru || []).map((item) => `
-      <li>
-        <div>
-          <strong>${escapeHtml(item.nospp)}</strong>
-          <small>${escapeHtml(item.nama || 'Siswa')} &bull; ${escapeHtml(item.tglbyr)}</small>
-        </div>
-        <strong>${formatRupiah(Number(item.nominal))}</strong>
-      </li>`).join('');
+  const seq = ++dashboardFetchSeq;
+  const year = currentYearScope() || currentAcademicYear();
+
+  if (app.user.role === 'unit') {
+    ui.financeDashboard.hidden = true;
+    ui.unitDashboard.hidden = false;
+    ui.unitDashboardYear.textContent = year;
+    const { data, error } = await app.supabase.rpc('spp_app_student_count_v1', {
+      p_tahun: year,
+      p_kdsek: app.user.unit
+    });
+    if (seq !== dashboardFetchSeq) return;
+    ui.unitDashboardStudents.textContent = error ? '—' : Number(data || 0).toLocaleString('id-ID');
+    ui.unitDashboardStatus.textContent = error
+      ? `Jumlah murid gagal dimuat: ${error.message}. Pastikan migration 016 sudah dijalankan.`
+      : '';
+    return;
+  }
+
+  ui.unitDashboard.hidden = true;
+  ui.financeDashboard.hidden = false;
+  ui.totalSiswa.textContent = '—';
+  ui.totalTagihan.textContent = '—';
+  ui.paymentThisMonth.textContent = '—';
+  ui.totalTransaksi.textContent = '—';
+  ui.revenueChart.innerHTML = '<p class="empty-state">Memuat pemasukan...</p>';
+  ui.priorYearRevenueBody.innerHTML = '<tr><td colspan="6" class="empty-state">Memuat rekap...</td></tr>';
+  if (!app.dashboardCredentials) {
+    showRevenueLoadError('Silakan keluar lalu masuk kembali untuk memuat dashboard Admin/Yayasan.');
+    return;
+  }
+
+  try {
+    const [countResult, revenueResult, priorYearResult, activityResult] = await Promise.all([
+      app.supabase.rpc('spp_app_student_count_v1', { p_tahun: year, p_kdsek: null }),
+      app.supabase.rpc('spp_app_revenue_by_unit_v1', {
+        p_username: app.dashboardCredentials.username,
+        p_password: app.dashboardCredentials.password,
+        p_tahun: year
+      }),
+      app.supabase.rpc('spp_app_prior_year_revenue_v1', {
+        p_username: app.dashboardCredentials.username,
+        p_password: app.dashboardCredentials.password,
+        p_tahun: year
+      }),
+      app.supabase.from('spp_app_payment_list').select('nospp,nama,tglbyr,nominal')
+        .order('tglbyr', { ascending: false }).order('id', { ascending: false }).limit(5)
+    ]);
+    if (seq !== dashboardFetchSeq) return;
+    if (countResult.error) throw countResult.error;
+    if (revenueResult.error) throw revenueResult.error;
+    if (priorYearResult.error) throw priorYearResult.error;
+    if (activityResult.error) throw activityResult.error;
+
+    ui.totalSiswa.textContent = Number(countResult.data || 0).toLocaleString('id-ID');
+    const totals = renderRevenueDashboard(revenueResult.data || [], year);
+    renderPriorYearRevenue(priorYearResult.data || []);
+    ui.totalTagihan.textContent = formatRupiah(totals.totalRevenue);
+    ui.paymentThisMonth.textContent = formatRupiah(totals.currentMonthRevenue);
+    ui.totalTransaksi.textContent = totals.totalTransactions.toLocaleString('id-ID');
+    renderActivityList(activityResult.data || []);
+  } catch (error) {
+    if (seq !== dashboardFetchSeq) return;
+    showRevenueLoadError(error.message || 'Periksa migration 016 dan koneksi Supabase.');
+  }
 }
 
 function renderDashboard() {
-  if (app.server) return fetchDashboard();
-  const siswa = getAccessibleStudentRows();
-  const transaksi = getAccessibleTransactionRows();
-  const totalSiswa = siswa.length;
-  const totalTagihan = siswa.reduce((sum, item) => sum + feeTotal(item), 0);
-  const bulanIni = new Date().getMonth() + 1;
-  const thisMonth = transaksi
-    .filter((item) => {
-      const d = new Date(item.tglbyr);
-      return d.getMonth() + 1 === bulanIni && d.getFullYear() === new Date().getFullYear();
-    })
-    .reduce((sum, item) => sum + Number(item.nominal || 0), 0);
-
-  ui.totalSiswa.textContent = totalSiswa.toLocaleString('id-ID');
-  ui.totalTagihan.textContent = formatRupiah(totalTagihan);
-  ui.paymentThisMonth.textContent = formatRupiah(thisMonth);
-  ui.totalTransaksi.textContent = transaksi.length.toLocaleString('id-ID');
-
-  ui.activityList.innerHTML = [...transaksi]
-    .sort((a, b) => new Date(b.tglbyr) - new Date(a.tglbyr))
-    .slice(0, 5)
-    .map((item) => `
-      <li>
-        <div>
-          <strong>${item.nospp}</strong>
-          <small>${item.nama || 'Siswa'} • ${item.tglbyr}</small>
-        </div>
-        <strong>${formatRupiah(item.nominal)}</strong>
-      </li>
-    `)
-    .join('');
-}
-
-function drawReportSummary(summary, totalStudents, totalTagihan, totalTerbayar) {
-  const totalBelum = Math.max(totalTagihan - totalTerbayar, 0);
-
-  const now = new Date();
-  const period = app.server && currentYearScope()
-    ? currentYearScope()
-    : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  ui.reportPeriod.textContent = period;
-  ui.reportSummaryStudents.textContent = totalStudents.toLocaleString('id-ID');
-  ui.reportSummaryStudentsMeta.textContent = `${summary.reduce((sum, row) => sum + row.jumlah, 0).toLocaleString('id-ID')} siswa aktif`;
-  ui.reportSummaryTagihan.textContent = formatRupiah(totalTagihan);
-  ui.reportSummaryTerbayar.textContent = formatRupiah(totalTerbayar);
-  ui.reportSummaryBelum.textContent = formatRupiah(totalBelum);
-
-  ui.reportList.innerHTML = summary.map((row) => `
-    <div class="report-item">
-      <div class="report-item-meta">
-        <span class="report-badge">${row.jumlah} siswa</span>
-        <strong>${escapeHtml(row.school)}</strong>
-      </div>
-      <div class="report-item-metrics">
-        <span>Tagihan <strong>${formatRupiah(row.totalTagihan)}</strong></span>
-        <span>Terbayar <strong>${formatRupiah(row.totalTerbayar)}</strong></span>
-        <span>Belum <strong>${formatRupiah(row.belum)}</strong></span>
-      </div>
-    </div>
-  `).join('');
-
-  ui.reportTable.innerHTML = summary.map((row) => `
-    <tr>
-      <td>${escapeHtml(row.school)}</td>
-      <td>${row.jumlah}</td>
-      <td>${formatRupiah(row.totalTagihan)}</td>
-      <td>${formatRupiah(row.totalTerbayar)}</td>
-      <td>${formatRupiah(row.belum)}</td>
-    </tr>
-  `).join('');
-}
-
-function detailRowMarkup(row, totalTagihan, totalTerbayar, lastPaid) {
-  const sisa = Math.max(totalTagihan - totalTerbayar, 0);
-  const status = totalTerbayar >= totalTagihan ? 'Lunas' : 'Belum';
-  return `
-      <tr>
-        <td>${escapeHtml(row.nospp)}</td>
-        <td>${escapeHtml(row.nama)}</td>
-        <td>${escapeHtml(getSchoolName(row.kdsek))}</td>
-        <td>${escapeHtml(row.kdkls)}</td>
-        <td>${formatRupiah(totalTagihan)}</td>
-        <td>${formatRupiah(totalTerbayar)}</td>
-        <td>${formatRupiah(sisa)}</td>
-        <td><span class="status-pill ${status === 'Lunas' ? 'lunas' : 'belum'}">${status}</span></td>
-        <td>${lastPaid || '-'}</td>
-      </tr>
-    `;
-}
-
-let reportFetchSeq = 0;
-let detailFetchSeq = 0;
-
-async function fetchDetailPage() {
   if (!app.user) return;
-  const seq = ++detailFetchSeq;
-  ui.detailReportTable.innerHTML = skeletonRows(9);
-  let query = app.supabase.from('spp_app_student_overview').select('*', { count: 'exact' });
-  const year = currentYearScope();
-  const school = currentSchoolScope();
-  if (year) query = query.eq('tahun_ajaran', year);
-  if (school) query = query.eq('kdsek', school);
-  const from = app.paging.detail * PAGE_SIZE;
-  const { data, count, error } = await query
-    .order('nama').order('id_siswa').order('tahun_ajaran', { ascending: false })
-    .range(from, from + PAGE_SIZE - 1);
-  if (seq !== detailFetchSeq) return;
-  if (error) {
-    ui.detailReportTable.innerHTML = `<tr><td colspan="9" class="empty-state">Data gagal dimuat: ${escapeHtml(error.message)}</td></tr>`;
+  if (app.server) {
+    fetchDashboard();
     return;
   }
-  app.totals.detail = count || 0;
-  renderPager('detail', app.totals.detail);
-  ui.detailReportTable.innerHTML = (data || []).map(normalizeOverviewRow)
-    .map((row) => detailRowMarkup(row, rowBilled(row), row.paidTotal, row.lastPaid)).join('')
-    || '<tr><td colspan="9" class="empty-state">Belum ada data.</td></tr>';
+
+  const year = currentYearScope() || currentAcademicYear();
+  if (app.user.role === 'unit') {
+    ui.financeDashboard.hidden = true;
+    ui.unitDashboard.hidden = false;
+    ui.unitDashboardYear.textContent = year;
+    ui.unitDashboardStudents.textContent = getAccessibleStudentRows().length.toLocaleString('id-ID');
+    ui.unitDashboardStatus.textContent = '';
+    return;
+  }
+
+  ui.unitDashboard.hidden = true;
+  ui.financeDashboard.hidden = false;
+  const siswa = getAccessibleStudentRows();
+  const transactions = getAccessibleTransactionRows();
+  const startYear = Number(year.slice(0, 4));
+  const rows = transactions
+    .filter((item) => {
+      const transactionDate = new Date(`${item.tglbyr}T00:00:00`);
+      return transactionDate >= new Date(startYear, 6, 1) && transactionDate < new Date(startYear + 1, 6, 1);
+    })
+    .reduce((groups, item) => {
+      const month = String(item.tglbyr || '').slice(0, 7);
+      const key = `${item.kdsek}|${month}`;
+      const current = groups.get(key) || { kdsek: item.kdsek, bulan: `${month}-01`, pemasukan: 0, transaksi: 0 };
+      current.pemasukan += Number(item.nominal || 0);
+      current.transaksi += 1;
+      groups.set(key, current);
+      return groups;
+    }, new Map());
+  ui.totalSiswa.textContent = siswa.length.toLocaleString('id-ID');
+  const totals = renderRevenueDashboard([...rows.values()], year);
+  ui.totalTagihan.textContent = formatRupiah(totals.totalRevenue);
+  ui.paymentThisMonth.textContent = formatRupiah(totals.currentMonthRevenue);
+  ui.totalTransaksi.textContent = totals.totalTransactions.toLocaleString('id-ID');
+  renderPriorYearRevenue([]);
+  renderActivityList([...transactions].sort((a, b) => new Date(b.tglbyr) - new Date(a.tglbyr)).slice(0, 5));
 }
 
-async function fetchReport() {
+let arrearsFetchSeq = 0;
+
+function formatPeriodLabel(value) {
+  const match = /^(0[1-9]|1[0-2])(\d{4})$/.exec(String(value || ''));
+  if (!match) return String(value || '-');
+  return new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(Number(match[2]), Number(match[1]) - 1, 1)));
+}
+
+function populateReportPeriods() {
+  const year = ui.reportYearFilter.value || currentAcademicYear();
+  const activeMonths = academicMonths(year);
+  const months = year === currentAcademicYear()
+    ? activeMonths.filter((month) => month.key <= localMonthInputValue())
+    : activeMonths;
+  const previous = ui.reportPeriodFilter.value;
+  const values = months.map((month) => {
+    const [yyyy, mm] = month.key.split('-');
+    return { value: `${mm}${yyyy}`, label: formatPeriodLabel(`${mm}${yyyy}`) };
+  });
+  ui.reportPeriodFilter.innerHTML = values.map((item) => (
+    `<option value="${item.value}">${escapeHtml(item.label)}</option>`
+  )).join('');
+
+  const now = new Date();
+  const current = `${String(now.getMonth() + 1).padStart(2, '0')}${now.getFullYear()}`;
+  const defaultValue = year === currentAcademicYear() ? current : values[values.length - 1]?.value;
+  ui.reportPeriodFilter.value = values.some((item) => item.value === previous)
+    ? previous
+    : (values.some((item) => item.value === defaultValue) ? defaultValue : values[values.length - 1]?.value || '');
+}
+
+function populateReportFilters() {
+  const previousYear = ui.reportYearFilter.value;
+  const years = app.years.length ? app.years : [currentAcademicYear()];
+  ui.reportYearFilter.innerHTML = years.map((year) => (
+    `<option value="${escapeHtml(year)}">${escapeHtml(year)}</option>`
+  )).join('');
+  ui.reportYearFilter.value = years.includes(previousYear)
+    ? previousYear
+    : (years.includes(currentAcademicYear()) ? currentAcademicYear() : years[0]);
+  populateReportPeriods();
+
+  const school = currentSchoolScope();
+  const classes = app.state.classes
+    .filter((item) => !school || item.kdsek === school)
+    .filter((item) => !app.user || app.user.role !== 'unit' || item.kdsek === app.user.unit)
+    .sort((a, b) => a.kdkls.localeCompare(b.kdkls, 'id'))
+    .filter((item, index, list) => list.findIndex((candidate) => (
+      candidate.kdkls.toLowerCase() === item.kdkls.toLowerCase()
+    )) === index);
+  const previousClass = ui.reportClassFilter.value;
+  ui.reportClassFilter.innerHTML = '<option value="">Semua kelas</option>'
+    + classes.map((item) => (
+      `<option value="${escapeHtml(item.kdkls)}">${escapeHtml(item.kdkls)}</option>`
+    )).join('');
+  ui.reportClassFilter.value = classes.some((item) => item.kdkls === previousClass) ? previousClass : '';
+}
+
+function reportDetailMarkup(billing) {
+  const months = billing.periode_bulanan || [];
+  const monthlyRows = months.map((item) => `
+    <tr>
+      <th scope="row">${escapeHtml(formatPeriodLabel(item.periode))}</th>
+      <td>${formatRupiah(item.spp.tagihan)}</td>
+      <td>${formatRupiah(item.spp.dibayar)}</td>
+      <td>${formatRupiah(item.spp.saldo_dibawa)}</td>
+      <td>${formatRupiah(item.spp.sisa)}</td>
+      <td><span class="billing-status ${item.spp.status === 'Lunas' ? 'is-paid' : ''}">${escapeHtml(item.spp.status)}</span></td>
+      <td>${formatRupiah(item.komp.tagihan)}</td>
+      <td>${formatRupiah(item.komp.dibayar)}</td>
+      <td>${formatRupiah(item.komp.saldo_dibawa)}</td>
+      <td>${formatRupiah(item.komp.sisa)}</td>
+    </tr>
+  `).join('');
+  const components = Object.entries(billing.komponen_satu_kali || {})
+    .filter(([, item]) => Number(item.tagihan || 0) > 0 || Number(item.dibayar || 0) > 0)
+    .map(([key, item]) => `
+      <tr>
+        <th scope="row">${escapeHtml(getPaymentComponentLabel(key))}</th>
+        <td>${formatRupiah(item.tagihan)}</td>
+        <td>${formatRupiah(item.dibayar)}</td>
+        <td>${formatRupiah(item.sisa)}</td>
+        <td><span class="billing-status ${item.status === 'Lunas' ? 'is-paid' : ''}">${escapeHtml(item.status)}</span></td>
+      </tr>
+    `).join('');
+
+  return `<details class="billing-drilldown">
+    <summary>Lihat rekap periode</summary>
+    <div class="table-wrap billing-period-wrap">
+      <table class="billing-period-table">
+        <thead><tr>
+          <th rowspan="2">Periode</th>
+          <th colspan="5">SPP</th>
+          <th colspan="4">Komputer</th>
+        </tr><tr>
+          <th>Tagihan</th><th>Dibayar</th><th>Saldo masuk</th><th>Sisa</th><th>Status</th>
+          <th>Tagihan</th><th>Dibayar</th><th>Saldo masuk</th><th>Sisa</th>
+        </tr></thead>
+        <tbody>${monthlyRows || '<tr><td colspan="10" class="empty-state">Tidak ada periode bulanan.</td></tr>'}</tbody>
+      </table>
+    </div>
+    <div class="table-wrap billing-onetime-wrap">
+      <table>
+        <thead><tr><th>Komponen satu kali / tahun lalu</th><th>Tagihan</th><th>Dibayar</th><th>Sisa</th><th>Status</th></tr></thead>
+        <tbody>${components || '<tr><td colspan="5" class="empty-state">Tidak ada tagihan satu kali.</td></tr>'}</tbody>
+      </table>
+    </div>
+    <p class="billing-last-paid">Pembayaran terakhir: ${escapeHtml(billing.terakhir_bayar || '-')}</p>
+  </details>`;
+}
+
+function normalizeWhatsAppNumber(value) {
+  let number = String(value || '').replace(/[^\d+]/g, '');
+  if (number.startsWith('+')) number = number.slice(1);
+  if (number.startsWith('0')) number = `62${number.slice(1)}`;
+  return /^\d{8,20}$/.test(number) ? number : '';
+}
+
+function getArrearsPeriods(billing) {
+  const monthly = (billing.periode_bulanan || [])
+    .filter((item) => Number(item.spp.sisa || 0) > 0 || Number(item.komp.sisa || 0) > 0)
+    .map((item) => `<span class="period-chip">${escapeHtml(formatPeriodLabel(item.periode))}</span>`)
+    .join('');
+  if (monthly) return monthly;
+  const oneTime = Object.entries(billing.komponen_satu_kali || {})
+    .filter(([, item]) => Number(item.sisa || 0) > 0)
+    .map(([key]) => `<span class="period-chip is-muted">${escapeHtml(getPaymentComponentLabel(key))}</span>`)
+    .join('');
+  return oneTime || '<span class="period-chip is-muted">Tagihan satu kali</span>';
+}
+
+function arrearsRowMarkup(row) {
+  const billing = row.billing || {};
+  const unallocated = Number(billing.belum_dialokasikan || 0);
+  const remaining = Number(billing.sisa_total || 0);
+  const partial = Object.values(billing.komponen_satu_kali || {}).some((item) => item.status === 'Cicilan')
+    || (billing.periode_bulanan || []).some((item) => item.spp.status === 'Cicilan' || item.komp.status === 'Cicilan');
+  const status = unallocated > 0 ? 'Perlu rekonsiliasi' : (remaining <= 0 ? 'Lunas' : (partial ? 'Cicilan' : 'Belum bayar'));
+  const statusClass = unallocated > 0 ? 'needs-review' : (remaining <= 0 ? 'lunas' : 'belum');
+  const phone = normalizeWhatsAppNumber(row.no_wa);
+  const monthlyPeriods = (billing.periode_bulanan || [])
+    .filter((item) => Number(item.spp.sisa || 0) > 0 || Number(item.komp.sisa || 0) > 0)
+    .map((item) => formatPeriodLabel(item.periode));
+  const oneTimeComponents = Object.entries(billing.komponen_satu_kali || {})
+    .filter(([, item]) => Number(item.sisa || 0) > 0)
+    .map(([key]) => getPaymentComponentLabel(key));
+  const name = String(row.nama || 'Siswa');
+  const balanceDescription = monthlyPeriods.length
+    ? `periode ${monthlyPeriods.join(', ')}`
+    : `komponen ${oneTimeComponents.join(', ') || 'tagihan satu kali'}`;
+  const whatsappMessage = `Yth. Orang tua/wali ${name}, kami informasikan terdapat sisa tagihan untuk ${balanceDescription}. Mohon cek rincian dan konfirmasi pembayaran kepada tata usaha. Terima kasih.`;
+  const whatsappUrl = phone && unallocated <= 0
+    ? `https://wa.me/${phone}?text=${encodeURIComponent(whatsappMessage)}`
+    : '';
+  const canPrint = unallocated <= 0;
+  const balanceMarkup = `${formatRupiah(remaining)}${unallocated > 0
+    ? `<small class="unallocated-note">+ ${formatRupiah(unallocated)} belum dialokasikan</small>`
+    : ''}`;
+
+  return `<tr>
+    <td>${escapeHtml(row.kdkls || '-')}</td>
+    <td><strong>${escapeHtml(name)}</strong><small class="student-sub">${escapeHtml(row.nospp || row.id_siswa)}</small></td>
+    <td><div class="period-chip-list">${getArrearsPeriods(billing)}</div></td>
+    <td>${reportDetailMarkup(billing)}</td>
+    <td class="balance-cell">${balanceMarkup}</td>
+    <td><span class="status-pill ${statusClass}">${status}</span></td>
+    <td class="report-actions">
+      ${whatsappUrl ? `<a class="action-btn whatsapp-action" href="${escapeHtml(whatsappUrl)}" target="_blank" rel="noopener noreferrer">WhatsApp</a>` : ''}
+      ${canPrint ? `<button type="button" class="action-btn print-action" data-print-arrears="${escapeHtml(row.id_siswa)}">Cetak surat</button>` : '<span class="student-sub">Tahan penagihan sampai rekonsiliasi</span>'}
+    </td>
+  </tr>`;
+}
+
+function renderArrearsReport() {
+  const rows = [...app.arrearsRows].sort((a, b) => (
+    String(a.kdkls || '').localeCompare(String(b.kdkls || ''), 'id')
+      || String(a.nama || '').localeCompare(String(b.nama || ''), 'id')
+  ));
+  app.arrearsRowsById = new Map(rows.map((row) => [String(row.id_siswa), row]));
+  const groups = [];
+  let previousClass = null;
+  rows.forEach((row) => {
+    const className = row.kdkls || 'Tanpa kelas';
+    if (className !== previousClass) {
+      groups.push(`<tr class="class-group-row"><th colspan="7" scope="rowgroup">${escapeHtml(className)}</th></tr>`);
+      previousClass = className;
+    }
+    groups.push(arrearsRowMarkup(row));
+  });
+  ui.arrearsReportTable.innerHTML = groups.join('')
+    || '<tr><td colspan="7" class="empty-state">Tidak ada tunggakan pada filter ini.</td></tr>';
+  ui.arrearsReportCount.textContent = `${app.arrearsTotal.toLocaleString('id-ID')} siswa memiliki sisa tagihan atau pembayaran lama yang perlu direkonsiliasi.`;
+  const shown = Math.min(app.arrearsRows.length, app.arrearsTotal);
+  ui.arrearsPageInfo.textContent = `${shown.toLocaleString('id-ID')} dari ${app.arrearsTotal.toLocaleString('id-ID')} siswa`;
+  ui.loadMoreArrears.hidden = shown >= app.arrearsTotal;
+  const hasLegacy = rows.some((row) => Number(row.billing?.belum_dialokasikan || 0) > 0);
+  ui.legacyPaymentNote.hidden = !hasLegacy;
+  ui.reportPeriod.textContent = formatPeriodLabel(ui.reportPeriodFilter.value);
+}
+
+async function fetchArrearsReport(append = false) {
   if (!app.user) return;
-  const seq = ++reportFetchSeq;
-  const { data, error } = await app.supabase.rpc('spp_app_report_v1', {
-    p_tahun: currentYearScope(),
-    p_kdsek: currentSchoolScope()
+  ui.reportPeriod.textContent = formatPeriodLabel(ui.reportPeriodFilter.value);
+  if (!app.server) {
+    ui.arrearsReportCount.textContent = 'Laporan per komponen membutuhkan backend Supabase dan migration 016.';
+    ui.arrearsReportTable.innerHTML = '<tr><td colspan="7" class="empty-state">Hubungkan Supabase dan jalankan migration 016 untuk menghitung cicilan dan sisa per periode secara akurat.</td></tr>';
+    ui.loadMoreArrears.hidden = true;
+    return;
+  }
+
+  const seq = ++arrearsFetchSeq;
+  const year = ui.reportYearFilter.value || currentAcademicYear();
+  const period = ui.reportPeriodFilter.value;
+  if (!append) {
+    app.arrearsOffset = 0;
+    app.arrearsRows = [];
+    ui.arrearsReportTable.innerHTML = skeletonRows(7);
+  }
+
+  const { data, error } = await app.supabase.rpc('spp_app_class_billing_v1', {
+    p_tahun: year,
+    p_periode: period,
+    p_kdsek: currentSchoolScope(),
+    p_kdkls: ui.reportClassFilter.value || null,
+    p_limit: ARREARS_PAGE_SIZE,
+    p_offset: app.arrearsOffset
   });
-  if (seq !== reportFetchSeq || error) return;
-  const byCode = new Map((data || []).map((row) => [row.kdsek, row]));
-  const schools = canAccessAllReports() ? app.state.schools : app.state.schools.filter((school) => getAllowedSchoolCodes().includes(school.kdsek));
-  const summary = schools.map((school) => {
-    const row = byCode.get(school.kdsek) || {};
-    const totalTagihan = Number(row.tagihan || 0);
-    const totalTerbayar = Number(row.terbayar || 0);
-    return {
-      school: school.nmsek,
-      jumlah: Number(row.jumlah || 0),
-      totalTagihan,
-      totalTerbayar,
-      belum: Math.max(totalTagihan - totalTerbayar, 0)
-    };
-  });
-  drawReportSummary(
-    summary,
-    summary.reduce((sum, row) => sum + row.jumlah, 0),
-    summary.reduce((sum, row) => sum + row.totalTagihan, 0),
-    summary.reduce((sum, row) => sum + row.totalTerbayar, 0)
-  );
+  if (seq !== arrearsFetchSeq) return;
+  if (error) {
+    ui.arrearsReportTable.innerHTML = `<tr><td colspan="7" class="empty-state">Laporan gagal dimuat: ${escapeHtml(error.message)}. Periksa migration 016.</td></tr>`;
+    ui.arrearsReportCount.textContent = 'Laporan tidak dapat dimuat.';
+    ui.loadMoreArrears.hidden = true;
+    return;
+  }
+
+  const pageRows = (data || []).map((row) => ({
+    ...row,
+    id_siswa: String(row.id_siswa),
+    billing: row.billing || {}
+  }));
+  app.arrearsRows = append ? [...app.arrearsRows, ...pageRows] : pageRows;
+  app.arrearsOffset += pageRows.length;
+  app.arrearsTotal = Number(pageRows[0]?.total_count || (append ? app.arrearsTotal : 0));
+  renderArrearsReport();
 }
 
 function renderReport() {
-  if (app.server) {
-    fetchReport();
-    return fetchDetailPage();
-  }
-  const schools = canAccessAllReports() ? app.state.schools : app.state.schools.filter((school) => getAllowedSchoolCodes().includes(school.kdsek));
-
-  const summary = schools.map((school) => {
-    const siswaSekolah = getAccessibleStudentRows().filter((item) => item.kdsek === school.kdsek);
-    const totalTagihan = siswaSekolah.reduce((sum, item) => sum + feeTotal(item), 0);
-    const totalTerbayar = getAccessibleTransactionRows()
-      .filter((item) => item.kdsek === school.kdsek)
-      .reduce((sum, item) => sum + Number(item.nominal || 0), 0);
-    const belum = Math.max(totalTagihan - totalTerbayar, 0);
-
-    return {
-      school: school.nmsek,
-      jumlah: siswaSekolah.length,
-      totalTagihan,
-      totalTerbayar,
-      belum
-    };
-  });
-
-  const siswa = getAccessibleStudentRows();
-  drawReportSummary(
-    summary,
-    siswa.length,
-    siswa.reduce((sum, item) => sum + feeTotal(item), 0),
-    getAccessibleTransactionRows().reduce((sum, item) => sum + Number(item.nominal || 0), 0)
-  );
-
-  ui.detailReportTable.innerHTML = getAccessibleStudentRows().map((row) => {
-    const totalTagihan = feeTotal(row);
-    const payments = getAccessibleTransactionRows().filter((item) => item.nospp === row.nospp);
-    const totalTerbayar = payments.reduce((sum, item) => sum + Number(item.nominal || 0), 0);
-    const terakhirBayar = [...payments].sort((a, b) => new Date(b.tglbyr) - new Date(a.tglbyr))[0];
-    return detailRowMarkup(row, totalTagihan, totalTerbayar, terakhirBayar ? terakhirBayar.tglbyr : '');
-  }).join('');
+  populateReportFilters();
+  fetchArrearsReport();
 }
+
+function printArrearsLetter(studentId) {
+  const row = app.arrearsRowsById?.get(String(studentId));
+  if (!row) return;
+  const billing = row.billing || {};
+  if (Number(billing.belum_dialokasikan || 0) > 0) {
+    alert('Surat belum dapat dicetak sebelum pembayaran lama direkonsiliasi.');
+    return;
+  }
+  const periods = (billing.periode_bulanan || [])
+    .filter((item) => Number(item.spp.sisa || 0) > 0 || Number(item.komp.sisa || 0) > 0)
+    .map((item) => `<tr><td>${escapeHtml(formatPeriodLabel(item.periode))}</td><td>${formatRupiah(item.spp.sisa)}</td><td>${formatRupiah(item.komp.sisa)}</td></tr>`)
+    .join('');
+  const components = Object.entries(billing.komponen_satu_kali || {})
+    .filter(([, item]) => Number(item.sisa || 0) > 0)
+    .map(([key, item]) => `<tr><td>${escapeHtml(getPaymentComponentLabel(key))}</td><td colspan="2">${formatRupiah(item.sisa)}</td></tr>`)
+    .join('');
+  ui.arrearsPrintSheet.innerHTML = `
+    <article class="print-letter">
+      <h1>Pemberitahuan Sisa Tagihan</h1>
+      <p>Kepada orang tua/wali dari:</p>
+      <p><strong>${escapeHtml(row.nama)}</strong><br>No. SPP: ${escapeHtml(row.nospp)}<br>Kelas: ${escapeHtml(row.kdkls)} &middot; ${escapeHtml(getSchoolName(row.kdsek))}</p>
+      <p>Berdasarkan catatan pembayaran sampai ${escapeHtml(formatPeriodLabel(billing.periode_aktif))}, terdapat rincian sisa tagihan berikut:</p>
+      <table><thead><tr><th>Periode / komponen</th><th>Sisa SPP</th><th>Sisa Komputer</th></tr></thead><tbody>${periods || ''}${components || ''}</tbody></table>
+      <p><strong>Total sisa terhitung: ${formatRupiah(billing.sisa_total)}</strong></p>
+      <p>Mohon melakukan konfirmasi kepada tata usaha unit. Jika pembayaran telah dilakukan, silakan menyampaikan bukti agar data dapat diperbarui.</p>
+      <p class="print-date">${escapeHtml(new Date().toLocaleDateString('id-ID', { dateStyle: 'long' }))}</p>
+      <p class="print-signature">Tata Usaha<br>${escapeHtml(getSchoolName(row.kdsek))}</p>
+    </article>`;
+  ui.arrearsPrintSheet.hidden = false;
+  document.body.classList.add('printing-arrears');
+  window.print();
+}
+
+window.addEventListener('afterprint', () => {
+  document.body.classList.remove('printing-arrears');
+  ui.arrearsPrintSheet.hidden = true;
+});
 
 function currentAcademicYear() {
   const now = new Date();
@@ -1994,6 +2348,93 @@ async function deletePayment(id) {
   renderReport();
 }
 
+function updatePaymentPeriodVisibility(row) {
+  const component = row.querySelector('.payment-component').value;
+  const isMonthly = component === 'spp' || component === 'komp';
+  const periodField = row.querySelector('.payment-period-field');
+  const periodInput = row.querySelector('.payment-component-period');
+  periodField.hidden = !isMonthly;
+  periodInput.required = isMonthly;
+  if (!isMonthly) periodInput.value = '';
+  if (isMonthly && !periodInput.value) {
+    periodInput.value = localMonthInputValue();
+  }
+}
+
+function makePaymentComponentRow() {
+  const options = PAYMENT_COMPONENTS.map(([key, label]) => (
+    `<option value="${key}">${escapeHtml(label)}</option>`
+  )).join('');
+  const wrapper = document.createElement('div');
+  wrapper.className = 'payment-component-row';
+  wrapper.innerHTML = `
+    <label>
+      <span>Komponen</span>
+      <select class="payment-component" aria-label="Komponen pembayaran">${options}</select>
+    </label>
+    <label class="payment-period-field">
+      <span>Periode tagihan</span>
+      <input class="payment-component-period" type="month" required />
+    </label>
+    <label>
+      <span>Nominal</span>
+      <input class="money-input payment-component-amount" type="text" inputmode="numeric" required />
+    </label>
+    <button type="button" class="action-btn delete payment-remove" aria-label="Hapus komponen">Hapus</button>`;
+  wrapper.querySelector('.payment-component-period').value = localMonthInputValue();
+  updatePaymentPeriodVisibility(wrapper);
+  return wrapper;
+}
+
+function updatePaymentAllocationTotal() {
+  const total = [...ui.paymentComponentRows.querySelectorAll('.payment-component-amount')]
+    .reduce((sum, input) => sum + parseMoney(input.value), 0);
+  ui.paymentAllocationTotal.textContent = formatRupiah(total);
+}
+
+function updatePaymentAllocationRows() {
+  const rows = [...ui.paymentComponentRows.querySelectorAll('.payment-component-row')];
+  rows.forEach((row) => {
+    updatePaymentPeriodVisibility(row);
+    row.querySelector('.payment-remove').disabled = rows.length <= 1;
+  });
+  updatePaymentAllocationTotal();
+}
+
+function resetPaymentAllocationForm() {
+  ui.paymentComponentRows.replaceChildren(makePaymentComponentRow());
+  updatePaymentAllocationRows();
+}
+
+function collectPaymentItems() {
+  const rows = [...ui.paymentComponentRows.querySelectorAll('.payment-component-row')];
+  if (!rows.length || rows.length > 12) {
+    throw new Error('Satu penerimaan harus memiliki 1 sampai 12 rincian komponen.');
+  }
+
+  const items = rows.map((row) => {
+    const component = row.querySelector('.payment-component').value;
+    const monthValue = row.querySelector('.payment-component-period').value;
+    const amount = parseMoney(row.querySelector('.payment-component-amount').value);
+    const period = component === 'spp' || component === 'komp' ? toPeriode(monthValue) : '';
+    if (amount <= 0) throw new Error('Nominal setiap komponen harus lebih dari 0.');
+    if ((component === 'spp' || component === 'komp') && !period) {
+      throw new Error('Pilih periode untuk pembayaran SPP atau Komputer bulanan.');
+    }
+    return { component, periode: period, nominal: amount };
+  });
+
+  const uniquePeriods = new Set();
+  for (const item of items) {
+    const key = `${item.component}|${item.periode}`;
+    if (uniquePeriods.has(key)) {
+      throw new Error('Gabungkan nominal komponen dan periode yang sama dalam satu baris.');
+    }
+    uniquePeriods.add(key);
+  }
+  return items;
+}
+
 async function handlePaymentSubmit(event) {
   event.preventDefault();
   if (!canAccessPayment()) {
@@ -2005,51 +2446,62 @@ async function handlePaymentSubmit(event) {
   const formData = new FormData(form);
   const nospp = String(formData.get('nospp') || '').trim();
   const nama = String(formData.get('nama') || '').trim();
-  const periode = String(formData.get('periode') || '').trim();
-  const nominal = parseMoney(formData.get('nominal'));
+  let items;
+  try {
+    items = collectPaymentItems();
+  } catch (error) {
+    alert(error.message);
+    return;
+  }
 
-  if (!nospp || nominal <= 0) {
-    alert('Nomor SPP dan nominal pembayaran harus diisi.');
+  if (!nospp) {
+    alert('Nomor SPP harus diisi.');
     return;
   }
 
   if (app.server) {
     try {
       const credentials = requireStudentRules();
-      const { error } = await app.supabase.rpc('add_payment_v1', {
+      const { error } = await app.supabase.rpc('add_payment_components_v1', {
         ...credentials,
         p_nospp: nospp,
-        p_periode: periode || new Date().toISOString().slice(0, 7).replace('-', '').replace(/^(\d{4})(\d{2})$/, '$2$1'),
-        p_nominal: nominal
+        p_items: items
       });
       if (error) throw error;
       form.reset();
-      formatAllMoneyInputs();
+      resetPaymentAllocationForm();
       app.paging.payments = 0;
       await reloadStudentData();
       alert('Pembayaran berhasil disimpan.');
     } catch (error) {
-      alert(error.message || 'Pembayaran gagal disimpan. Pastikan migration 012 sudah dijalankan.');
+      const message = error.message || 'Pembayaran gagal disimpan.';
+      const migrationHint = /function.*not found|schema cache/i.test(message)
+        ? ' Jalankan migration 016, lalu perbarui schema Supabase.'
+        : '';
+      alert(`${message}${migrationHint}`);
     }
     return;
   }
 
   const student = app.state.siswa.find((item) => item.nospp === nospp);
-  const payload = {
-    id: `tx-${Date.now()}`,
-    nospp,
-    nama: nama || (student ? student.nama : 'Siswa'),
-    kdsek: student ? student.kdsek : '',
-    periode: periode || new Date().toISOString().slice(0, 7).replace('-', ''),
-    nominal,
-    tglbyr: new Date().toISOString().slice(0, 10),
-    idpemakai: app.user ? app.user.idpemakai : 'admin',
-    ket: 'Pembayaran via web'
-  };
-
-  app.state.transaksi.push(payload);
+  const paymentDate = new Date().toISOString().slice(0, 10);
+  items.forEach((item, index) => {
+    app.state.transaksi.push({
+      id: `tx-${Date.now()}-${index}`,
+      nospp,
+      nama: nama || (student ? student.nama : 'Siswa'),
+      kdsek: student ? student.kdsek : '',
+      periode: item.periode,
+      nominal: item.nominal,
+      component: item.component,
+      tglbyr: paymentDate,
+      idpemakai: app.user ? app.user.idpemakai : 'admin',
+      ket: 'Pembayaran via web'
+    });
+  });
   saveLocalData();
   event.currentTarget.reset();
+  resetPaymentAllocationForm();
   renderDashboard();
   renderPaymentList();
   renderReport();
@@ -2123,6 +2575,9 @@ async function login(username, password) {
     app.adminCredentials = mappedUser.role === 'superadmin'
       ? { username: username.trim(), password }
       : null;
+    app.dashboardCredentials = ['superadmin', 'yayasan'].includes(mappedUser.role)
+      ? { username: username.trim(), password }
+      : null;
     ui.userName.textContent = mappedUser.jabatan || mappedUser.idpemakai;
     ui.sidebar.hidden = false;
     applyUserAccess();
@@ -2134,6 +2589,7 @@ async function login(username, password) {
   if (localUser) {
     app.user = localUser;
     app.adminCredentials = null;
+    app.dashboardCredentials = null;
     ui.userName.textContent = localUser.jabatan || localUser.idpemakai;
     ui.sidebar.hidden = false;
     applyUserAccess();
@@ -2329,7 +2785,6 @@ function setupEvents() {
   const handleScopeChange = () => {
     app.paging.students = 0;
     app.paging.payments = 0;
-    app.paging.detail = 0;
     renderStudentTable();
     if (app.server) {
       renderDashboard();
@@ -2339,13 +2794,32 @@ function setupEvents() {
   };
   ui.schoolFilter.addEventListener('change', handleScopeChange);
   ui.yearFilter.addEventListener('change', handleScopeChange);
+  ui.reportYearFilter.addEventListener('change', () => {
+    populateReportPeriods();
+    app.arrearsOffset = 0;
+    fetchArrearsReport();
+  });
+  ui.reportPeriodFilter.addEventListener('change', () => {
+    app.arrearsOffset = 0;
+    fetchArrearsReport();
+  });
+  ui.reportClassFilter.addEventListener('change', () => {
+    app.arrearsOffset = 0;
+    fetchArrearsReport();
+  });
+  ui.loadMoreArrears.addEventListener('click', () => fetchArrearsReport(true));
+  ui.refreshRevenue.addEventListener('click', fetchDashboard);
+  ui.arrearsReportTable.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-print-arrears]');
+    if (button) printArrearsLetter(button.dataset.printArrears);
+  });
   document.addEventListener('click', (event) => {
     const button = event.target.closest('[data-page-dir]');
     const pager = button && button.closest('[data-pager]');
     if (!pager) return;
     const key = pager.dataset.pager;
     app.paging[key] = Math.max(0, app.paging[key] + Number(button.dataset.pageDir));
-    ({ students: fetchStudentPage, payments: fetchPaymentPage, detail: fetchDetailPage })[key]();
+    ({ students: fetchStudentPage, payments: fetchPaymentPage })[key]?.();
     if (key === 'students') ui.studentTableBody.closest('.students-scroll')?.scrollTo({ top: 0 });
   });
   ui.studentSekolah.addEventListener('change', () => populateStudentClassSelect());
@@ -2416,9 +2890,31 @@ function setupEvents() {
     if (event.target.classList && event.target.classList.contains('name-input')) applyNameCase(event.target);
   });
   document.addEventListener('input', (event) => {
-    if (event.target.classList && event.target.classList.contains('money-input')) formatMoneyInput(event.target);
+    if (event.target.classList && event.target.classList.contains('money-input')) {
+      formatMoneyInput(event.target);
+      if (event.target.classList.contains('payment-component-amount')) updatePaymentAllocationTotal();
+    }
   });
   formatAllMoneyInputs();
+  updatePaymentAllocationRows();
+  ui.addPaymentComponent.addEventListener('click', () => {
+    const rowCount = ui.paymentComponentRows.querySelectorAll('.payment-component-row').length;
+    if (rowCount >= 12) {
+      alert('Satu penerimaan maksimal 12 komponen.');
+      return;
+    }
+    ui.paymentComponentRows.append(makePaymentComponentRow());
+    updatePaymentAllocationRows();
+  });
+  ui.paymentComponentRows.addEventListener('change', (event) => {
+    if (event.target.classList.contains('payment-component')) updatePaymentAllocationRows();
+  });
+  ui.paymentComponentRows.addEventListener('click', (event) => {
+    const button = event.target.closest('.payment-remove');
+    if (!button || ui.paymentComponentRows.querySelectorAll('.payment-component-row').length <= 1) return;
+    button.closest('.payment-component-row').remove();
+    updatePaymentAllocationRows();
+  });
   document.getElementById('logBtn').addEventListener('click', showStudentLog);
   ui.importFile.addEventListener('change', () => {
     if (ui.importFile.files[0]) importStudentsFile(ui.importFile.files[0]);
@@ -2586,6 +3082,7 @@ function setupEvents() {
   document.getElementById('logoutBtn').addEventListener('click', () => {
     app.user = null;
     app.adminCredentials = null;
+    app.dashboardCredentials = null;
     applyUserAccess();
     ui.sidebar.hidden = true;
     ui.loginScreen.classList.remove('hidden');

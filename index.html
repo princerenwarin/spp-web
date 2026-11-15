@@ -65,13 +65,24 @@
         </header>
 
         <section class="page active" id="dashboardPage">
+          <section class="panel unit-dashboard" id="unitDashboard" hidden aria-labelledby="unitDashboardTitle">
+            <div class="panel-header">
+              <h2 id="unitDashboardTitle">Ringkasan Unit</h2>
+              <span class="report-pill">Tahun ajaran <strong id="unitDashboardYear">-</strong></span>
+            </div>
+            <p class="unit-dashboard-count"><strong id="unitDashboardStudents">0</strong><span>murid terdaftar</span></p>
+            <p class="muted-copy">Dashboard unit menampilkan jumlah murid. Informasi nominal tersedia pada menu laporan.</p>
+            <p class="dashboard-error" id="unitDashboardStatus" aria-live="polite"></p>
+          </section>
+
+          <div id="financeDashboard" hidden>
           <div class="stats-grid">
             <article class="stat-card accent">
               <div class="stat-label">Total Siswa</div>
               <div class="stat-value" id="totalSiswa">0</div>
             </article>
             <article class="stat-card purple">
-              <div class="stat-label">Total Tagihan</div>
+              <div class="stat-label">Pemasukan Tahun Ajaran</div>
               <div class="stat-value" id="totalTagihan">Rp 0</div>
             </article>
             <article class="stat-card green">
@@ -84,21 +95,45 @@
             </article>
           </div>
 
-          <div class="content-grid">
-            <div class="panel chart-panel">
+            <div class="panel revenue-panel">
               <div class="panel-header">
-                <h3>Perkembangan Pembayaran</h3>
-              </div>
-              <div class="chart-placeholder">
-                <div class="bars">
-                  <span style="height: 40%"></span>
-                  <span style="height: 70%"></span>
-                  <span style="height: 52%"></span>
-                  <span style="height: 88%"></span>
-                  <span style="height: 64%"></span>
-                  <span style="height: 94%"></span>
-                  <span style="height: 72%"></span>
+                <div>
+                  <h2>Pemasukan per Bulan dan Unit</h2>
+                  <p class="muted-copy">Berdasarkan tanggal transaksi pada tahun ajaran yang dipilih.</p>
                 </div>
+                <button type="button" class="secondary-button small-button" id="refreshRevenue">Muat ulang</button>
+              </div>
+              <div class="revenue-legend" id="revenueLegend"></div>
+              <div class="revenue-chart" id="revenueChart" role="img" aria-label="Grafik pemasukan per bulan dan unit"></div>
+              <div class="table-wrap revenue-table-wrap">
+                <table>
+                  <thead id="revenueTableHead"></thead>
+                  <tbody id="revenueTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="panel prior-year-panel">
+              <div class="panel-header">
+                <div>
+                  <h2>Rekap DPP dan SPP Tahun Lalu</h2>
+                  <p class="muted-copy">Tagihan lama dibandingkan dengan pembayaran yang dialokasikan pada tahun ajaran ini.</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Unit</th>
+                      <th>DPP lama</th>
+                      <th>DPP dibayar</th>
+                      <th>SPP lama</th>
+                      <th>SPP dibayar</th>
+                      <th>Total sisa</th>
+                    </tr>
+                  </thead>
+                  <tbody id="priorYearRevenueBody"></tbody>
+                </table>
               </div>
             </div>
 
@@ -349,15 +384,43 @@
                   <span>Nama Siswa</span>
                   <input name="nama" class="name-input" type="text" placeholder="Nama siswa" />
                 </label>
-                <label>
-                  <span>Periode</span>
-                  <input name="periode" type="text" placeholder="contoh: 112026" />
-                </label>
-                <label>
-                  <span>Jumlah Bayar</span>
-                  <input name="nominal" class="money-input" type="text" inputmode="numeric" required />
-                </label>
               </div>
+              <fieldset class="payment-allocation">
+                <legend>Alokasi dalam satu penerimaan</legend>
+                <p class="muted-copy">Pisahkan nominal menurut komponen. SPP dan Komputer dapat dibayar untuk periode yang berbeda.</p>
+                <div id="paymentComponentRows">
+                  <div class="payment-component-row">
+                    <label>
+                      <span>Komponen</span>
+                      <select class="payment-component" aria-label="Komponen pembayaran">
+                        <option value="spp">SPP bulanan</option>
+                        <option value="komp">Komputer bulanan</option>
+                        <option value="giat">Kegiatan</option>
+                        <option value="dpp">DPP</option>
+                        <option value="dpp_tl">DPP tahun lalu</option>
+                        <option value="dsp">DSP</option>
+                        <option value="seragam">Seragam</option>
+                        <option value="spp_tl">SPP tahun lalu</option>
+                        <option value="komp_tl">Komputer tahun lalu</option>
+                        <option value="lainnya">Lainnya</option>
+                      </select>
+                    </label>
+                    <label class="payment-period-field">
+                      <span>Periode tagihan</span>
+                      <input class="payment-component-period" type="month" required />
+                    </label>
+                    <label>
+                      <span>Nominal</span>
+                      <input class="money-input payment-component-amount" type="text" inputmode="numeric" required />
+                    </label>
+                    <button type="button" class="action-btn delete payment-remove" aria-label="Hapus komponen" disabled>Hapus</button>
+                  </div>
+                </div>
+                <div class="payment-allocation-footer">
+                  <button type="button" class="secondary-button small-button" id="addPaymentComponent">Tambah komponen</button>
+                  <p>Total penerimaan <strong id="paymentAllocationTotal">Rp 0</strong></p>
+                </div>
+              </fieldset>
               <div class="form-actions">
                 <button type="submit" class="primary-button">Simpan Pembayaran</button>
               </div>
@@ -375,6 +438,7 @@
                   <tr>
                     <th>No. SPP</th>
                     <th>Nama</th>
+                    <th>Komponen</th>
                     <th>Periode</th>
                     <th>Tanggal</th>
                     <th>Nominal</th>
@@ -391,80 +455,58 @@
         <section class="page" id="laporanPage">
           <div class="report-hero">
             <div>
-              <h3>Laporan Pembayaran SPP</h3>
-              <p class="report-eyebrow">Ringkasan</p>
+              <h2>Laporan Tunggakan dan Pembayaran</h2>
+              <p class="muted-copy">Pantau sisa tiap periode, cicilan, dan pembayaran yang belum direkonsiliasi.</p>
             </div>
-            <div class="report-pill">Periode: <strong id="reportPeriod">2026</strong></div>
+            <div class="report-pill">Periode: <strong id="reportPeriod">-</strong></div>
           </div>
 
-          <div class="report-summary-grid">
-            <article class="report-summary-card accent">
-              <span>Jumlah Siswa</span>
-              <strong id="reportSummaryStudents">0</strong>
-              <small id="reportSummaryStudentsMeta">Total aktif</small>
-            </article>
-            <article class="report-summary-card purple">
-              <span>Tagihan</span>
-              <strong id="reportSummaryTagihan">Rp 0</strong>
-              <small>Seluruh sekolah</small>
-            </article>
-            <article class="report-summary-card green">
-              <span>Terbayar</span>
-              <strong id="reportSummaryTerbayar">Rp 0</strong>
-              <small>Sudah masuk</small>
-            </article>
-            <article class="report-summary-card orange">
-              <span>Belum Bayar</span>
-              <strong id="reportSummaryBelum">Rp 0</strong>
-              <small>Outstanding</small>
-            </article>
-          </div>
-
-          <div class="panel report-sheet">
+          <div class="panel arrears-report-panel">
             <div class="panel-header">
-              <h3>Rekap per Sekolah</h3>
-              <button type="button" class="secondary-button small-button">Export</button>
+              <div>
+                <h2>Tunggakan per Kelas</h2>
+                <p class="muted-copy" id="arrearsReportCount">Memuat daftar siswa...</p>
+              </div>
             </div>
-            <div class="report-list" id="reportList"></div>
+            <div class="report-filters">
+              <label>
+                <span>Tahun ajaran</span>
+                <select id="reportYearFilter"></select>
+              </label>
+              <label>
+                <span>Periode tagihan sampai</span>
+                <select id="reportPeriodFilter"></select>
+              </label>
+              <label>
+                <span>Kelas</span>
+                <select id="reportClassFilter">
+                  <option value="">Semua kelas</option>
+                </select>
+              </label>
+            </div>
+            <p class="legacy-payment-note" id="legacyPaymentNote" hidden>
+              Ada pembayaran lama yang belum dialokasikan ke komponen. Jumlah tersebut tidak dihitung sebagai pelunasan dan belum boleh dijadikan dasar penagihan sampai direkonsiliasi.
+            </p>
             <div class="table-wrap report-table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>Sekolah</th>
-                    <th>Jumlah Siswa</th>
-                    <th>Tagihan</th>
-                    <th>Terbayar</th>
-                    <th>Belum Bayar</th>
-                  </tr>
-                </thead>
-                <tbody id="reportTable"></tbody>
-              </table>
-            </div>
-          </div>
-
-          <div class="panel detail-report-panel">
-            <div class="panel-header">
-              <h3>Laporan Rinci Per Siswa</h3>
-            </div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>No. SPP</th>
-                    <th>Nama Siswa</th>
-                    <th>Sekolah</th>
                     <th>Kelas</th>
-                    <th>Tagihan</th>
-                    <th>Terbayar</th>
+                    <th>Siswa</th>
+                    <th>Periode tertunggak</th>
+                    <th>Rincian</th>
                     <th>Sisa</th>
                     <th>Status</th>
-                    <th>Terakhir Bayar</th>
+                    <th>Penagihan</th>
                   </tr>
                 </thead>
-                <tbody id="detailReportTable"></tbody>
+                <tbody id="arrearsReportTable"></tbody>
               </table>
             </div>
-            <div class="pager" data-pager="detail"></div>
+            <div class="report-load-more">
+              <span id="arrearsPageInfo"></span>
+              <button type="button" class="secondary-button small-button" id="loadMoreArrears" hidden>Muat siswa berikutnya</button>
+            </div>
           </div>
         </section>
 
@@ -574,6 +616,7 @@
       </div>
     </div>
 
+    <div id="arrearsPrintSheet" hidden></div>
     <script src="./config.js"></script>
     <script src="./app.js"></script>
   </body>
