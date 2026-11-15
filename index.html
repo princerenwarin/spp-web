@@ -120,7 +120,7 @@
                 <input id="searchStudent" type="search" placeholder="Cari nama, ID, atau kelas" autocomplete="off" />
               </div>
               <div class="toolbar-actions admin-only" hidden>
-                <button type="button" class="primary-button small-button" data-open="studentFormSection">+ Siswa / Naik Kelas</button>
+                <button type="button" class="primary-button small-button" id="openStudentFormBtn">+ Siswa / Naik Kelas</button>
                 <button type="button" class="secondary-button small-button" data-open="arrearsTools">Tagihan Tahun Lalu</button>
                 <button type="button" class="secondary-button small-button" data-open="studentTools">Impor &amp; Log</button>
               </div>
@@ -169,18 +169,26 @@
             </div>
             <div class="pager" data-pager="students"></div>
 
-            <details class="fold admin-only" id="studentFormSection" hidden>
-              <summary>Tambah siswa baru / naik kelas</summary>
+            <dialog class="modal" id="studentFormSection">
             <form id="studentForm" class="student-form">
+              <header class="modal-head">
+                <div>
+                  <p class="eyebrow" id="studentModalEyebrow">Data siswa</p>
+                  <h3 id="studentModalTitle">Siswa Baru / Naik Kelas</h3>
+                </div>
+                <button type="button" class="modal-close" id="studentCloseBtn" aria-label="Tutup">&times;</button>
+              </header>
+              <div class="edit-summary" id="studentEditSummary" hidden></div>
               <div class="student-form-grid">
-                <label>
+                <label data-hide="ubah">
                   <span>Jenis</span>
                   <select id="studentType">
                     <option value="baru">Siswa baru masuk</option>
-                    <option value="naik">Naik kelas tahun ajaran</option>
+                    <option value="naik">Naik / pindah kelas</option>
+                    <option value="ubah" hidden>Ubah tagihan</option>
                   </select>
                 </label>
-                <label>
+                <label data-hide="ubah">
                   <span>Tahun Ajaran</span>
                   <input id="studentTahun" type="text" pattern="[0-9]{4}-[0-9]{4}" placeholder="2026-2027" required />
                 </label>
@@ -192,19 +200,19 @@
                     <div class="picker-results" hidden></div>
                   </div>
                 </div>
-                <label>
+                <label data-hide="ubah">
                   <span>Nama Siswa</span>
                   <input id="studentNama" class="name-input" type="text" placeholder="Nama lengkap" />
                 </label>
-                <label>
+                <label data-hide="ubah">
                   <span>WhatsApp</span>
                   <input id="studentWa" type="tel" placeholder="08xxxxxxxxxx" />
                 </label>
-                <label>
+                <label data-hide="ubah">
                   <span>Sekolah</span>
                   <select id="studentSekolah"></select>
                 </label>
-                <label>
+                <label data-hide="ubah">
                   <span>Kelas</span>
                   <select id="studentKelas" required disabled>
                     <option value="">Pilih sekolah terlebih dahulu</option>
@@ -214,15 +222,15 @@
                   <span>Periode Masuk (SPP tidak ditagih)</span>
                   <input id="studentPeriode" type="month" />
                 </label>
-                <label data-for="baru">
+                <label data-for="baru ubah">
                   <span>Nominal DPP</span>
                   <input id="studentDpp" class="money-input" type="text" inputmode="numeric" value="0" />
                 </label>
-                <label data-for="baru">
+                <label data-for="baru ubah">
                   <span>Nominal DPS</span>
                   <input id="studentDsp" class="money-input" type="text" inputmode="numeric" value="0" />
                 </label>
-                <label data-for="baru">
+                <label data-for="baru ubah">
                   <span>Nominal Seragam</span>
                   <input id="studentSeragam" class="money-input" type="text" inputmode="numeric" value="0" />
                 </label>
@@ -238,13 +246,18 @@
                   <span>Nominal Komputer</span>
                   <input id="studentKomp" class="money-input" type="text" inputmode="numeric" value="0" required />
                 </label>
+                <label data-for="ubah">
+                  <span>SPP &amp; Komputer berlaku mulai</span>
+                  <input id="studentEffective" type="month" />
+                  <small class="field-hint">Isi bila SPP/Komputer diubah. Bulan sebelumnya tidak berubah.</small>
+                </label>
               </div>
               <div class="form-actions">
                 <button type="submit" class="primary-button" id="studentSubmitBtn">Simpan Siswa</button>
                 <button type="button" class="secondary-button" id="studentResetBtn">Batal</button>
               </div>
             </form>
-            </details>
+            </dialog>
 
             <details class="fold admin-only" id="studentTools" hidden>
               <summary>Impor CSV &amp; log perubahan</summary>

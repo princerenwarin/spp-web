@@ -1399,3 +1399,20 @@ label {
 
 .danger-button{color:#b91c1c;border-color:rgba(185,28,28,.4)}
 .danger-button:hover{background:rgba(185,28,28,.08)}
+
+/* Student dialog */
+.modal{width:min(760px,calc(100vw - 24px));max-height:calc(100vh - 24px);padding:0;border:1px solid var(--border);border-radius:20px;background:var(--panel);color:inherit;box-shadow:0 30px 80px rgba(15,23,42,.28);overflow:auto}
+.modal::backdrop{background:rgba(15,23,42,.45);backdrop-filter:blur(4px)}
+.modal .student-form{padding:0 24px 24px}
+.modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;position:sticky;top:0;z-index:2;padding:20px 24px 14px;background:var(--panel);border-bottom:1px solid var(--border);margin-bottom:18px}
+.modal-head h2{margin:2px 0 0;font-size:1.3rem}
+.modal-head .eyebrow{margin:0}
+.modal-close{width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:transparent;font-size:1.3rem;line-height:1;cursor:pointer;color:var(--muted)}
+.modal-close:hover{background:rgba(100,116,139,.12)}
+.modal .student-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.modal .form-actions{position:sticky;bottom:0;background:var(--panel);padding-top:14px;margin-top:14px;border-top:1px solid var(--border)}
+.edit-summary{display:flex;flex-direction:column;gap:2px;padding:14px 16px;margin-bottom:16px;border:1px solid var(--border);border-radius:14px;background:rgba(100,116,139,.08)}
+.edit-summary span{color:var(--muted);font-size:.9rem}
+.field-hint{display:block;margin-top:4px;color:var(--muted);font-size:.8rem}
+.modal [hidden]{display:none!important}
+@media (max-width:600px){.modal{width:100vw;max-height:100vh;border-radius:16px 16px 0 0;margin:auto 0 0}.modal .student-form-grid{grid-template-columns:1fr}.modal-head,.modal .student-form{padding-left:16px;padding-right:16px}}

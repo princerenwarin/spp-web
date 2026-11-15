@@ -92,6 +92,11 @@ const ui = {
   studentSekolah: document.getElementById('studentSekolah'),
   studentKelas: document.getElementById('studentKelas'),
   studentType: document.getElementById('studentType'),
+  studentDialog: document.getElementById('studentFormSection'),
+  studentEditSummary: document.getElementById('studentEditSummary'),
+  studentEffective: document.getElementById('studentEffective'),
+  studentModalEyebrow: document.getElementById('studentModalEyebrow'),
+  studentModalTitle: document.getElementById('studentModalTitle'),
   studentTahun: document.getElementById('studentTahun'),
   studentExisting: document.getElementById('studentExisting'),
   studentWa: document.getElementById('studentWa'),
@@ -122,6 +127,7 @@ const ui = {
   studentLogBody: document.getElementById('studentLogBody'),
   studentSubmitBtn: document.getElementById('studentSubmitBtn'),
   studentResetBtn: document.getElementById('studentResetBtn'),
+  studentCloseBtn: document.getElementById('studentCloseBtn'),
   activityList: document.getElementById('activityList'),
   reportList: document.getElementById('reportList'),
   reportTable: document.getElementById('reportTable'),
@@ -831,6 +837,9 @@ function normalizeOverviewRow(row) {
     spp: Number(row.spp || 0),
     komp: Number(row.komp || 0),
     giat: Number(row.giat || 0),
+    dpp: Number(row.dpp || 0),
+    dsp: Number(row.dsp || 0),
+    seragam: Number(row.seragam || 0),
     tahunAjaran: row.tahun_ajaran,
     noWa: row.no_wa || '',
     isStaffChild: row.is_staff_child === true,
@@ -971,7 +980,7 @@ function drawStudentTable() {
         <td data-label="Status"><span class="status-pill ${status === 'Lunas' ? 'lunas' : 'belum'}">${status}</span></td>
         <td data-label="Aksi" class="row-actions">
           ${admin && row.tahunAjaran ? `
-            <button class="action-btn edit" data-action="edit-student" data-nospp="${escapeHtml(row.nospp)}">Ubah SPP</button>
+            <button class="action-btn edit" data-action="edit-student" data-nospp="${escapeHtml(row.nospp)}">Ubah Tagihan</button>
           ` : ''}
           ${admin && selectable ? `<button class="action-btn edit" data-action="arrear-student" data-id="${escapeHtml(row.id)}">Tunggakan</button>` : ''}
           ${admin && selectable ? `<button class="action-btn edit" data-action="rename-student" data-id="${escapeHtml(row.id)}" data-name="${escapeHtml(row.nama)}">Ubah Nama</button>` : ''}
@@ -1386,14 +1395,42 @@ function toPeriode(monthValue) {
 }
 
 function updateStudentFormMode() {
-  const isNew = ui.studentType.value === 'baru';
-  document.querySelectorAll('[data-for="baru"]').forEach((item) => { item.hidden = !isNew; });
-  document.querySelectorAll('[data-for="naik"]').forEach((item) => { item.hidden = isNew; });
+  const mode = ui.studentType.value;
+  const isNew = mode === 'baru';
+  const isEdit = mode === 'ubah';
+  document.querySelectorAll('#studentForm [data-for]').forEach((item) => {
+    item.hidden = !item.dataset.for.split(' ').includes(mode);
+  });
+  document.querySelectorAll('#studentForm [data-hide]').forEach((item) => {
+    item.hidden = item.dataset.hide.split(' ').includes(mode);
+  });
+  ui.studentEditSummary.hidden = !isEdit;
   ui.studentNama.required = isNew;
   ui.studentWa.required = isNew;
   ui.studentPeriode.required = isNew;
-  ui.studentExisting.required = !isNew;
+  ui.studentExisting.required = mode === 'naik';
+  ui.studentKelas.required = !isEdit;
   ui.studentNama.placeholder = isNew ? 'Nama lengkap' : 'Kosongkan jika tidak berubah';
+  const titles = {
+    baru: ['Siswa baru', 'Tambah Siswa Baru'],
+    naik: ['Tahun ajaran baru', 'Naik / Pindah Kelas'],
+    ubah: ['Tagihan siswa', 'Ubah Tagihan']
+  };
+  ui.studentModalEyebrow.textContent = titles[mode][0];
+  ui.studentModalTitle.textContent = titles[mode][1];
+  ui.studentSubmitBtn.textContent = isEdit ? 'Simpan Perubahan' : 'Simpan Siswa';
+}
+
+function openStudentDialog(mode = 'baru') {
+  resetStudentForm();
+  ui.studentType.value = mode;
+  updateStudentFormMode();
+  if (!ui.studentDialog.open) ui.studentDialog.showModal();
+}
+
+function closeStudentDialog() {
+  if (ui.studentDialog.open) ui.studentDialog.close();
+  app.editingEnrollment = null;
 }
 
 function populateExistingStudents() {
@@ -1483,6 +1520,9 @@ function resetStudentForm() {
   populateStudentClassSelect();
   updateStudentFormMode();
   ui.studentSubmitBtn.textContent = 'Simpan Siswa';
+  ui.studentEditSummary.innerHTML = '';
+  ui.studentEffective.value = '';
+  app.editingEnrollment = null;
 }
 
 function buildStudentRow(source) {
@@ -1537,6 +1577,10 @@ async function reloadStudentData() {
 
 async function addOrUpdateStudent(event) {
   event.preventDefault();
+  if (ui.studentType.value === 'ubah') {
+    await saveEnrollmentFees();
+    return;
+  }
   if (ui.studentType.value === 'naik' && !ui.studentExisting.value) {
     alert('Pilih siswa dari daftar pencarian terlebih dahulu.');
     return;
@@ -1562,6 +1606,7 @@ async function addOrUpdateStudent(event) {
     const { data, error } = await app.supabase.rpc('save_student_v1', { ...credentials, p_row: row });
     if (error) throw error;
     await reloadStudentData();
+    closeStudentDialog();
     resetStudentForm();
     alert(`Tersimpan. No. SPP: ${data.nospp} (ID siswa ${data.id_siswa}).`);
   } catch (error) {
@@ -1572,27 +1617,56 @@ async function addOrUpdateStudent(event) {
 async function changeStudentSpp(nospp) {
   const row = app.state.siswa.find((item) => item.nospp === nospp);
   if (!row || !row.tahunAjaran) {
-    alert('Perubahan SPP hanya untuk siswa yang terdaftar lewat aturan baru.');
+    alert('Perubahan tagihan hanya untuk siswa yang terdaftar lewat aturan baru.');
     return;
   }
-  const spp = window.prompt(`SPP baru untuk ${row.nama} (sekarang ${row.spp}):`, row.spp);
-  if (spp === null) return;
-  const periode = window.prompt('Berlaku mulai periode (MMYYYY, contoh 012027). Bulan sebelumnya tidak berubah:', '');
-  if (periode === null) return;
+  openStudentDialog('ubah');
+  app.editingEnrollment = row;
+  ui.studentTahun.value = row.tahunAjaran;
+  ui.studentDpp.value = formatRupiah(row.dpp || 0);
+  ui.studentDsp.value = formatRupiah(row.dsp || 0);
+  ui.studentSeragam.value = formatRupiah(row.seragam || 0);
+  ui.studentGiat.value = formatRupiah(row.giat || 0);
+  ui.studentSpp.value = formatRupiah(row.spp || 0);
+  ui.studentKomp.value = formatRupiah(row.komp || 0);
+  const [start] = row.tahunAjaran.split('-').map(Number);
+  ui.studentEffective.value = `${start}-07`;
+  ui.studentEffective.min = `${start}-07`;
+  ui.studentEffective.max = `${start + 1}-06`;
+  ui.studentEditSummary.innerHTML = `
+    <strong>${escapeHtml(row.nama)}</strong>
+    <span>${escapeHtml(getSchoolName(row.kdsek))} &middot; Kelas ${escapeHtml(row.kdkls)} &middot; TA ${escapeHtml(row.tahunAjaran)}</span>
+    <span class="student-sub">${escapeHtml(row.nospp)}</span>`;
+}
+
+async function saveEnrollmentFees() {
+  const row = app.editingEnrollment;
+  const spp = parseMoney(ui.studentSpp.value);
+  const komp = parseMoney(ui.studentKomp.value);
+  const feeChanged = spp !== Number(row.spp || 0) || komp !== Number(row.komp || 0);
+  if (feeChanged && !ui.studentEffective.value) {
+    alert('Isi periode berlaku untuk perubahan SPP/Komputer.');
+    return;
+  }
   try {
     const credentials = requireStudentRules();
-    const { error } = await app.supabase.rpc('update_student_spp_v1', {
+    const { error } = await app.supabase.rpc('update_enrollment_fees_v1', {
       ...credentials,
       p_id_siswa: row.id,
       p_tahun_ajaran: row.tahunAjaran,
-      p_effective_period: periode.trim(),
-      p_spp: Number(spp),
-      p_komp: row.komp
+      p_dpp: parseMoney(ui.studentDpp.value),
+      p_dsp: parseMoney(ui.studentDsp.value),
+      p_seragam: parseMoney(ui.studentSeragam.value),
+      p_giat: parseMoney(ui.studentGiat.value),
+      p_spp: spp,
+      p_komp: komp,
+      p_effective_period: feeChanged ? toPeriode(ui.studentEffective.value) : null
     });
     if (error) throw error;
+    closeStudentDialog();
     await reloadStudentData();
   } catch (error) {
-    alert(error.message || 'SPP tidak dapat diubah.');
+    alert(error.message || 'Tagihan gagal diubah. Pastikan migration 014 sudah dijalankan.');
   }
 }
 
@@ -2194,7 +2268,12 @@ function setupEvents() {
   });
   ui.studentSekolah.addEventListener('change', () => populateStudentClassSelect());
   ui.studentForm.addEventListener('submit', addOrUpdateStudent);
-  ui.studentResetBtn.addEventListener('click', resetStudentForm);
+  ui.studentResetBtn.addEventListener('click', () => { closeStudentDialog(); resetStudentForm(); });
+  ui.studentCloseBtn.addEventListener('click', () => { closeStudentDialog(); resetStudentForm(); });
+  ui.studentDialog.addEventListener('click', (event) => {
+    if (event.target === ui.studentDialog) closeStudentDialog();
+  });
+  document.getElementById('openStudentFormBtn').addEventListener('click', () => openStudentDialog('baru'));
   ui.studentType.addEventListener('change', updateStudentFormMode);
   document.getElementById('bulkGiatBtn').addEventListener('click', applyBulkActivity);
   document.getElementById('bulkStaffBtn').addEventListener('click', applyBulkStaff);
