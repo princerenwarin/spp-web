@@ -54,8 +54,11 @@
                 <option value="all">Semua</option>
               </select>
             </div>
+            <div class="filter-pill" hidden>
+              <label for="yearFilter">Tahun ajaran</label>
+              <select id="yearFilter"></select>
+            </div>
           </div>
-        </header>
 
         <section class="page active" id="dashboardPage">
           <div class="stats-grid">
@@ -162,6 +165,7 @@
                 <tbody id="studentTableBody"></tbody>
               </table>
             </div>
+            <div class="pager" data-pager="students"></div>
 
             <details class="fold admin-only" id="studentFormSection" hidden>
               <summary>Tambah siswa baru / naik kelas</summary>
@@ -345,6 +349,7 @@
           <div class="panel payment-list-panel">
             <div class="panel-header">
               <h3>Riwayat Pembayaran</h3>
+              <input type="search" id="paymentSearch" class="inline-search" placeholder="Cari nama / No. SPP" />
             </div>
             <div class="table-wrap">
               <table>
@@ -361,6 +366,7 @@
                 <tbody id="paymentList"></tbody>
               </table>
             </div>
+            <div class="pager" data-pager="payments"></div>
           </div>
         </section>
 
@@ -440,6 +446,7 @@
                 <tbody id="detailReportTable"></tbody>
               </table>
             </div>
+            <div class="pager" data-pager="detail"></div>
           </div>
         </section>
 

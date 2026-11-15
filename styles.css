@@ -1382,3 +1382,12 @@ label {
   .students-table td[data-label="Siswa"] .student-name { font-size: 1.02rem; }
   .students-table tr.empty-row { display: block; }
 }
+
+/* Pagination, skeleton, inline search */
+.pager{display:flex;align-items:center;justify-content:center;gap:14px;padding:12px 8px;color:var(--muted,#64748b);font-size:.85rem}
+.pager[hidden]{display:none}
+.pager button:disabled{opacity:.4;cursor:default}
+.inline-search{margin-left:auto;min-width:200px;max-width:280px;padding:8px 12px;border:1px solid rgba(100,116,139,.3);border-radius:10px;font:inherit}
+.skeleton{display:block;height:16px;border-radius:8px;background:linear-gradient(90deg,rgba(148,163,184,.15) 25%,rgba(148,163,184,.3) 50%,rgba(148,163,184,.15) 75%);background-size:200% 100%;animation:skeleton-shimmer 1.2s infinite}
+.skeleton-row td{padding:14px 12px}
+@keyframes skeleton-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
