@@ -191,6 +191,7 @@ const ui = {
   paymentImportRows: document.getElementById('paymentImportRows'),
   importPaymentsBtn: document.getElementById('importPaymentsBtn'),
   downloadPaymentTemplate: document.getElementById('downloadPaymentTemplate'),
+  addOneTimePaymentComponent: document.getElementById('addOneTimePaymentComponent'),
   refreshRevenue: document.getElementById('refreshRevenue'),
   loginForm: document.getElementById('loginForm'),
   schoolSettingsForm: document.getElementById('schoolSettingsForm'),
@@ -942,15 +943,6 @@ function normalizeOverviewRow(row) {
   };
 }
 
-function feeTotal(row) {
-  return ['spp', 'komp', 'dpp', 'dsp', 'giat', 'seragam']
-    .reduce((sum, key) => sum + Number(row[key] || 0), 0);
-}
-
-function rowBilled(row) {
-  return feeTotal(row) + Number(row.arrearsTotal || 0);
-}
-
 const FEE_LABELS = [
   ['spp', 'SPP'], ['komp', 'Komputer'], ['dpp', 'DPP'],
   ['dsp', 'DPS'], ['giat', 'Kegiatan'], ['seragam', 'Seragam']
@@ -959,13 +951,16 @@ const FEE_LABELS = [
 function billBreakdownMarkup(row, arrearsTotal) {
   const lines = FEE_LABELS
     .filter(([key]) => Number(row[key] || 0) > 0)
-    .map(([key, label]) => `<div class="bill-line"><span>${label}</span><strong>${formatRupiah(row[key])}</strong></div>`)
+    .map(([key, label]) => {
+      const detailLabel = key === 'spp' || key === 'komp' ? `${label} · per bulan` : label;
+      return `<div class="bill-line"><span>${detailLabel}</span><strong>${formatRupiah(row[key])}</strong></div>`;
+    })
     .join('');
   const arrears = arrearsTotal
-    ? `<div class="bill-line bill-arrears"><span>Tunggakan tahun lalu</span><strong>${formatRupiah(arrearsTotal)}</strong></div>
+    ? `<div class="bill-arrears"><span>Tunggakan tahun lalu</span></div>
        <div class="bill-arrears-list" data-arrears-for="${escapeHtml(row.id)}"><span class="student-sub">Memuat rincian...</span></div>`
     : '';
-  return `<div class="bill-lines">${lines || '<span class="student-sub">Belum ada tagihan.</span>'}${arrears}</div>`;
+  return `<div class="bill-lines" aria-label="Rincian tagihan per komponen">${lines || '<span class="student-sub">Belum ada tagihan.</span>'}${arrears}</div>`;
 }
 
 async function hydrateArrearsBreakdown() {
@@ -1087,13 +1082,11 @@ function drawStudentTable() {
       : (app.state.arrears || [])
         .filter((item) => item.idSiswa === String(row.id))
         .reduce((sum, item) => sum + item.nominal, 0);
-    const totalTagihan = feeTotal(row) + arrearsTotal;
     const totalBayar = app.server
       ? row.paidTotal
       : app.state.transaksi
         .filter((tx) => tx.nospp === row.nospp)
         .reduce((sum, tx) => sum + Number(tx.nominal || 0), 0);
-    const status = totalBayar >= totalTagihan ? 'Lunas' : 'Belum';
     const virtualAccounts = getStudentVirtualAccounts(row);
     const virtualAccountMarkup = virtualAccounts.length
       ? `<div class="student-va-list">${virtualAccounts.map((item) => `
@@ -1109,8 +1102,8 @@ function drawStudentTable() {
         <td data-label="Siswa"><div class="student-name">${escapeHtml(row.nama)}</div><div class="student-sub">${escapeHtml(row.nospp)}${row.tahunAjaran ? ` &middot; ${escapeHtml(row.tahunAjaran)}` : ''}${row.isStaffChild ? ' &middot; <span class="badge-staff">Anak guru</span>' : ''}</div></td>
         <td data-label="Sekolah / Kelas"><div>${escapeHtml(getSchoolName(row.kdsek))}</div><div class="student-sub">Kelas ${escapeHtml(row.kdkls)}</div></td>
         <td data-label="Virtual Account">${virtualAccountMarkup}</td>
-        <td data-label="Tagihan">${row.isStaffChild && row.showInBilling === false ? 'Tidak ditagih' : `<div class="bill-total">${formatRupiah(totalTagihan)}</div><div class="student-sub">Terbayar ${formatRupiah(totalBayar)} &middot; Sisa ${formatRupiah(Math.max(totalTagihan - totalBayar, 0))}</div>${billBreakdownMarkup(row, arrearsTotal)}`}</td>
-        <td data-label="Status"><span class="status-pill ${status === 'Lunas' ? 'lunas' : 'belum'}">${status}</span></td>
+        <td data-label="Rincian tagihan">${row.isStaffChild && row.showInBilling === false ? 'Tidak ditagih' : billBreakdownMarkup(row, arrearsTotal)}</td>
+        <td data-label="Riwayat pembayaran"><span class="payment-history-note">${totalBayar > 0 ? `Transaksi tercatat ${formatRupiah(totalBayar)}` : 'Belum ada transaksi'}</span></td>
         <td data-label="Aksi" class="row-actions">
           ${admin && row.tahunAjaran ? `
             <button class="action-btn edit" data-action="edit-student" data-nospp="${escapeHtml(row.nospp)}">Ubah Tagihan</button>
@@ -1661,55 +1654,33 @@ function populateReportFilters() {
 
 function reportDetailMarkup(billing) {
   const months = billing.periode_bulanan || [];
-  const monthlyRows = months.map((item) => `
-    <tr>
-      <th scope="row">${escapeHtml(formatPeriodLabel(item.periode))}</th>
-      <td>${formatRupiah(item.spp.tagihan)}</td>
-      <td>${formatRupiah(item.spp.dibayar)}</td>
-      <td>${formatRupiah(item.spp.saldo_dibawa)}</td>
-      <td>${formatRupiah(item.spp.sisa)}</td>
-      <td><span class="billing-status ${item.spp.status === 'Lunas' ? 'is-paid' : ''}">${escapeHtml(item.spp.status)}</span></td>
-      <td>${formatRupiah(item.komp.tagihan)}</td>
-      <td>${formatRupiah(item.komp.dibayar)}</td>
-      <td>${formatRupiah(item.komp.saldo_dibawa)}</td>
-      <td>${formatRupiah(item.komp.sisa)}</td>
-    </tr>
-  `).join('');
+  const monthlyRows = months.map((item) => {
+    const components = [
+      ['SPP', Number(item.spp.sisa || 0)],
+      ['Komputer', Number(item.komp.sisa || 0)]
+    ].filter(([, remaining]) => remaining > 0)
+      .map(([label, remaining]) => `
+        <div class="arrears-balance-line"><span>${label}</span><strong>${formatRupiah(remaining)}</strong></div>
+      `).join('');
+    if (!components) return '';
+    return `
+      <div class="arrears-period">
+        <strong>${escapeHtml(formatPeriodLabel(item.periode))}</strong>
+        <div class="arrears-period-items">${components}</div>
+      </div>
+    `;
+  }).join('');
   const components = Object.entries(billing.komponen_satu_kali || {})
-    .filter(([, item]) => Number(item.tagihan || 0) > 0 || Number(item.dibayar || 0) > 0)
+    .filter(([, item]) => Number(item.sisa || 0) > 0)
     .map(([key, item]) => `
-      <tr>
-        <th scope="row">${escapeHtml(getPaymentComponentLabel(key))}</th>
-        <td>${formatRupiah(item.tagihan)}</td>
-        <td>${formatRupiah(item.dibayar)}</td>
-        <td>${formatRupiah(item.sisa)}</td>
-        <td><span class="billing-status ${item.status === 'Lunas' ? 'is-paid' : ''}">${escapeHtml(item.status)}</span></td>
-      </tr>
+      <div class="arrears-balance-line"><span>${escapeHtml(getPaymentComponentLabel(key))}</span><strong>${formatRupiah(item.sisa)}</strong></div>
     `).join('');
+  const reconciliation = Number(billing.belum_dialokasikan || 0) > 0
+    ? `<div class="arrears-reconciliation">Pembayaran lama belum dialokasikan <strong>${formatRupiah(billing.belum_dialokasikan)}</strong></div>`
+    : '';
+  const items = `${monthlyRows}${components ? `<div class="arrears-period"><strong>Komponen lainnya</strong><div class="arrears-period-items">${components}</div></div>` : ''}${reconciliation}`;
 
-  return `<details class="billing-drilldown">
-    <summary>Lihat rekap periode</summary>
-    <div class="table-wrap billing-period-wrap">
-      <table class="billing-period-table">
-        <thead><tr>
-          <th rowspan="2">Periode</th>
-          <th colspan="5">SPP</th>
-          <th colspan="4">Komputer</th>
-        </tr><tr>
-          <th>Tagihan</th><th>Dibayar</th><th>Saldo masuk</th><th>Sisa</th><th>Status</th>
-          <th>Tagihan</th><th>Dibayar</th><th>Saldo masuk</th><th>Sisa</th>
-        </tr></thead>
-        <tbody>${monthlyRows || '<tr><td colspan="10" class="empty-state">Tidak ada periode bulanan.</td></tr>'}</tbody>
-      </table>
-    </div>
-    <div class="table-wrap billing-onetime-wrap">
-      <table>
-        <thead><tr><th>Komponen satu kali / tahun lalu</th><th>Tagihan</th><th>Dibayar</th><th>Sisa</th><th>Status</th></tr></thead>
-        <tbody>${components || '<tr><td colspan="5" class="empty-state">Tidak ada tagihan satu kali.</td></tr>'}</tbody>
-      </table>
-    </div>
-    <p class="billing-last-paid">Pembayaran terakhir: ${escapeHtml(billing.terakhir_bayar || '-')}</p>
-  </details>`;
+  return `<div class="arrears-breakdown">${items || '<span class="student-sub">Tidak ada rincian sisa tagihan.</span>'}</div>`;
 }
 
 function normalizeWhatsAppNumber(value) {
@@ -1717,19 +1688,6 @@ function normalizeWhatsAppNumber(value) {
   if (number.startsWith('+')) number = number.slice(1);
   if (number.startsWith('0')) number = `62${number.slice(1)}`;
   return /^\d{8,20}$/.test(number) ? number : '';
-}
-
-function getArrearsPeriods(billing) {
-  const monthly = (billing.periode_bulanan || [])
-    .filter((item) => Number(item.spp.sisa || 0) > 0 || Number(item.komp.sisa || 0) > 0)
-    .map((item) => `<span class="period-chip">${escapeHtml(formatPeriodLabel(item.periode))}</span>`)
-    .join('');
-  if (monthly) return monthly;
-  const oneTime = Object.entries(billing.komponen_satu_kali || {})
-    .filter(([, item]) => Number(item.sisa || 0) > 0)
-    .map(([key]) => `<span class="period-chip is-muted">${escapeHtml(getPaymentComponentLabel(key))}</span>`)
-    .join('');
-  return oneTime || '<span class="period-chip is-muted">Tagihan satu kali</span>';
 }
 
 function arrearsRowMarkup(row) {
@@ -1741,17 +1699,24 @@ function arrearsRowMarkup(row) {
   const status = unallocated > 0 ? 'Perlu rekonsiliasi' : (remaining <= 0 ? 'Lunas' : (partial ? 'Cicilan' : 'Belum bayar'));
   const statusClass = unallocated > 0 ? 'needs-review' : (remaining <= 0 ? 'lunas' : 'belum');
   const phone = normalizeWhatsAppNumber(row.no_wa);
-  const monthlyPeriods = (billing.periode_bulanan || [])
-    .filter((item) => Number(item.spp.sisa || 0) > 0 || Number(item.komp.sisa || 0) > 0)
-    .map((item) => formatPeriodLabel(item.periode));
-  const oneTimeComponents = Object.entries(billing.komponen_satu_kali || {})
+  const monthlyDetails = (billing.periode_bulanan || [])
+    .map((item) => {
+      const components = [
+        ['SPP', Number(item.spp.sisa || 0)],
+        ['Komputer', Number(item.komp.sisa || 0)]
+      ].filter(([, amount]) => amount > 0)
+        .map(([label, amount]) => `${label} ${formatRupiah(amount)}`);
+      return components.length
+        ? `${formatPeriodLabel(item.periode)}: ${components.join(', ')}`
+        : '';
+    })
+    .filter(Boolean);
+  const oneTimeDetails = Object.entries(billing.komponen_satu_kali || {})
     .filter(([, item]) => Number(item.sisa || 0) > 0)
-    .map(([key]) => getPaymentComponentLabel(key));
+    .map(([key, item]) => `${getPaymentComponentLabel(key)} ${formatRupiah(item.sisa)}`);
   const name = String(row.nama || 'Siswa');
-  const balanceDescription = monthlyPeriods.length
-    ? `periode ${monthlyPeriods.join(', ')}`
-    : `komponen ${oneTimeComponents.join(', ') || 'tagihan satu kali'}`;
-  const whatsappMessage = `Yth. Orang tua/wali ${name}, kami informasikan terdapat sisa tagihan untuk ${balanceDescription}. Mohon cek rincian dan konfirmasi pembayaran kepada tata usaha. Terima kasih.`;
+  const balanceDescription = [...monthlyDetails, ...oneTimeDetails].join('; ') || 'tagihan satu kali';
+  const whatsappMessage = `Yth. Orang tua/wali ${name}, berikut rincian sisa tagihan: ${balanceDescription}. Total sisa ${formatRupiah(remaining)}. Mohon konfirmasi pembayaran kepada tata usaha. Terima kasih.`;
   const whatsappUrl = phone && unallocated <= 0
     ? `https://wa.me/${phone}?text=${encodeURIComponent(whatsappMessage)}`
     : '';
@@ -1762,8 +1727,7 @@ function arrearsRowMarkup(row) {
 
   return `<tr>
     <td>${escapeHtml(row.kdkls || '-')}</td>
-    <td><strong>${escapeHtml(name)}</strong><small class="student-sub">${escapeHtml(row.nospp || row.id_siswa)}</small></td>
-    <td><div class="period-chip-list">${getArrearsPeriods(billing)}</div></td>
+    <td><strong>${escapeHtml(name)}</strong></td>
     <td>${reportDetailMarkup(billing)}</td>
     <td class="balance-cell">${balanceMarkup}</td>
     <td><span class="status-pill ${statusClass}">${status}</span></td>
@@ -1785,13 +1749,13 @@ function renderArrearsReport() {
   rows.forEach((row) => {
     const className = row.kdkls || 'Tanpa kelas';
     if (className !== previousClass) {
-      groups.push(`<tr class="class-group-row"><th colspan="7" scope="rowgroup">${escapeHtml(className)}</th></tr>`);
+      groups.push(`<tr class="class-group-row"><th colspan="6" scope="rowgroup">${escapeHtml(className)}</th></tr>`);
       previousClass = className;
     }
     groups.push(arrearsRowMarkup(row));
   });
   ui.arrearsReportTable.innerHTML = groups.join('')
-    || '<tr><td colspan="7" class="empty-state">Tidak ada tunggakan pada filter ini.</td></tr>';
+    || '<tr><td colspan="6" class="empty-state">Tidak ada tunggakan pada filter ini.</td></tr>';
   ui.arrearsReportCount.textContent = `${app.arrearsTotal.toLocaleString('id-ID')} siswa memiliki sisa tagihan atau pembayaran lama yang perlu direkonsiliasi.`;
   const shown = Math.min(app.arrearsRows.length, app.arrearsTotal);
   ui.arrearsPageInfo.textContent = `${shown.toLocaleString('id-ID')} dari ${app.arrearsTotal.toLocaleString('id-ID')} siswa`;
@@ -1806,7 +1770,7 @@ async function fetchArrearsReport(append = false) {
   ui.reportPeriod.textContent = formatPeriodLabel(ui.reportPeriodFilter.value);
   if (!app.server) {
     ui.arrearsReportCount.textContent = 'Laporan per komponen membutuhkan backend Supabase dan migration 016.';
-    ui.arrearsReportTable.innerHTML = '<tr><td colspan="7" class="empty-state">Hubungkan Supabase dan jalankan migration 016 untuk menghitung cicilan dan sisa per periode secara akurat.</td></tr>';
+    ui.arrearsReportTable.innerHTML = '<tr><td colspan="6" class="empty-state">Hubungkan Supabase dan jalankan migration 016 untuk menghitung cicilan dan sisa per periode secara akurat.</td></tr>';
     ui.loadMoreArrears.hidden = true;
     return;
   }
@@ -1817,7 +1781,7 @@ async function fetchArrearsReport(append = false) {
   if (!append) {
     app.arrearsOffset = 0;
     app.arrearsRows = [];
-    ui.arrearsReportTable.innerHTML = skeletonRows(7);
+    ui.arrearsReportTable.innerHTML = skeletonRows(6);
   }
 
   const { data, error } = await app.supabase.rpc('spp_app_class_billing_v1', {
@@ -1830,7 +1794,7 @@ async function fetchArrearsReport(append = false) {
   });
   if (seq !== arrearsFetchSeq) return;
   if (error) {
-    ui.arrearsReportTable.innerHTML = `<tr><td colspan="7" class="empty-state">Laporan gagal dimuat: ${escapeHtml(error.message)}. Periksa migration 016.</td></tr>`;
+    ui.arrearsReportTable.innerHTML = `<tr><td colspan="6" class="empty-state">Laporan gagal dimuat: ${escapeHtml(error.message)}. Periksa migration 016.</td></tr>`;
     ui.arrearsReportCount.textContent = 'Laporan tidak dapat dimuat.';
     ui.loadMoreArrears.hidden = true;
     return;
@@ -1872,7 +1836,7 @@ function printArrearsLetter(studentId) {
     <article class="print-letter">
       <h1>Pemberitahuan Sisa Tagihan</h1>
       <p>Kepada orang tua/wali dari:</p>
-      <p><strong>${escapeHtml(row.nama)}</strong><br>No. SPP: ${escapeHtml(row.nospp)}<br>Kelas: ${escapeHtml(row.kdkls)} &middot; ${escapeHtml(getSchoolName(row.kdsek))}</p>
+      <p><strong>${escapeHtml(row.nama)}</strong><br>Kelas: ${escapeHtml(row.kdkls)} &middot; ${escapeHtml(getSchoolName(row.kdsek))}</p>
       <p>Berdasarkan catatan pembayaran sampai ${escapeHtml(formatPeriodLabel(billing.periode_aktif))}, terdapat rincian sisa tagihan berikut:</p>
       <table><thead><tr><th>Periode / komponen</th><th>Sisa SPP</th><th>Sisa Komputer</th></tr></thead><tbody>${periods || ''}${components || ''}</tbody></table>
       <p><strong>Total sisa terhitung: ${formatRupiah(billing.sisa_total)}</strong></p>
@@ -1972,7 +1936,10 @@ function setPickerValue(hiddenId, id) {
     app.paymentBillingError = '';
     paymentBillingRequest += 1;
     if (student) loadPaymentBilling(student);
-    else renderPaymentBillingStatus();
+    else {
+      resetMonthlyPaymentRows();
+      renderPaymentBillingStatus();
+    }
   }
 }
 
@@ -2025,6 +1992,7 @@ function setupStudentPickers() {
         app.paymentBilling = null;
         app.paymentBillingError = '';
         paymentBillingRequest += 1;
+        resetMonthlyPaymentRows();
         renderPaymentBillingStatus();
       }
       renderSoon();
@@ -2833,6 +2801,11 @@ function paymentBillingCutoff(year) {
   return start === currentStart ? localMonthInputValue() : `${start + 1}-06`;
 }
 
+function paymentPeriodSequence(period) {
+  const match = /^(0[1-9]|1[0-2])(\d{4})$/.exec(String(period || ''));
+  return match ? Number(match[2]) * 12 + Number(match[1]) : 0;
+}
+
 function buildLocalPaymentBilling(student, year, cutoff) {
   const months = academicMonths(year).filter((month) => month.key <= cutoff);
   const transactions = app.state.transaksi.filter((item) => item.nospp === student.nospp);
@@ -2848,16 +2821,18 @@ function buildLocalPaymentBilling(student, year, cutoff) {
       .reduce((sum, item) => sum + Number(item.nominal || 0), 0);
     const kompPaid = transactions.filter((item) => item.component === 'komp' && item.periode === period)
       .reduce((sum, item) => sum + Number(item.nominal || 0), 0);
-    const sppRemaining = Math.max(sppTarget - sppPaid - sppCredit, 0);
-    const kompRemaining = Math.max(kompTarget - kompPaid - kompCredit, 0);
+    const sppCreditIn = sppCredit;
+    const kompCreditIn = kompCredit;
+    const sppRemaining = Math.max(sppTarget - sppPaid - sppCreditIn, 0);
+    const kompRemaining = Math.max(kompTarget - kompPaid - kompCreditIn, 0);
     sppCredit = Math.max(sppPaid + sppCredit - sppTarget, 0);
     kompCredit = Math.max(kompPaid + kompCredit - kompTarget, 0);
     sppTotal += sppRemaining;
     kompTotal += kompRemaining;
     return {
       periode: period,
-      spp: { sisa: sppRemaining },
-      komp: { sisa: kompRemaining }
+      spp: { tagihan: sppTarget, dibayar: sppPaid, saldo_dibawa: sppCreditIn, sisa: sppRemaining },
+      komp: { tagihan: kompTarget, dibayar: kompPaid, saldo_dibawa: kompCreditIn, sisa: kompRemaining }
     };
   });
   const legacy = transactions.filter((item) => item.component === 'legacy')
@@ -2875,7 +2850,100 @@ function buildLocalPaymentBilling(student, year, cutoff) {
   };
 }
 
-async function getPaymentBilling(student) {
+async function appendFuturePaymentPeriods(student, billing) {
+  const currentPeriods = billing.periode_bulanan || [];
+  const lastCurrentPeriod = currentPeriods[currentPeriods.length - 1]?.periode || billing.periode_aktif;
+  const sequenceEnd = paymentPeriodSequence(lastCurrentPeriod);
+  const academicPeriods = academicMonths(billing.tahun_ajaran).map((month) => toPeriode(month.key));
+  let futurePeriods = academicPeriods.filter((period) => paymentPeriodSequence(period) > sequenceEnd);
+  if (!futurePeriods.length) {
+    billing.payment_periods = currentPeriods;
+    return billing;
+  }
+
+  let enrollment = { spp: student.spp, komp: student.komp, periode_masuk: student.periodeMasuk };
+  let historyRows = [];
+  let futurePayments = [];
+  if (app.server) {
+    const [enrollmentResult, historyResult] = await Promise.all([
+      app.supabase.from('spp_app_enrollments')
+        .select('spp,komp,periode_masuk')
+        .eq('id_siswa', String(student.id))
+        .eq('tahun_ajaran', billing.tahun_ajaran)
+        .maybeSingle(),
+      app.supabase.from('spp_app_spp_history')
+        .select('effective_date,spp,komp')
+        .eq('id_siswa', String(student.id))
+        .eq('tahun_ajaran', billing.tahun_ajaran)
+        .order('effective_date', { ascending: true })
+    ]);
+    if (enrollmentResult.error) throw enrollmentResult.error;
+    if (historyResult.error) throw historyResult.error;
+    enrollment = enrollmentResult.data || enrollment;
+    if (futurePeriods.length) {
+      const { data, error } = await app.supabase.from('spp_app_payment_list')
+        .select('component,periode,nominal')
+        .eq('nospp', student.nospp)
+        .in('component', ['spp', 'komp'])
+        .in('periode', futurePeriods);
+      if (error) throw error;
+      futurePayments = data || [];
+    }
+    historyRows = historyResult.data || [];
+  } else {
+    futurePayments = app.state.transaksi.filter((item) => (
+      item.nospp === student.nospp && ['spp', 'komp'].includes(item.component)
+      && futurePeriods.includes(item.periode)
+    ));
+  }
+
+  const entryPeriod = String(enrollment.periode_masuk || '');
+  if (entryPeriod) {
+    futurePeriods = futurePeriods.filter((period) => (
+      paymentPeriodSequence(period) >= paymentPeriodSequence(entryPeriod)
+    ));
+  }
+  const last = currentPeriods[currentPeriods.length - 1];
+  let sppTarget = Number(last?.spp?.tagihan ?? enrollment.spp ?? 0);
+  let kompTarget = Number(last?.komp?.tagihan ?? enrollment.komp ?? 0);
+  let sppCredit = last
+    ? Math.max(Number(last.spp?.dibayar || 0) + Number(last.spp?.saldo_dibawa || 0) - sppTarget, 0)
+    : 0;
+  let kompCredit = last
+    ? Math.max(Number(last.komp?.dibayar || 0) + Number(last.komp?.saldo_dibawa || 0) - kompTarget, 0)
+    : 0;
+  const extendedPeriods = [...currentPeriods];
+
+  futurePeriods.forEach((period) => {
+    const effectiveDate = `${period.slice(2)}-${period.slice(0, 2)}-01`;
+    const rate = historyRows.reduce((latest, item) => (
+      item.effective_date <= effectiveDate ? item : latest
+    ), null);
+    if (rate) {
+      sppTarget = Number(rate.spp);
+      kompTarget = Number(rate.komp);
+    }
+    const sppPaid = futurePayments.filter((item) => item.component === 'spp' && item.periode === period)
+      .reduce((sum, item) => sum + Number(item.nominal || 0), 0);
+    const kompPaid = futurePayments.filter((item) => item.component === 'komp' && item.periode === period)
+      .reduce((sum, item) => sum + Number(item.nominal || 0), 0);
+    const sppCreditIn = sppCredit;
+    const kompCreditIn = kompCredit;
+    const sppRemaining = Math.max(sppTarget - sppPaid - sppCreditIn, 0);
+    const kompRemaining = Math.max(kompTarget - kompPaid - kompCreditIn, 0);
+    sppCredit = Math.max(sppPaid + sppCreditIn - sppTarget, 0);
+    kompCredit = Math.max(kompPaid + kompCreditIn - kompTarget, 0);
+    extendedPeriods.push({
+      periode: period,
+      spp: { tagihan: sppTarget, dibayar: sppPaid, saldo_dibawa: sppCreditIn, sisa: sppRemaining },
+      komp: { tagihan: kompTarget, dibayar: kompPaid, saldo_dibawa: kompCreditIn, sisa: kompRemaining }
+    });
+  });
+  billing.payment_periods = extendedPeriods;
+  return billing;
+}
+
+async function getPaymentBilling(student, includeFuturePeriods = false) {
   let year = student.tahunAjaran || '';
   if (app.server && !year) {
     const { data, error } = await app.supabase.from('spp_app_student_overview')
@@ -2891,7 +2959,7 @@ async function getPaymentBilling(student) {
   const cutoff = paymentBillingCutoff(year);
   if (!cutoff) throw new Error(`Tagihan bulanan untuk tahun ajaran ${year} belum aktif.`);
   const period = toPeriode(cutoff);
-  const cacheKey = `${student.id}|${year}|${period}`;
+  const cacheKey = `${student.id}|${year}|${period}|${includeFuturePeriods ? 'future' : 'current'}`;
   if (app.paymentBillingCache.has(cacheKey)) return app.paymentBillingCache.get(cacheKey);
 
   let billing;
@@ -2908,6 +2976,8 @@ async function getPaymentBilling(student) {
     billing = buildLocalPaymentBilling(student, year, cutoff);
   }
   billing.tahun_ajaran = billing.tahun_ajaran || year;
+  if (includeFuturePeriods) await appendFuturePaymentPeriods(student, billing);
+  else billing.payment_periods = billing.periode_bulanan || [];
   app.paymentBillingCache.set(cacheKey, billing);
   return billing;
 }
@@ -2955,10 +3025,10 @@ async function loadPaymentBilling(student) {
   const request = ++paymentBillingRequest;
   app.paymentBilling = null;
   app.paymentBillingError = '';
+  resetMonthlyPaymentRows();
   renderPaymentBillingStatus();
-  updatePaymentAllocationRows();
   try {
-    const billing = await getPaymentBilling(student);
+    const billing = await getPaymentBilling(student, true);
     if (request !== paymentBillingRequest) return;
     app.paymentBilling = billing;
   } catch (error) {
@@ -2969,39 +3039,104 @@ async function loadPaymentBilling(student) {
   updatePaymentAllocationRows();
 }
 
-function updatePaymentPeriodVisibility(row) {
-  const component = row.querySelector('.payment-component').value;
-  const summary = row.querySelector('.payment-period-summary');
-  const isMonthly = component === 'spp' || component === 'komp';
-  summary.hidden = !isMonthly;
-  if (!isMonthly) return;
-  const period = app.paymentBilling ? oldestDuePeriod(app.paymentBilling, component) : '';
-  summary.querySelector('strong').textContent = period
-    ? `Mulai ${formatPeriodLabel(period)}`
-    : 'Otomatis dari tunggakan terlama';
+function paymentSchedule(billing = app.paymentBilling) {
+  return billing?.payment_periods || billing?.periode_bulanan || [];
 }
 
-function makePaymentComponentRow() {
-  const options = PAYMENT_COMPONENTS.map(([key, label]) => (
+function defaultPaymentPeriod(billing = app.paymentBilling) {
+  const schedule = paymentSchedule(billing);
+  const oldest = oldestAnyDuePeriod(billing);
+  return schedule.some((item) => item.periode === oldest)
+    ? oldest
+    : schedule[0]?.periode || '';
+}
+
+function nextPaymentPeriod(period, billing = app.paymentBilling) {
+  const schedule = paymentSchedule(billing);
+  const index = schedule.findIndex((item) => item.periode === period);
+  return index >= 0 ? schedule[index + 1]?.periode || '' : '';
+}
+
+function updateMonthlyPaymentRow(row, forceFill = false) {
+  const select = row.querySelector('.payment-period');
+  const schedule = paymentSchedule();
+  const currentPeriod = select.value;
+  const preferredPeriod = currentPeriod || row.dataset.initialPeriod || '';
+  select.innerHTML = `<option value="">${app.paymentBilling ? 'Pilih periode' : 'Pilih siswa dahulu'}</option>${schedule.map((item) => (
+    `<option value="${item.periode}">${escapeHtml(formatPeriodLabel(item.periode))}</option>`
+  )).join('')}`;
+  select.value = schedule.some((item) => item.periode === preferredPeriod)
+    ? preferredPeriod
+    : defaultPaymentPeriod();
+  delete row.dataset.initialPeriod;
+
+  const period = select.value;
+  const inputs = {
+    spp: row.querySelector('.payment-spp-amount'),
+    komp: row.querySelector('.payment-komp-amount')
+  };
+  select.disabled = !schedule.length;
+  Object.values(inputs).forEach((input) => { input.disabled = !period; });
+  if (!period) {
+    row.dataset.paymentPeriod = '';
+    return;
+  }
+
+  const periodBilling = schedule.find((item) => item.periode === period);
+  const changedPeriod = row.dataset.paymentPeriod !== period;
+  ['spp', 'komp'].forEach((component) => {
+    const input = inputs[component];
+    const autoValue = Number(periodBilling?.[component]?.sisa || 0);
+    const wasAutoFilled = input.value === '' || parseMoney(input.value) === Number(row.dataset[`auto${component}`]);
+    if (forceFill || changedPeriod || wasAutoFilled) {
+      input.value = formatRupiah(autoValue);
+      row.dataset[`auto${component}`] = String(autoValue);
+    }
+  });
+  row.dataset.paymentPeriod = period;
+}
+
+function makePaymentComponentRow(period = '') {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'payment-component-row payment-monthly-row';
+  wrapper.dataset.paymentRow = 'monthly';
+  wrapper.innerHTML = `
+    <label>
+      <span>Periode</span>
+      <select class="payment-period" aria-label="Periode tagihan"></select>
+    </label>
+    <label>
+      <span>SPP</span>
+      <input class="money-input payment-component-amount payment-spp-amount" type="text" inputmode="numeric" aria-label="Nominal SPP" disabled />
+    </label>
+    <label>
+      <span>Komputer</span>
+      <input class="money-input payment-component-amount payment-komp-amount" type="text" inputmode="numeric" aria-label="Nominal Komputer" disabled />
+    </label>
+    <button type="button" class="action-btn delete payment-remove" aria-label="Hapus periode">Hapus</button>`;
+  if (period) wrapper.dataset.initialPeriod = period;
+  return wrapper;
+}
+
+function makeOneTimePaymentRow() {
+  const options = PAYMENT_COMPONENTS
+    .filter(([key]) => key !== 'spp' && key !== 'komp')
+    .map(([key, label]) => (
     `<option value="${key}">${escapeHtml(label)}</option>`
   )).join('');
   const wrapper = document.createElement('div');
-  wrapper.className = 'payment-component-row';
+  wrapper.className = 'payment-component-row payment-one-time-row';
+  wrapper.dataset.paymentRow = 'one-time';
   wrapper.innerHTML = `
     <label>
       <span>Komponen</span>
       <select class="payment-component" aria-label="Komponen pembayaran">${options}</select>
     </label>
-    <div class="payment-period-summary" hidden>
-      <span>Periode alokasi</span>
-      <strong>Otomatis dari tunggakan terlama</strong>
-    </div>
     <label>
       <span>Nominal</span>
-      <input class="money-input payment-component-amount" type="text" inputmode="numeric" required />
+      <input class="money-input payment-component-amount payment-one-time-amount" type="text" inputmode="numeric" required />
     </label>
     <button type="button" class="action-btn delete payment-remove" aria-label="Hapus komponen">Hapus</button>`;
-  updatePaymentPeriodVisibility(wrapper);
   return wrapper;
 }
 
@@ -3012,11 +3147,17 @@ function updatePaymentAllocationTotal() {
 }
 
 function updatePaymentAllocationRows() {
-  const rows = [...ui.paymentComponentRows.querySelectorAll('.payment-component-row')];
-  rows.forEach((row) => {
-    updatePaymentPeriodVisibility(row);
-    row.querySelector('.payment-remove').disabled = rows.length <= 1;
+  const monthlyRows = [...ui.paymentComponentRows.querySelectorAll('.payment-monthly-row')];
+  const oneTimeRows = [...ui.paymentComponentRows.querySelectorAll('.payment-one-time-row')];
+  monthlyRows.forEach((row) => {
+    updateMonthlyPaymentRow(row);
+    row.querySelector('.payment-remove').disabled = monthlyRows.length <= 1;
   });
+  oneTimeRows.forEach((row) => { row.querySelector('.payment-remove').disabled = false; });
+  const lastPeriod = monthlyRows[monthlyRows.length - 1]?.querySelector('.payment-period').value
+    || defaultPaymentPeriod();
+  ui.addPaymentComponent.disabled = !app.paymentBilling || !nextPaymentPeriod(lastPeriod);
+  ui.addOneTimePaymentComponent.disabled = oneTimeRows.length >= 12;
   updatePaymentAllocationTotal();
 }
 
@@ -3025,8 +3166,20 @@ function resetPaymentAllocationForm() {
   updatePaymentAllocationRows();
 }
 
+function resetMonthlyPaymentRows() {
+  ui.paymentComponentRows.querySelectorAll('.payment-monthly-row').forEach((row) => {
+    row.querySelector('.payment-period').value = '';
+    row.querySelector('.payment-spp-amount').value = '';
+    row.querySelector('.payment-komp-amount').value = '';
+    delete row.dataset.paymentPeriod;
+    delete row.dataset.autoSpp;
+    delete row.dataset.autoKomp;
+  });
+  updatePaymentAllocationRows();
+}
+
 function allocateMonthlyPayment(component, amount, billing, startPeriod = '') {
-  const periods = billing?.periode_bulanan || [];
+  const periods = paymentSchedule(billing);
   if (!periods.length) throw new Error('Belum ada periode tagihan yang dapat dialokasikan.');
   if (Number(billing.belum_dialokasikan || 0) > 0) {
     throw new Error('Rekonsiliasi pembayaran lama yang belum dialokasikan sebelum memakai alokasi otomatis.');
@@ -3069,23 +3222,33 @@ function allocateMonthlyPayment(component, amount, billing, startPeriod = '') {
 }
 
 async function collectPaymentItems() {
-  const rows = [...ui.paymentComponentRows.querySelectorAll('.payment-component-row')];
-  if (!rows.length || rows.length > 12) {
-    throw new Error('Satu penerimaan harus memiliki 1 sampai 12 rincian komponen.');
+  const monthlyRows = [...ui.paymentComponentRows.querySelectorAll('.payment-monthly-row')];
+  const oneTimeRows = [...ui.paymentComponentRows.querySelectorAll('.payment-one-time-row')];
+  if (monthlyRows.length > 12 || oneTimeRows.length > 12) {
+    throw new Error('Satu penerimaan maksimal 12 periode bulanan dan 12 komponen lainnya.');
   }
 
   const items = [];
-  for (const row of rows) {
+  for (const row of monthlyRows) {
+    const period = row.querySelector('.payment-period').value;
+    const sppAmount = parseMoney(row.querySelector('.payment-spp-amount').value);
+    const kompAmount = parseMoney(row.querySelector('.payment-komp-amount').value);
+    if (sppAmount <= 0 && kompAmount <= 0) continue;
+    if (!period) throw new Error('Pilih periode untuk setiap pembayaran SPP atau Komputer.');
+    if (!app.paymentBilling) throw new Error('Pilih siswa yang tagihannya berhasil dimuat terlebih dahulu.');
+    if (Number(app.paymentBilling.belum_dialokasikan || 0) > 0) {
+      throw new Error('Rekonsiliasi pembayaran lama yang belum dialokasikan sebelum memakai alokasi otomatis.');
+    }
+    if (sppAmount > 0) items.push(...allocateMonthlyPayment('spp', sppAmount, app.paymentBilling, period));
+    if (kompAmount > 0) items.push(...allocateMonthlyPayment('komp', kompAmount, app.paymentBilling, period));
+  }
+  for (const row of oneTimeRows) {
     const component = row.querySelector('.payment-component').value;
     const amount = parseMoney(row.querySelector('.payment-component-amount').value);
     if (amount <= 0) throw new Error('Nominal setiap komponen harus lebih dari 0.');
-    if (component === 'spp' || component === 'komp') {
-      if (!app.paymentBilling) throw new Error('Pilih siswa yang tagihannya berhasil dimuat terlebih dahulu.');
-      items.push(...allocateMonthlyPayment(component, amount, app.paymentBilling));
-    } else {
-      items.push({ component, periode: '', nominal: amount });
-    }
+    items.push({ component, periode: '', nominal: amount });
   }
+  if (!items.length) throw new Error('Isi nominal pembayaran SPP, Komputer, atau komponen lainnya.');
   if (items.length > 36) throw new Error('Alokasi pembayaran melebihi 36 rincian. Pisahkan penerimaan menjadi dua transaksi.');
   const merged = new Map();
   items.forEach((item) => {
@@ -3568,21 +3731,43 @@ function setupEvents() {
   formatAllMoneyInputs();
   updatePaymentAllocationRows();
   ui.addPaymentComponent.addEventListener('click', () => {
-    const rowCount = ui.paymentComponentRows.querySelectorAll('.payment-component-row').length;
-    if (rowCount >= 12) {
-      alert('Satu penerimaan maksimal 12 komponen.');
+    const monthlyRows = [...ui.paymentComponentRows.querySelectorAll('.payment-monthly-row')];
+    if (monthlyRows.length >= 12) {
+      alert('Satu penerimaan maksimal 12 periode bulanan.');
       return;
     }
-    ui.paymentComponentRows.append(makePaymentComponentRow());
+    const lastPeriod = monthlyRows[monthlyRows.length - 1]?.querySelector('.payment-period').value
+      || defaultPaymentPeriod();
+    const nextPeriod = nextPaymentPeriod(lastPeriod);
+    if (!nextPeriod) {
+      alert('Tidak ada periode berikutnya pada tahun ajaran ini.');
+      return;
+    }
+    ui.paymentComponentRows.append(makePaymentComponentRow(nextPeriod));
+    updatePaymentAllocationRows();
+  });
+  ui.addOneTimePaymentComponent.addEventListener('click', () => {
+    const rowCount = ui.paymentComponentRows.querySelectorAll('.payment-one-time-row').length;
+    if (rowCount >= 12) {
+      alert('Satu penerimaan maksimal 12 komponen lainnya.');
+      return;
+    }
+    ui.paymentComponentRows.append(makeOneTimePaymentRow());
     updatePaymentAllocationRows();
   });
   ui.paymentComponentRows.addEventListener('change', (event) => {
-    if (event.target.classList.contains('payment-component')) updatePaymentAllocationRows();
+    if (event.target.matches('.payment-period')) {
+      updateMonthlyPaymentRow(event.target.closest('.payment-monthly-row'), true);
+      updatePaymentAllocationRows();
+    }
   });
   ui.paymentComponentRows.addEventListener('click', (event) => {
     const button = event.target.closest('.payment-remove');
-    if (!button || ui.paymentComponentRows.querySelectorAll('.payment-component-row').length <= 1) return;
-    button.closest('.payment-component-row').remove();
+    const row = button?.closest('.payment-component-row');
+    if (!button || !row) return;
+    if (row.classList.contains('payment-monthly-row')
+        && ui.paymentComponentRows.querySelectorAll('.payment-monthly-row').length <= 1) return;
+    row.remove();
     updatePaymentAllocationRows();
   });
   document.getElementById('logBtn').addEventListener('click', showStudentLog);

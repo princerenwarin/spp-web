@@ -197,8 +197,8 @@
                     <th>Siswa</th>
                     <th>Sekolah / Kelas</th>
                     <th>Virtual Account</th>
-                    <th>Tagihan</th>
-                    <th>Status</th>
+                    <th>Rincian tagihan</th>
+                    <th>Riwayat pembayaran</th>
                     <th>Aksi</th>
                   </tr>
                 </thead>
@@ -388,38 +388,32 @@
               </div>
               <p class="payment-billing-status" id="paymentBillingStatus" role="status" aria-live="polite">Pilih siswa untuk melihat sisa tagihan dan urutan alokasi.</p>
               <fieldset class="payment-allocation">
-                <legend>Alokasi dalam satu penerimaan</legend>
-                <p class="muted-copy">Masukkan nominal per komponen. SPP dan Komputer otomatis dialokasikan mulai dari periode tertunggak paling lama.</p>
+                <legend>Alokasi pembayaran</legend>
+                <p class="muted-copy">SPP dan Komputer ditampilkan bersama per periode. Pilih periode untuk mengisi saldo tagihan otomatis; nominal tetap bisa disesuaikan untuk pembayaran cicilan.</p>
                 <div id="paymentComponentRows">
-                  <div class="payment-component-row">
+                  <div class="payment-component-row payment-monthly-row" data-payment-row="monthly">
                     <label>
-                      <span>Komponen</span>
-                      <select class="payment-component" aria-label="Komponen pembayaran">
-                        <option value="spp">SPP bulanan</option>
-                        <option value="komp">Komputer bulanan</option>
-                        <option value="giat">Kegiatan</option>
-                        <option value="dpp">DPP</option>
-                        <option value="dpp_tl">DPP tahun lalu</option>
-                        <option value="dsp">DSP</option>
-                        <option value="seragam">Seragam</option>
-                        <option value="spp_tl">SPP tahun lalu</option>
-                        <option value="komp_tl">Komputer tahun lalu</option>
-                        <option value="lainnya">Lainnya</option>
+                      <span>Periode</span>
+                      <select class="payment-period" aria-label="Periode tagihan" disabled>
+                        <option value="">Pilih siswa dahulu</option>
                       </select>
                     </label>
-                    <div class="payment-period-summary" hidden>
-                      <span>Periode alokasi</span>
-                      <strong>Otomatis dari tunggakan terlama</strong>
-                    </div>
                     <label>
-                      <span>Nominal</span>
-                      <input class="money-input payment-component-amount" type="text" inputmode="numeric" required />
+                      <span>SPP</span>
+                      <input class="money-input payment-component-amount payment-spp-amount" type="text" inputmode="numeric" aria-label="Nominal SPP" disabled />
                     </label>
-                    <button type="button" class="action-btn delete payment-remove" aria-label="Hapus komponen" disabled>Hapus</button>
+                    <label>
+                      <span>Komputer</span>
+                      <input class="money-input payment-component-amount payment-komp-amount" type="text" inputmode="numeric" aria-label="Nominal Komputer" disabled />
+                    </label>
+                    <button type="button" class="action-btn delete payment-remove" aria-label="Hapus periode" disabled>Hapus</button>
                   </div>
                 </div>
                 <div class="payment-allocation-footer">
-                  <button type="button" class="secondary-button small-button" id="addPaymentComponent">Tambah komponen</button>
+                  <div class="payment-add-actions">
+                    <button type="button" class="secondary-button small-button" id="addPaymentComponent" disabled>Tambah periode berikutnya</button>
+                    <button type="button" class="secondary-button small-button" id="addOneTimePaymentComponent">Tambah komponen lain</button>
+                  </div>
                   <p>Total penerimaan <strong id="paymentAllocationTotal">Rp 0</strong></p>
                 </div>
               </fieldset>
@@ -532,8 +526,7 @@
                   <tr>
                     <th>Kelas</th>
                     <th>Siswa</th>
-                    <th>Periode tertunggak</th>
-                    <th>Rincian</th>
+                    <th>Rincian tunggakan</th>
                     <th>Sisa</th>
                     <th>Status</th>
                     <th>Penagihan</th>
