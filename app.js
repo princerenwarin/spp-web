@@ -74,14 +74,26 @@ const ui = {
   schoolFilter: document.getElementById('schoolFilter'),
   studentTableBody: document.getElementById('studentTableBody'),
   studentForm: document.getElementById('studentForm'),
-  studentNospp: document.getElementById('studentNospp'),
   studentNama: document.getElementById('studentNama'),
   studentSekolah: document.getElementById('studentSekolah'),
   studentKelas: document.getElementById('studentKelas'),
-  studentIndex: document.getElementById('studentIndex'),
+  studentType: document.getElementById('studentType'),
+  studentTahun: document.getElementById('studentTahun'),
+  studentExisting: document.getElementById('studentExisting'),
+  studentWa: document.getElementById('studentWa'),
+  studentPeriode: document.getElementById('studentPeriode'),
+  studentDpp: document.getElementById('studentDpp'),
+  studentDsp: document.getElementById('studentDsp'),
+  studentSeragam: document.getElementById('studentSeragam'),
+  studentGiat: document.getElementById('studentGiat'),
   studentSpp: document.getElementById('studentSpp'),
   studentKomp: document.getElementById('studentKomp'),
-  studentIdEdit: document.getElementById('studentIdEdit'),
+  studentTools: document.getElementById('studentTools'),
+  bulkGiat: document.getElementById('bulkGiat'),
+  bulkStaffMode: document.getElementById('bulkStaffMode'),
+  importFile: document.getElementById('importFile'),
+  studentLogWrap: document.getElementById('studentLogWrap'),
+  studentLogBody: document.getElementById('studentLogBody'),
   studentSubmitBtn: document.getElementById('studentSubmitBtn'),
   studentResetBtn: document.getElementById('studentResetBtn'),
   activityList: document.getElementById('activityList'),
@@ -267,6 +279,33 @@ function normalizeSupabaseStudent(row) {
   };
 }
 
+function buildRuleStudents(students, enrollments) {
+  const byId = new Map((students || []).map((item) => [String(item.id_siswa), item]));
+  const latest = new Map();
+  (enrollments || []).forEach((item) => {
+    const current = latest.get(item.id_siswa);
+    if (!current || item.tahun_ajaran > current.tahun_ajaran) latest.set(item.id_siswa, item);
+  });
+  return [...latest.values()].map((item) => {
+    const student = byId.get(String(item.id_siswa)) || {};
+    return {
+      nospp: item.nospp,
+      nama: student.nama || 'Siswa',
+      kdsek: item.kdsek,
+      kdkls: item.kdkls,
+      id: String(item.id_siswa),
+      spp: Number(item.spp || 0),
+      komp: Number(item.komp || 0),
+      giat: Number(item.giat || 0),
+      tahunAjaran: item.tahun_ajaran,
+      noWa: student.no_wa || '',
+      isStaffChild: student.is_staff_child === true,
+      showInBilling: student.show_in_billing !== false,
+      idpemakai: 'admin'
+    };
+  });
+}
+
 function normalizeSupabaseTransaction(row) {
   const nospp = row.nospp || row.no_spp || '';
   const nama = row.nama || row.nama_siswa || 'Siswa';
@@ -290,7 +329,7 @@ async function loadSupabaseData() {
   }
 
   try {
-    const [schoolsRes, mastankRes, mastsppRes, pembayaranRes, bankSettingsRes, schoolSettingsRes, schoolClassesRes, vaSettingsRes] = await Promise.all([
+    const [schoolsRes, mastankRes, mastsppRes, pembayaranRes, bankSettingsRes, schoolSettingsRes, schoolClassesRes, vaSettingsRes, appStudentsRes, appEnrollmentsRes] = await Promise.all([
       app.supabase.from('mastsek').select('*'),
       app.supabase.from('mastank').select('*'),
       app.supabase.from('mastspp').select('*'),
@@ -298,8 +337,15 @@ async function loadSupabaseData() {
       app.supabase.from('spp_app_bank_settings').select('bank_name').eq('setting_id', 1).maybeSingle(),
       app.supabase.from('spp_app_school_settings').select('school_code, school_name, va_school_code, is_active, is_custom'),
       app.supabase.from('spp_app_school_classes').select('school_code, class_name, is_active'),
-      app.supabase.from('spp_app_va_settings').select('config_id, bank_name, va_prefix, is_active')
+      app.supabase.from('spp_app_va_settings').select('config_id, bank_name, va_prefix, is_active'),
+      app.supabase.from('spp_app_students').select('*'),
+      app.supabase.from('spp_app_enrollments').select('*')
     ]);
+    const studentRulesRes = { students: appStudentsRes.data, enrollments: appEnrollmentsRes.data };
+    app.studentRulesReady = !appStudentsRes.error && !appEnrollmentsRes.error;
+    if (!app.studentRulesReady) {
+      console.warn('Migration 010_student_rules.sql belum dijalankan; data siswa hanya dibaca dari tabel lama.');
+    }
 
     const settingsErrors = [bankSettingsRes.error, schoolSettingsRes.error, schoolClassesRes.error, vaSettingsRes.error].filter(Boolean);
     app.settingsReady = settingsErrors.length === 0;
@@ -341,7 +387,7 @@ async function loadSupabaseData() {
         nmsek: row.school_name
       })));
 
-    const fallbackSiswa = (tagihanData.length ? tagihanData : DEFAULT_DB.siswa)
+    const legacySiswa = (tagihanData.length ? tagihanData : DEFAULT_DB.siswa)
       .map((row) => {
         const master = studentById.get(String(row.id_siswa || row.id || '')) || {};
         return normalizeSupabaseStudent({
@@ -355,6 +401,9 @@ async function loadSupabaseData() {
         });
       })
       .filter((siswa) => siswa.nospp);
+    const ruleStudents = buildRuleStudents(studentRulesRes.students, studentRulesRes.enrollments);
+    const ruleIds = new Set(ruleStudents.map((item) => item.id));
+    const fallbackSiswa = ruleStudents.concat(legacySiswa.filter((item) => !ruleIds.has(item.id)));
 
     const fallbackTransaksi = (transaksiData.length ? transaksiData : DEFAULT_DB.transaksi)
       .map(normalizeSupabaseTransaction);
@@ -619,6 +668,8 @@ function applyUserAccess() {
   if (paymentNav) {
     paymentNav.style.display = canAccessPayment() ? 'block' : 'none';
   }
+  ui.studentForm.hidden = !canManageSettings();
+  ui.studentTools.hidden = !canManageSettings();
   document.querySelectorAll('.admin-only').forEach((button) => {
     button.hidden = !canManageSettings();
   });
@@ -712,11 +763,12 @@ function renderStudentTable() {
         <td>${escapeHtml(getSchoolName(row.kdsek))}</td>
         <td>${row.kdkls}</td>
         <td>${virtualAccountMarkup}</td>
-        <td>${formatRupiah(totalTagihan)}</td>
+        <td>${row.isStaffChild && row.showInBilling === false ? 'Tidak ditagih' : formatRupiah(totalTagihan)}</td>
         <td><span class="status-pill ${status === 'Lunas' ? 'lunas' : 'belum'}">${status}</span></td>
         <td>
-          <button class="action-btn edit" data-action="edit-student" data-nospp="${row.nospp}">Edit</button>
-          <button class="action-btn delete" data-action="delete-student" data-nospp="${row.nospp}">Hapus</button>
+          ${canManageSettings() && row.tahunAjaran ? `
+            <button class="action-btn edit" data-action="edit-student" data-nospp="${escapeHtml(row.nospp)}">Ubah SPP</button>
+          ` : '-'}
         </td>
       </tr>
     `;
@@ -878,106 +930,316 @@ function renderReport() {
   }).join('');
 }
 
+function currentAcademicYear() {
+  const now = new Date();
+  const start = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
+  return `${start}-${start + 1}`;
+}
+
+function toPeriode(monthValue) {
+  const match = /^(\d{4})-(\d{2})$/.exec(monthValue || '');
+  return match ? `${match[2]}${match[1]}` : '';
+}
+
+function updateStudentFormMode() {
+  const isNew = ui.studentType.value === 'baru';
+  document.querySelectorAll('[data-for="baru"]').forEach((item) => { item.hidden = !isNew; });
+  document.querySelectorAll('[data-for="naik"]').forEach((item) => { item.hidden = isNew; });
+  ui.studentNama.required = isNew;
+  ui.studentWa.required = isNew;
+  ui.studentPeriode.required = isNew;
+  ui.studentExisting.required = !isNew;
+  ui.studentNama.placeholder = isNew ? 'Nama lengkap' : 'Kosongkan jika tidak berubah';
+}
+
+function populateExistingStudents() {
+  const options = app.state.siswa
+    .filter((item) => /^\d+$/.test(item.id))
+    .map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.id)} - ${escapeHtml(item.nama)} (${escapeHtml(item.kdkls)})</option>`);
+  ui.studentExisting.innerHTML = `<option value="">Pilih siswa</option>${options.join('')}`;
+}
+
 function resetStudentForm() {
   ui.studentForm.reset();
-  ui.studentIdEdit.value = '';
-  ui.studentSpp.value = 0;
-  ui.studentKomp.value = 0;
+  ui.studentType.value = 'baru';
+  ui.studentTahun.value = currentAcademicYear();
+  ['studentDpp', 'studentDsp', 'studentSeragam', 'studentGiat', 'studentSpp', 'studentKomp'].forEach((key) => {
+    ui[key].value = 0;
+  });
+  populateExistingStudents();
   populateStudentClassSelect();
+  updateStudentFormMode();
   ui.studentSubmitBtn.textContent = 'Simpan Siswa';
 }
 
-function fillStudentForm(row) {
-  ui.studentIdEdit.value = row.nospp;
-  ui.studentNospp.value = row.nospp;
-  ui.studentNama.value = row.nama;
-  populateSchoolSelect(row.kdsek, row.kdkls);
-  ui.studentIndex.value = row.id;
-  ui.studentSpp.value = row.spp;
-  ui.studentKomp.value = row.komp;
-  ui.studentSubmitBtn.textContent = 'Update Siswa';
-  setPage('siswa');
+function buildStudentRow(source) {
+  return {
+    jenis: source.jenis,
+    tahun_ajaran: source.tahun_ajaran,
+    id_siswa: source.id_siswa || '',
+    nama: source.nama || '',
+    no_wa: source.no_wa || '',
+    kdsek: source.kdsek,
+    kdkls: source.kdkls,
+    periode_masuk: source.periode_masuk || '',
+    dpp: source.dpp || 0,
+    dsp: source.dsp || 0,
+    seragam: source.seragam || 0,
+    giat: source.giat || 0,
+    spp: source.spp || 0,
+    komp: source.komp || 0
+  };
 }
 
-function addOrUpdateStudent(event) {
+function requireStudentRules() {
+  if (!canManageSettings()) {
+    throw new Error('Hanya Admin yang dapat mengubah data siswa.');
+  }
+  if (!app.useSupabase || !app.studentRulesReady) {
+    throw new Error('Aturan data siswa memerlukan Supabase dan migration 010_student_rules.sql.');
+  }
+  if (!app.adminCredentials) {
+    throw new Error('Silakan keluar lalu masuk kembali sebagai Admin untuk menyimpan perubahan.');
+  }
+  return { p_username: app.adminCredentials.username, p_password: app.adminCredentials.password };
+}
+
+async function reloadStudentData() {
+  const data = await loadSupabaseData();
+  if (data) app.state = { ...app.state, siswa: data.siswa, transaksi: data.transaksi };
+  populateExistingStudents();
+  renderStudentTable();
+  renderDashboard();
+  renderReport();
+}
+
+async function addOrUpdateStudent(event) {
   event.preventDefault();
-  const nospp = ui.studentNospp.value.trim();
-  const nama = ui.studentNama.value.trim();
-  const kdsek = ui.studentSekolah.value;
-  const kdkls = ui.studentKelas.value.trim();
-  const id = ui.studentIndex.value.trim();
-  const spp = Number(ui.studentSpp.value || 0);
-  const komp = Number(ui.studentKomp.value || 0);
-
-  if (!nospp || !nama || !kdsek || !kdkls || !id) {
-    alert('Mohon isi semua field siswa dengan lengkap.');
-    return;
+  try {
+    const credentials = requireStudentRules();
+    const row = buildStudentRow({
+      jenis: ui.studentType.value,
+      tahun_ajaran: ui.studentTahun.value.trim(),
+      id_siswa: ui.studentExisting.value,
+      nama: ui.studentNama.value.trim(),
+      no_wa: ui.studentWa.value.trim(),
+      kdsek: ui.studentSekolah.value,
+      kdkls: ui.studentKelas.value.trim(),
+      periode_masuk: toPeriode(ui.studentPeriode.value),
+      dpp: ui.studentDpp.value,
+      dsp: ui.studentDsp.value,
+      seragam: ui.studentSeragam.value,
+      giat: ui.studentGiat.value,
+      spp: ui.studentSpp.value,
+      komp: ui.studentKomp.value
+    });
+    const { data, error } = await app.supabase.rpc('save_student_v1', { ...credentials, p_row: row });
+    if (error) throw error;
+    await reloadStudentData();
+    resetStudentForm();
+    alert(`Tersimpan. No. SPP: ${data.nospp} (ID siswa ${data.id_siswa}).`);
+  } catch (error) {
+    alert(error.message || 'Data siswa tidak dapat disimpan.');
   }
-
-  if (!/^\d{1,10}$/.test(id)) {
-    alert('ID siswa hanya boleh berisi angka, maksimal 10 digit.');
-    return;
-  }
-
-  const existingIndex = app.state.siswa.findIndex((item) => item.nospp === nospp);
-  const existingStudent = existingIndex >= 0 ? app.state.siswa[existingIndex] : null;
-  const duplicateStudentId = app.state.siswa.some((item) => item.id === id && item.nospp !== nospp);
-  if (duplicateStudentId) {
-    alert('ID siswa sudah digunakan. ID harus unik di seluruh sekolah.');
-    return;
-  }
-
-  const selectedSchool = app.state.schools.find((item) => item.kdsek === kdsek);
-  const existingSchool = existingStudent && existingStudent.kdsek === kdsek;
-  if (!selectedSchool || (!selectedSchool.active && !existingSchool)) {
-    alert('Pilih sekolah yang aktif.');
-    return;
-  }
-
-  const needsNewVA = !existingStudent || existingStudent.kdsek !== kdsek || existingStudent.id !== id;
-  if (needsNewVA && !/^\d{2}$/.test(selectedSchool.vaCode || '')) {
-    alert('ID VA sekolah belum diatur. Atur kode dua digit di menu Sekolah terlebih dahulu.');
-    return;
-  }
-  if (needsNewVA && !getActiveVABanks().length) {
-    alert('Belum ada bank VA aktif. Atur minimal satu prefix di menu Bank terlebih dahulu.');
-    return;
-  }
-
-  const activeClass = app.state.classes.some((item) => item.kdsek === kdsek && item.kdkls === kdkls && item.active);
-  const retainingInactiveClass = existingStudent
-    && existingStudent.kdsek === kdsek
-    && existingStudent.kdkls === kdkls;
-  if (!activeClass && !retainingInactiveClass) {
-    alert('Pilih kelas aktif yang sudah diatur untuk sekolah ini.');
-    return;
-  }
-
-  const payload = { nospp, nama, kdsek, kdkls, id, spp, komp, idpemakai: app.user ? app.user.idpemakai : 'admin' };
-
-  if (existingIndex >= 0) {
-    app.state.siswa[existingIndex] = payload;
-  } else {
-    app.state.siswa.push(payload);
-  }
-
-  saveLocalData();
-  renderStudentTable();
-  renderDashboard();
-  renderReport();
-  resetStudentForm();
 }
 
-function deleteStudent(nospp) {
-  const confirmed = window.confirm(`Hapus siswa ${nospp}?`);
-  if (!confirmed) return;
+async function changeStudentSpp(nospp) {
+  const row = app.state.siswa.find((item) => item.nospp === nospp);
+  if (!row || !row.tahunAjaran) {
+    alert('Perubahan SPP hanya untuk siswa yang terdaftar lewat aturan baru.');
+    return;
+  }
+  const spp = window.prompt(`SPP baru untuk ${row.nama} (sekarang ${row.spp}):`, row.spp);
+  if (spp === null) return;
+  const periode = window.prompt('Berlaku mulai periode (MMYYYY, contoh 012027). Bulan sebelumnya tidak berubah:', '');
+  if (periode === null) return;
+  try {
+    const credentials = requireStudentRules();
+    const { error } = await app.supabase.rpc('update_student_spp_v1', {
+      ...credentials,
+      p_id_siswa: row.id,
+      p_tahun_ajaran: row.tahunAjaran,
+      p_effective_period: periode.trim(),
+      p_spp: Number(spp),
+      p_komp: row.komp
+    });
+    if (error) throw error;
+    await reloadStudentData();
+  } catch (error) {
+    alert(error.message || 'SPP tidak dapat diubah.');
+  }
+}
 
-  app.state.siswa = app.state.siswa.filter((item) => item.nospp !== nospp);
-  app.state.transaksi = app.state.transaksi.filter((item) => item.nospp !== nospp);
-  saveLocalData();
-  renderStudentTable();
-  renderDashboard();
-  renderReport();
+async function applyBulkActivity() {
+  const giat = Number(ui.bulkGiat.value);
+  const schoolFilter = ui.schoolFilter.value === 'all' ? '' : ui.schoolFilter.value;
+  const tahun = ui.studentTahun.value.trim();
+  if (ui.bulkGiat.value === '' || !(giat >= 0)) {
+    alert('Isi nominal kegiatan.');
+    return;
+  }
+  if (!window.confirm(`Set kegiatan Rp ${giat} untuk semua siswa ${tahun}${schoolFilter ? ` di sekolah ${schoolFilter}` : ''}?`)) return;
+  try {
+    const credentials = requireStudentRules();
+    const { data, error } = await app.supabase.rpc('bulk_set_activity_fee_v1', {
+      ...credentials, p_tahun_ajaran: tahun, p_kdsek: schoolFilter, p_kdkls: '', p_giat: giat
+    });
+    if (error) throw error;
+    alert(`${data} siswa diperbarui.`);
+  } catch (error) {
+    alert(error.message || 'Kegiatan massal gagal.');
+  }
+}
+
+async function applyBulkStaff() {
+  const rows = getFilteredStudents().filter((item) => /^\d+$/.test(item.id));
+  if (!rows.length) {
+    alert('Tidak ada siswa pada filter saat ini.');
+    return;
+  }
+  const mode = ui.bulkStaffMode.value;
+  if (!window.confirm(`Terapkan ke ${rows.length} siswa yang tampil?`)) return;
+  try {
+    const credentials = requireStudentRules();
+    const { error } = await app.supabase.rpc('bulk_set_staff_child_v1', {
+      ...credentials,
+      p_ids: rows.map((item) => item.id),
+      p_is_staff_child: mode !== 'regular',
+      p_show_in_billing: mode !== 'staff-hide'
+    });
+    if (error) throw error;
+    await reloadStudentData();
+  } catch (error) {
+    alert(error.message || 'Status anak guru gagal diubah.');
+  }
+}
+
+const IMPORT_COLUMNS = ['jenis', 'tahun_ajaran', 'id_siswa', 'nama', 'no_wa', 'kdsek', 'kdkls', 'periode_masuk', 'dpp', 'dsp', 'seragam', 'giat', 'spp', 'komp'];
+
+const BACKUP_TABLES = ['mastsek', 'mastank', 'mastspp', 'pembayaran', 'spp_app_bank_settings', 'spp_app_school_settings',
+  'spp_app_school_classes', 'spp_app_va_settings', 'spp_app_students', 'spp_app_enrollments'];
+
+async function backupData() {
+  if (!app.supabase) {
+    alert('Backup hanya tersedia saat terhubung ke Supabase.');
+    return;
+  }
+  const button = document.getElementById('backupBtn');
+  button.disabled = true;
+  try {
+    const tables = {};
+    const skipped = [];
+    for (const name of BACKUP_TABLES) {
+      const rows = [];
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await app.supabase.from(name).select('*').range(from, from + 999);
+        if (error) {
+          skipped.push(name);
+          break;
+        }
+        rows.push(...data);
+        if (data.length < 1000) break;
+      }
+      if (!skipped.includes(name)) tables[name] = rows;
+    }
+    const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+    const blob = new Blob([JSON.stringify({ createdAt: new Date().toISOString(), tables }, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `backup-spp-${stamp}.json`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    alert(skipped.length ? `Backup tersimpan. Tabel dilewati: ${skipped.join(', ')}` : 'Backup tersimpan di folder Download.');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function downloadImportTemplate() {
+  const year = currentAcademicYear();
+  const lines = [
+    IMPORT_COLUMNS.join(','),
+    `baru,${year},,Contoh Siswa Baru,08123456789,M,1A,082026,1000000,500000,300000,100000,400000,50000`,
+    `naik,${year},12,,,M,2A,,,,,100000,450000,50000`
+  ];
+  const blob = new Blob([`\uFEFF${lines.join('\r\n')}\r\n`], { type: 'text/csv;charset=utf-8' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'template_data_siswa.csv';
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let quoted = false;
+  const source = text.replace(/^\uFEFF/, '');
+  const delimiter = (source.split(/\r?\n/)[0] || '').includes(';') ? ';' : ',';
+  for (let i = 0; i < source.length; i += 1) {
+    const char = source[i];
+    if (quoted) {
+      if (char === '"' && source[i + 1] === '"') { cell += '"'; i += 1; }
+      else if (char === '"') quoted = false;
+      else cell += char;
+    } else if (char === '"') quoted = true;
+    else if (char === delimiter) { row.push(cell); cell = ''; }
+    else if (char === '\n' || char === '\r') {
+      if (char === '\r' && source[i + 1] === '\n') i += 1;
+      row.push(cell); cell = '';
+      if (row.some((value) => value.trim() !== '')) rows.push(row);
+      row = [];
+    } else cell += char;
+  }
+  row.push(cell);
+  if (row.some((value) => value.trim() !== '')) rows.push(row);
+  return rows;
+}
+
+async function importStudentsFile(file) {
+  try {
+    const credentials = requireStudentRules();
+    const table = parseCsv(await file.text());
+    const header = (table.shift() || []).map((item) => item.trim().toLowerCase());
+    if (!IMPORT_COLUMNS.every((column) => header.includes(column))) {
+      throw new Error(`Kolom template tidak sesuai. Gunakan: ${IMPORT_COLUMNS.join(', ')}`);
+    }
+    const rows = table.map((cells) => {
+      const record = {};
+      header.forEach((column, index) => { record[column] = (cells[index] || '').trim(); });
+      return buildStudentRow(record);
+    });
+    if (!rows.length) throw new Error('File tidak berisi data.');
+    if (!window.confirm(`Import ${rows.length} baris? Jika ada satu baris salah, semuanya dibatalkan.`)) return;
+    const { error } = await app.supabase.rpc('import_students_v1', { ...credentials, p_rows: rows });
+    if (error) throw error;
+    await reloadStudentData();
+    alert(`${rows.length} baris berhasil diimport.`);
+  } catch (error) {
+    alert(error.message || 'Import gagal.');
+  } finally {
+    ui.importFile.value = '';
+  }
+}
+
+async function showStudentLog() {
+  try {
+    const credentials = requireStudentRules();
+    const { data, error } = await app.supabase.rpc('get_student_log_v1', { ...credentials, p_limit: 200 });
+    if (error) throw error;
+    ui.studentLogWrap.hidden = false;
+    ui.studentLogBody.innerHTML = (data || []).map((item) => `
+      <tr>
+        <td>${escapeHtml(new Date(item.logged_at).toLocaleString('id-ID'))}</td>
+        <td>${escapeHtml(item.actor)}</td>
+        <td>${escapeHtml(item.action)}</td>
+        <td>${escapeHtml(item.id_siswa || '-')}</td>
+        <td>${escapeHtml(JSON.stringify(item.detail))}</td>
+      </tr>`).join('') || '<tr><td colspan="5" class="empty-state">Belum ada log.</td></tr>';
+  } catch (error) {
+    alert(error.message || 'Log tidak dapat dimuat.');
+  }
 }
 
 function deletePayment(id) {
@@ -1293,6 +1555,15 @@ function setupEvents() {
   ui.studentSekolah.addEventListener('change', () => populateStudentClassSelect());
   ui.studentForm.addEventListener('submit', addOrUpdateStudent);
   ui.studentResetBtn.addEventListener('click', resetStudentForm);
+  ui.studentType.addEventListener('change', updateStudentFormMode);
+  document.getElementById('bulkGiatBtn').addEventListener('click', applyBulkActivity);
+  document.getElementById('bulkStaffBtn').addEventListener('click', applyBulkStaff);
+  document.getElementById('templateBtn').addEventListener('click', downloadImportTemplate);
+  document.getElementById('backupBtn').addEventListener('click', backupData);
+  document.getElementById('logBtn').addEventListener('click', showStudentLog);
+  ui.importFile.addEventListener('change', () => {
+    if (ui.importFile.files[0]) importStudentsFile(ui.importFile.files[0]);
+  });
   ui.paymentForm.addEventListener('submit', handlePaymentSubmit);
   ui.schoolSettingsForm.addEventListener('submit', handleSchoolSettingsSubmit);
   ui.bankSettingsForm.addEventListener('submit', handleBankSettingsSubmit);
@@ -1432,11 +1703,7 @@ function setupEvents() {
     if (!target) return;
     const { action, nospp } = target.dataset;
     if (action === 'edit-student') {
-      const row = app.state.siswa.find((item) => item.nospp === nospp);
-      if (row) fillStudentForm(row);
-    }
-    if (action === 'delete-student') {
-      deleteStudent(nospp);
+      changeStudentSpp(nospp);
     }
   });
 
@@ -1481,6 +1748,9 @@ function setupEvents() {
 
 function renderAll() {
   populateSchoolSelect();
+  populateExistingStudents();
+  if (!ui.studentTahun.value) ui.studentTahun.value = currentAcademicYear();
+  updateStudentFormMode();
   renderDashboard();
   renderStudentTable();
   renderPaymentList();

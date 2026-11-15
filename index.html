@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
   <head>
     <meta charset="UTF-8" />
@@ -36,6 +36,7 @@
             <small>Login sebagai</small>
             <strong id="userName">Admin</strong>
           </div>
+          <button class="ghost-button admin-only" id="backupBtn" hidden>Backup data</button>
           <button class="ghost-button" id="logoutBtn">Keluar</button>
         </div>
       </header>
@@ -113,15 +114,29 @@
             </div>
 
             <form id="studentForm" class="student-form">
-              <input type="hidden" id="studentIdEdit" />
               <div class="student-form-grid">
                 <label>
-                  <span>No. SPP</span>
-                  <input id="studentNospp" type="text" placeholder="contoh: M3B00342" required />
+                  <span>Jenis</span>
+                  <select id="studentType">
+                    <option value="baru">Siswa baru masuk</option>
+                    <option value="naik">Naik kelas tahun ajaran</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Tahun Ajaran</span>
+                  <input id="studentTahun" type="text" pattern="[0-9]{4}-[0-9]{4}" placeholder="2026-2027" required />
+                </label>
+                <label data-for="naik" hidden>
+                  <span>Siswa (ID)</span>
+                  <select id="studentExisting"></select>
                 </label>
                 <label>
                   <span>Nama Siswa</span>
-                  <input id="studentNama" type="text" placeholder="Nama lengkap" required />
+                  <input id="studentNama" type="text" placeholder="Nama lengkap" />
+                </label>
+                <label>
+                  <span>WhatsApp</span>
+                  <input id="studentWa" type="tel" placeholder="08xxxxxxxxxx" />
                 </label>
                 <label>
                   <span>Sekolah</span>
@@ -133,16 +148,32 @@
                     <option value="">Pilih sekolah terlebih dahulu</option>
                   </select>
                 </label>
-                <label>
-                  <span>ID Siswa</span>
-                  <input id="studentIndex" type="text" inputmode="numeric" pattern="[0-9]+" maxlength="10" placeholder="contoh: 3323" required />
+                <label data-for="baru">
+                  <span>Periode Masuk (SPP tidak ditagih)</span>
+                  <input id="studentPeriode" type="month" />
+                </label>
+                <label data-for="baru">
+                  <span>Nominal DPP</span>
+                  <input id="studentDpp" type="number" min="0" step="1000" value="0" />
+                </label>
+                <label data-for="baru">
+                  <span>Nominal DPS</span>
+                  <input id="studentDsp" type="number" min="0" step="1000" value="0" />
+                </label>
+                <label data-for="baru">
+                  <span>Nominal Seragam</span>
+                  <input id="studentSeragam" type="number" min="0" step="1000" value="0" />
                 </label>
                 <label>
-                  <span>Tagihan SPP</span>
+                  <span>Nominal Kegiatan</span>
+                  <input id="studentGiat" type="number" min="0" step="1000" value="0" required />
+                </label>
+                <label>
+                  <span>Nominal SPP</span>
                   <input id="studentSpp" type="number" min="0" step="1000" value="0" required />
                 </label>
                 <label>
-                  <span>Tagihan Komponen</span>
+                  <span>Nominal Komputer</span>
                   <input id="studentKomp" type="number" min="0" step="1000" value="0" required />
                 </label>
               </div>
@@ -151,6 +182,39 @@
                 <button type="button" class="secondary-button" id="studentResetBtn">Batal</button>
               </div>
             </form>
+
+            <div class="student-form admin-only" id="studentTools" hidden>
+              <div class="student-form-grid">
+                <label>
+                  <span>Kegiatan massal (siswa yang tampil di filter)</span>
+                  <input id="bulkGiat" type="number" min="0" step="1000" placeholder="Nominal kegiatan" />
+                </label>
+                <label>
+                  <span>Anak guru / karyawan</span>
+                  <select id="bulkStaffMode">
+                    <option value="staff-hide">Tandai anak guru - sembunyikan dari tagihan</option>
+                    <option value="staff-show">Tandai anak guru - tetap tampil di tagihan</option>
+                    <option value="regular">Kembalikan ke siswa biasa</option>
+                  </select>
+                </label>
+              </div>
+              <div class="form-actions">
+                <button type="button" class="secondary-button" id="bulkGiatBtn">Terapkan Kegiatan</button>
+                <button type="button" class="secondary-button" id="bulkStaffBtn">Terapkan Status Anak Guru</button>
+                <button type="button" class="secondary-button" id="templateBtn">Unduh Template CSV</button>
+                <label class="secondary-button">
+                  Upload CSV
+                  <input id="importFile" type="file" accept=".csv" hidden />
+                </label>
+                <button type="button" class="secondary-button" id="logBtn">Lihat Log Perubahan</button>
+              </div>
+              <div class="table-wrap" id="studentLogWrap" hidden>
+                <table>
+                  <thead><tr><th>Waktu</th><th>Pengguna</th><th>Aksi</th><th>ID</th><th>Detail</th></tr></thead>
+                  <tbody id="studentLogBody"></tbody>
+                </table>
+              </div>
+            </div>
 
             <div class="table-wrap">
               <table>
