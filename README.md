@@ -37,3 +37,5 @@ Aplikasi ini adalah starter web yang menggunakan Supabase sebagai backend untuk 
 - Jalankan `./supabase/013_student_edit_delete.sql` setelah 012: ubah nama siswa dan hapus massal data SPP siswa terpilih (ditolak jika masih ada pembayaran).
 
 - Jalankan supabase/014_edit_all_fees.sql setelah 013: tombol **Ubah Tagihan** (modal) bisa mengubah DPP, DPS, Seragam, Kegiatan, SPP, dan Komputer; perubahan SPP/Komputer memakai periode berlaku.
+
+- Jalankan supabase/015_full_billing_totals.sql setelah 014: total tagihan (dashboard, laporan, daftar siswa) mencakup SPP, Komputer, DPP, DPS, Kegiatan, Seragam, dan tunggakan tahun lalu; daftar siswa punya rincian per komponen.

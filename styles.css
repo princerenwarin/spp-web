@@ -1416,3 +1416,17 @@ label {
 .field-hint{display:block;margin-top:4px;color:var(--muted);font-size:.8rem}
 .modal [hidden]{display:none!important}
 @media (max-width:600px){.modal{width:100vw;max-height:100vh;border-radius:16px 16px 0 0;margin:auto 0 0}.modal .student-form-grid{grid-template-columns:1fr}.modal-head,.modal .student-form{padding-left:16px;padding-right:16px}}
+
+/* Rincian tagihan */
+.bill-total{font-weight:700;font-size:1rem}
+.bill-detail{margin-top:6px}
+.bill-detail summary{cursor:pointer;color:var(--accent,#2563eb);font-size:.8rem;font-weight:600;list-style:none}
+.bill-detail summary::-webkit-details-marker{display:none}
+.bill-detail[open] summary{margin-bottom:6px}
+.bill-lines{display:flex;flex-direction:column;gap:4px;min-width:210px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:rgba(100,116,139,.06)}
+.bill-line{display:flex;justify-content:space-between;gap:16px;font-size:.85rem}
+.bill-line span{color:var(--muted)}
+.bill-line strong{font-variant-numeric:tabular-nums;white-space:nowrap}
+.bill-arrears{margin-top:4px;padding-top:6px;border-top:1px dashed var(--border)}
+.bill-arrears-list{display:flex;flex-direction:column;gap:3px;padding-left:10px}
+.bill-sub{font-size:.78rem}

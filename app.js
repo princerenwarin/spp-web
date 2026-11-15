@@ -851,8 +851,49 @@ function normalizeOverviewRow(row) {
   };
 }
 
+function feeTotal(row) {
+  return ['spp', 'komp', 'dpp', 'dsp', 'giat', 'seragam']
+    .reduce((sum, key) => sum + Number(row[key] || 0), 0);
+}
+
 function rowBilled(row) {
-  return Number(row.spp || 0) + Number(row.komp || 0) + Number(row.arrearsTotal || 0);
+  return feeTotal(row) + Number(row.arrearsTotal || 0);
+}
+
+const FEE_LABELS = [
+  ['spp', 'SPP'], ['komp', 'Komputer'], ['dpp', 'DPP'],
+  ['dsp', 'DPS'], ['giat', 'Kegiatan'], ['seragam', 'Seragam']
+];
+
+function billBreakdownMarkup(row, arrearsTotal) {
+  const lines = FEE_LABELS
+    .filter(([key]) => Number(row[key] || 0) > 0)
+    .map(([key, label]) => `<div class="bill-line"><span>${label}</span><strong>${formatRupiah(row[key])}</strong></div>`)
+    .join('');
+  const arrears = arrearsTotal
+    ? `<div class="bill-line bill-arrears"><span>Tunggakan tahun lalu</span><strong>${formatRupiah(arrearsTotal)}</strong></div>
+       <div class="bill-arrears-list" data-arrears-for="${escapeHtml(row.id)}"><span class="student-sub">Memuat rincian...</span></div>`
+    : '';
+  return `<details class="bill-detail" data-bill-id="${escapeHtml(row.id)}">
+    <summary>Lihat rincian</summary>
+    <div class="bill-lines">${lines || '<span class="student-sub">Belum ada tagihan.</span>'}${arrears}</div>
+  </details>`;
+}
+
+async function loadArrearsBreakdown(box) {
+  const id = box.dataset.arrearsFor;
+  let items;
+  if (app.server) {
+    const { data, error } = await app.supabase.from('spp_app_arrears_list').select('*')
+      .eq('id_siswa', id).order('tahun_ajaran');
+    if (error) { box.textContent = 'Rincian gagal dimuat.'; return; }
+    items = (data || []).map((a) => ({ tahunAjaran: a.tahun_ajaran, jenis: a.jenis, keterangan: a.keterangan, nominal: Number(a.nominal) }));
+  } else {
+    items = (app.state.arrears || []).filter((a) => a.idSiswa === String(id));
+  }
+  box.innerHTML = items.map((a) => `<div class="bill-line bill-sub"><span>${escapeHtml(a.jenis)} ${escapeHtml(a.tahunAjaran)}${a.keterangan ? ` &middot; ${escapeHtml(a.keterangan)}` : ''}</span><strong>${formatRupiah(a.nominal)}</strong></div>`).join('')
+    || '<span class="student-sub">Tidak ada rincian.</span>';
+  box.dataset.loaded = '1';
 }
 
 function renderPager(key, total) {
@@ -954,7 +995,7 @@ function drawStudentTable() {
       : (app.state.arrears || [])
         .filter((item) => item.idSiswa === String(row.id))
         .reduce((sum, item) => sum + item.nominal, 0);
-    const totalTagihan = Number(row.spp || 0) + Number(row.komp || 0) + arrearsTotal;
+    const totalTagihan = feeTotal(row) + arrearsTotal;
     const totalBayar = app.server
       ? row.paidTotal
       : app.state.transaksi
@@ -976,7 +1017,7 @@ function drawStudentTable() {
         <td data-label="Siswa"><div class="student-name">${escapeHtml(row.nama)}</div><div class="student-sub">${escapeHtml(row.nospp)}${row.tahunAjaran ? ` &middot; ${escapeHtml(row.tahunAjaran)}` : ''}${row.isStaffChild ? ' &middot; <span class="badge-staff">Anak guru</span>' : ''}</div></td>
         <td data-label="Sekolah / Kelas"><div>${escapeHtml(getSchoolName(row.kdsek))}</div><div class="student-sub">Kelas ${escapeHtml(row.kdkls)}</div></td>
         <td data-label="Virtual Account">${virtualAccountMarkup}</td>
-        <td data-label="Tagihan">${row.isStaffChild && row.showInBilling === false ? 'Tidak ditagih' : formatRupiah(totalTagihan)}${arrearsTotal ? `<div class="student-sub">termasuk tunggakan ${formatRupiah(arrearsTotal)}</div>` : ''}</td>
+        <td data-label="Tagihan">${row.isStaffChild && row.showInBilling === false ? 'Tidak ditagih' : `<div class="bill-total">${formatRupiah(totalTagihan)}</div><div class="student-sub">Terbayar ${formatRupiah(totalBayar)} &middot; Sisa ${formatRupiah(Math.max(totalTagihan - totalBayar, 0))}</div>${billBreakdownMarkup(row, arrearsTotal)}`}</td>
         <td data-label="Status"><span class="status-pill ${status === 'Lunas' ? 'lunas' : 'belum'}">${status}</span></td>
         <td data-label="Aksi" class="row-actions">
           ${admin && row.tahunAjaran ? `
@@ -1198,7 +1239,7 @@ function renderDashboard() {
   const siswa = getAccessibleStudentRows();
   const transaksi = getAccessibleTransactionRows();
   const totalSiswa = siswa.length;
-  const totalTagihan = siswa.reduce((sum, item) => sum + Number(item.spp || 0) + Number(item.komp || 0), 0);
+  const totalTagihan = siswa.reduce((sum, item) => sum + feeTotal(item), 0);
   const bulanIni = new Date().getMonth() + 1;
   const thisMonth = transaksi
     .filter((item) => {
@@ -1351,7 +1392,7 @@ function renderReport() {
 
   const summary = schools.map((school) => {
     const siswaSekolah = getAccessibleStudentRows().filter((item) => item.kdsek === school.kdsek);
-    const totalTagihan = siswaSekolah.reduce((sum, item) => sum + Number(item.spp || 0) + Number(item.komp || 0), 0);
+    const totalTagihan = siswaSekolah.reduce((sum, item) => sum + feeTotal(item), 0);
     const totalTerbayar = getAccessibleTransactionRows()
       .filter((item) => item.kdsek === school.kdsek)
       .reduce((sum, item) => sum + Number(item.nominal || 0), 0);
@@ -1370,12 +1411,12 @@ function renderReport() {
   drawReportSummary(
     summary,
     siswa.length,
-    siswa.reduce((sum, item) => sum + Number(item.spp || 0) + Number(item.komp || 0), 0),
+    siswa.reduce((sum, item) => sum + feeTotal(item), 0),
     getAccessibleTransactionRows().reduce((sum, item) => sum + Number(item.nominal || 0), 0)
   );
 
   ui.detailReportTable.innerHTML = getAccessibleStudentRows().map((row) => {
-    const totalTagihan = Number(row.spp || 0) + Number(row.komp || 0);
+    const totalTagihan = feeTotal(row);
     const payments = getAccessibleTransactionRows().filter((item) => item.nospp === row.nospp);
     const totalTerbayar = payments.reduce((sum, item) => sum + Number(item.nominal || 0), 0);
     const terakhirBayar = [...payments].sort((a, b) => new Date(b.tglbyr) - new Date(a.tglbyr))[0];
@@ -2474,6 +2515,13 @@ function setupEvents() {
     renderBankVASettings();
     setSettingsStatus(ui.bankSettingsStatus, 'Bank VA dihapus dari daftar. Simpan perubahan untuk menerapkannya.', 'success');
   });
+
+  ui.studentTableBody.addEventListener('toggle', (event) => {
+    const details = event.target;
+    if (!details.open || !details.classList || !details.classList.contains('bill-detail')) return;
+    const box = details.querySelector('[data-arrears-for]');
+    if (box && !box.dataset.loaded) loadArrearsBreakdown(box);
+  }, true);
 
   ui.studentTableBody.addEventListener('click', (event) => {
     const target = event.target.closest('button');
