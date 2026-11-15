@@ -63,6 +63,7 @@ const app = {
   years: [],
   usedSchools: new Set(),
   selectedPaymentStudent: null,
+  pendingPaymentCorrection: null,
   paymentBilling: null,
   paymentBillingError: '',
   paymentBillingCache: new Map(),
@@ -73,7 +74,8 @@ const app = {
   reportRows: null,
   arrearsOffset: 0,
   arrearsTotal: 0,
-  arrearsRows: []
+  arrearsRows: [],
+  operatorCodes: []
 };
 
 const PAGE_SIZE = 25;
@@ -98,7 +100,8 @@ const pageMap = {
   pembayaran: document.getElementById('pembayaranPage'),
   laporan: document.getElementById('laporanPage'),
   sekolah: document.getElementById('sekolahPage'),
-  bank: document.getElementById('bankPage')
+  bank: document.getElementById('bankPage'),
+  operator: document.getElementById('operatorPage')
 };
 
 const ui = {
@@ -109,6 +112,10 @@ const ui = {
   schoolFilter: document.getElementById('schoolFilter'),
   yearFilter: document.getElementById('yearFilter'),
   paymentSearch: document.getElementById('paymentSearch'),
+  dailyPaymentDate: document.getElementById('dailyPaymentDate'),
+  dailyPaymentSummary: document.getElementById('dailyPaymentSummary'),
+  dailyPaymentSummaryTotal: document.getElementById('dailyPaymentSummaryTotal'),
+  dailyPaymentSummaryStatus: document.getElementById('dailyPaymentSummaryStatus'),
   studentTableBody: document.getElementById('studentTableBody'),
   studentForm: document.getElementById('studentForm'),
   studentNama: document.getElementById('studentNama'),
@@ -181,7 +188,15 @@ const ui = {
   paymentBankName: document.getElementById('paymentBankName'),
   searchStudent: document.getElementById('searchStudent'),
   paymentForm: document.getElementById('paymentForm'),
+  paymentDate: document.getElementById('paymentDate'),
+  paymentPrintSheet: document.getElementById('paymentPrintSheet'),
+  paymentCorrectionDialog: document.getElementById('paymentCorrectionDialog'),
+  paymentCorrectionReason: document.getElementById('paymentCorrectionReason'),
+  paymentCorrectionSubmit: document.getElementById('paymentCorrectionSubmit'),
+  operatorCodesTableBody: document.getElementById('operatorCodesTableBody'),
+  operatorCodesStatus: document.getElementById('operatorCodesStatus'),
   paymentComponentRows: document.getElementById('paymentComponentRows'),
+  paymentBosTotal: document.getElementById('paymentBosTotal'),
   paymentAllocationTotal: document.getElementById('paymentAllocationTotal'),
   paymentBillingStatus: document.getElementById('paymentBillingStatus'),
   addPaymentComponent: document.getElementById('addPaymentComponent'),
@@ -213,6 +228,11 @@ function clone(data) {
   return JSON.parse(JSON.stringify(data));
 }
 
+function getCurrentOperatorCode() {
+  const idpemakai = app.user?.idpemakai || 'ADMIN';
+  return app.state.operatorCodes?.[idpemakai] || app.user?.operatorCode || idpemakai;
+}
+
 function normalizeSchoolClasses(rows) {
   const classes = new Map();
   (Array.isArray(rows) ? rows : []).forEach((row) => {
@@ -230,6 +250,7 @@ function normalizeSchoolClasses(rows) {
         ? true
         : activeValue === true || activeValue === 1 || activeValue === 'true'
     });
+    ui.dailyPaymentDate.addEventListener('change', fetchDailyPaymentSummary);
   });
 
   return [...classes.values()].sort((a, b) => (
@@ -743,8 +764,8 @@ function setPage(pageName) {
     return;
   }
 
-  if (['sekolah', 'bank'].includes(pageName) && !canManageSettings()) {
-    alert('Hanya Admin yang dapat mengubah pengaturan sekolah dan bank.');
+  if (['sekolah', 'bank', 'operator'].includes(pageName) && !canManageSettings()) {
+    alert('Hanya Admin yang dapat mengubah pengaturan.');
     return;
   }
 
@@ -770,8 +791,11 @@ function setPage(pageName) {
     pembayaran: 'Pembayaran',
     laporan: 'Laporan',
     sekolah: 'Sekolah',
-    bank: 'Bank'
+    bank: 'Bank',
+    operator: 'Operator'
   }[pageName];
+
+  if (pageName === 'operator') loadOperatorCodes();
 }
 
 function initSupabase() {
@@ -840,6 +864,8 @@ function applyUserAccess() {
   document.querySelectorAll('.admin-only').forEach((button) => {
     button.hidden = !canManageSettings();
   });
+  const dailyPaymentPanel = document.querySelector('.daily-summary-panel');
+  if (dailyPaymentPanel) dailyPaymentPanel.hidden = !['superadmin', 'yayasan'].includes(app.user?.role);
   requestAnimationFrame(updateCourseIndicator);
 
   const allowedSchools = app.state.schools.filter((school) => getAllowedSchoolCodes().includes(school.kdsek));
@@ -932,6 +958,7 @@ function normalizeOverviewRow(row) {
     dpp: Number(row.dpp || 0),
     dsp: Number(row.dsp || 0),
     seragam: Number(row.seragam || 0),
+    periodeMasuk: row.periode_masuk || '',
     tahunAjaran: row.tahun_ajaran,
     noWa: row.no_wa || '',
     isStaffChild: row.is_staff_child === true,
@@ -1234,11 +1261,11 @@ async function fetchPaymentPage() {
   if (!app.user) return;
   const seq = ++paymentFetchSeq;
   ui.paymentList.innerHTML = skeletonRows(7);
-  let query = app.supabase.from('spp_app_payment_list').select('*', { count: 'exact' });
+  let query = app.supabase.from('spp_app_payment_batch_list').select('*', { count: 'exact' });
   const school = currentSchoolScope();
   const keyword = cleanKeyword(ui.paymentSearch.value);
   if (school) query = query.eq('kdsek', school);
-  if (keyword) query = query.or(`nospp.ilike.${keyword}%,nama.ilike.%${keyword}%`);
+  if (keyword) query = query.or(`receipt_no.ilike.${keyword}%,nospp.ilike.${keyword}%,nama.ilike.%${keyword}%`);
   const from = app.paging.payments * PAGE_SIZE;
   const { data, count, error } = await query
     .order('tglbyr', { ascending: false }).order('id', { ascending: false })
@@ -1248,7 +1275,7 @@ async function fetchPaymentPage() {
     ui.paymentList.innerHTML = `<tr><td colspan="7" class="empty-state">Data gagal dimuat: ${escapeHtml(error.message)}</td></tr>`;
     return;
   }
-  app.state.transaksi = (data || []).map(normalizeSupabaseTransaction);
+  app.state.transaksi = (data || []).map(normalizeSupabasePaymentBatch);
   app.totals.payments = count || 0;
   drawPaymentList();
 }
@@ -1263,7 +1290,7 @@ function renderPaymentList() {
 function drawPaymentList() {
   const rows = app.server
     ? app.state.transaksi
-    : [...getAccessibleTransactionRows()].sort((a, b) => new Date(b.tglbyr) - new Date(a.tglbyr));
+    : getLocalPaymentBatches().sort((a, b) => new Date(b.tglbyr) - new Date(a.tglbyr));
   if (app.server) renderPager('payments', app.totals.payments);
 
   if (!rows.length) {
@@ -1273,18 +1300,324 @@ function drawPaymentList() {
 
   ui.paymentList.innerHTML = rows.map((row) => `
     <tr>
-      <td>${escapeHtml(row.nospp)}</td>
-      <td>${escapeHtml(row.nama || '-')}</td>
-      <td>${escapeHtml(getPaymentComponentLabel(row.component))}</td>
-      <td>${escapeHtml(row.periode || '-')}</td>
+      <td>${escapeHtml(row.receipt_no || `LEGACY-${row.id}`)}</td>
+      <td>${escapeHtml(row.nama || '-')}
+        ${row.source === 'bos' ? `<small>${Number(row.student_count || row.items?.length || 0)} siswa</small>` : ''}
+      </td>
+      <td>${escapeHtml(getPaymentBatchSourceLabel(row))}${row.voided_at ? '<small>Dikoreksi</small>' : ''}</td>
       <td>${escapeHtml(row.tglbyr)}</td>
-      <td>${formatRupiah(row.nominal)}</td>
+      <td>${escapeHtml(formatDateTime(row.created_at))}</td>
+      <td>${formatRupiah(row.source === 'bos' ? row.nominal : (row.parent_nominal ?? row.nominal))}
+        ${row.source !== 'bos' && Number(row.bos_nominal || 0) > 0
+          ? `<small>Termasuk BOS ${formatRupiah(row.bos_nominal)}</small>` : ''}
+      </td>
       <td>
-        <button class="action-btn delete" data-action="delete-payment" data-id="${escapeHtml(row.id)}">Hapus</button>
+        <button class="secondary-button small-button" data-action="print-payment" data-id="${escapeHtml(row.id)}">Cetak slip</button>
+        ${row.voided_at
+          ? `<button class="secondary-button small-button" data-action="print-correction" data-id="${escapeHtml(row.id)}">Cetak koreksi</button>`
+          : `<button class="action-btn delete" data-action="correct-payment" data-id="${escapeHtml(row.id)}">Koreksi</button>`}
       </td>
     </tr>
   `).join('');
 }
+
+function normalizeSupabasePaymentBatch(row) {
+  return {
+    ...row,
+    id: String(row.id),
+    nominal: Number(row.nominal || 0),
+    bos_nominal: Number(row.bos_nominal || 0),
+    parent_nominal: Number(row.parent_nominal ?? row.nominal ?? 0),
+    item_count: Number(row.item_count || 0),
+    student_count: Number(row.student_count || 0)
+  };
+}
+
+function getLocalPaymentBatches() {
+  const batches = new Map();
+  getAccessibleTransactionRows(true).forEach((item) => {
+    const id = String(item.batch_id || item.id);
+    if (!batches.has(id)) {
+      batches.set(id, {
+        ...item,
+        id,
+        receipt_no: item.receipt_no || `LEGACY-${item.id}`,
+        source: item.source || 'legacy',
+        created_at: item.created_at || item.tglbyr,
+        items: [],
+        nominal: 0,
+        bos_nominal: 0,
+        parent_nominal: 0,
+        item_count: 0,
+        student_count: 1
+      });
+    }
+    const batch = batches.get(id);
+    batch.items.push(item);
+    const amount = Number(item.nominal || 0);
+    const isBosItem = item.source === 'bos' || item.component === 'spp_bos';
+    batch.nominal += amount;
+    if (isBosItem) batch.bos_nominal += amount;
+    else batch.parent_nominal += amount;
+    batch.item_count += 1;
+    if (item.voided_at) Object.assign(batch, {
+      voided_at: item.voided_at,
+      void_reason: item.void_reason,
+      correction_no: item.correction_no,
+      correction_created_at: item.correction_created_at,
+      correction_operator_code: item.correction_operator_code
+    });
+  });
+  return [...batches.values()];
+}
+
+function getPaymentSourceLabel(source) {
+  return ({
+    manual: 'Manual',
+    upload: 'Impor',
+    bos: 'BOS',
+    legacy: 'Riwayat lama'
+  })[source] || 'Tidak diketahui';
+}
+
+function getPaymentBatchSourceLabel(batch) {
+  const source = getPaymentSourceLabel(batch.source);
+  return batch.source !== 'bos' && Number(batch.bos_nominal || 0) > 0
+    ? `${source} + BOS`
+    : source;
+}
+
+function formatDateTime(value) {
+  if (!value) return '-';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? String(value)
+    : date.toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function renderDailyPaymentSummary(summary) {
+  const rows = [
+    ['Manual', summary.manual_transaksi, Number(summary.manual || 0)],
+    ['Impor', summary.upload_transaksi, Number(summary.upload || 0)],
+    ['BOS · pengurang penerimaan orang tua', summary.bos_transaksi, -Number(summary.bos || 0)],
+    ['Riwayat lama · sumber belum tercatat', summary.legacy_transaksi, Number(summary.legacy || 0)]
+  ];
+  ui.dailyPaymentSummary.innerHTML = rows.map(([label, count, amount]) => `
+    <tr>
+      <th>${escapeHtml(label)}</th>
+      <td>${Number(count || 0).toLocaleString('id-ID')}</td>
+      <td>${formatRupiah(amount)}</td>
+    </tr>
+  `).join('');
+  ui.dailyPaymentSummaryTotal.innerHTML = `
+    <tr class="net-row">
+      <th colspan="2">Net setelah alokasi BOS</th>
+      <th>${formatRupiah(Number(summary.net_orang_tua || 0))}</th>
+    </tr>`;
+  ui.dailyPaymentSummaryStatus.textContent = '';
+}
+
+let dailyPaymentSummaryFetchSeq = 0;
+
+async function fetchDailyPaymentSummary() {
+  if (!ui.dailyPaymentDate || !app.user || app.user.role === 'unit') return;
+  const seq = ++dailyPaymentSummaryFetchSeq;
+  if (!ui.dailyPaymentDate.value) ui.dailyPaymentDate.value = localDateInputValue();
+  ui.dailyPaymentSummaryStatus.textContent = 'Memuat rekap...';
+  ui.dailyPaymentSummary.innerHTML = '<tr><td colspan="3" class="empty-state">Memuat rekap...</td></tr>';
+  ui.dailyPaymentSummaryTotal.replaceChildren();
+  try {
+    let summary;
+    if (app.server) {
+      if (!app.dashboardCredentials) throw new Error('Silakan keluar lalu masuk kembali sebagai Admin atau Yayasan.');
+      const { data, error } = await app.supabase.rpc('spp_app_daily_payment_summary_v1', {
+        p_username: app.dashboardCredentials.username,
+        p_password: app.dashboardCredentials.password,
+        p_tanggal: ui.dailyPaymentDate.value
+      });
+      if (error) throw error;
+      summary = data;
+    } else {
+      const daily = getLocalPaymentBatches().filter((batch) => (
+        batch.tglbyr === ui.dailyPaymentDate.value && !batch.voided_at
+      ));
+      summary = { manual: 0, upload: 0, bos: 0, legacy: 0, manual_transaksi: 0,
+        upload_transaksi: 0, bos_transaksi: 0, legacy_transaksi: 0 };
+      daily.forEach((batch) => {
+        const source = ['manual', 'upload', 'bos', 'legacy'].includes(batch.source) ? batch.source : 'legacy';
+        summary[source] += Number(batch.nominal || 0);
+        summary[`${source}_transaksi`] += 1;
+        if (source !== 'bos' && Number(batch.bos_nominal || 0) > 0) {
+          summary.bos += Number(batch.bos_nominal || 0);
+          summary.bos_transaksi += 1;
+        }
+      });
+      summary.net_orang_tua = summary.manual + summary.upload + summary.legacy - summary.bos;
+    }
+    if (seq !== dailyPaymentSummaryFetchSeq) return;
+    renderDailyPaymentSummary(summary || {});
+  } catch (error) {
+    if (seq !== dailyPaymentSummaryFetchSeq) return;
+    ui.dailyPaymentSummary.innerHTML = `<tr><td colspan="3" class="empty-state">Rekap gagal dimuat: ${escapeHtml(error.message || 'Kesalahan tidak diketahui.')}</td></tr>`;
+    ui.dailyPaymentSummaryStatus.textContent = 'Pastikan migration 018 sudah dijalankan dan akun memiliki akses Admin/Yayasan.';
+  }
+}
+
+async function loadOperatorCodes() {
+  if (!ui.operatorCodesTableBody) return;
+  ui.operatorCodesStatus.textContent = 'Memuat akun operator...';
+  ui.operatorCodesTableBody.innerHTML = '<tr><td colspan="4" class="empty-state">Memuat akun operator...</td></tr>';
+  try {
+    if (app.server) {
+      const credentials = requireStudentRules();
+      const { data, error } = await app.supabase.rpc('get_payment_operator_codes_v1', credentials);
+      if (error) throw error;
+      app.operatorCodes = data || [];
+    } else {
+      const codes = app.state.operatorCodes || {};
+      app.operatorCodes = (app.state.users || []).map((user) => ({
+        idpemakai: user.idpemakai,
+        jabatan: user.jabatan,
+        role: user.role,
+        kode_operator: codes[user.idpemakai] || user.idpemakai
+      }));
+    }
+    ui.operatorCodesTableBody.innerHTML = app.operatorCodes.map((operator) => `
+      <tr>
+        <td>${escapeHtml(operator.idpemakai)}<small>${escapeHtml(operator.jabatan || '-')}</small></td>
+        <td>${escapeHtml(operator.role || '-')}</td>
+        <td><input class="operator-code-input" type="text" maxlength="20" value="${escapeHtml(operator.kode_operator || '')}" data-operator-code aria-label="Kode operator untuk ${escapeHtml(operator.idpemakai)}" /></td>
+        <td><button type="button" class="secondary-button small-button" data-save-operator-code="${escapeHtml(operator.idpemakai)}">Simpan</button></td>
+      </tr>
+    `).join('') || '<tr><td colspan="4" class="empty-state">Belum ada akun operator.</td></tr>';
+    ui.operatorCodesStatus.textContent = '';
+  } catch (error) {
+    ui.operatorCodesTableBody.innerHTML = `<tr><td colspan="4" class="empty-state">Akun operator gagal dimuat: ${escapeHtml(error.message || 'Kesalahan tidak diketahui.')}</td></tr>`;
+    ui.operatorCodesStatus.textContent = 'Pastikan migration 018 sudah dijalankan.';
+  }
+}
+
+async function savePaymentOperatorCode(button) {
+  const idpemakai = button.dataset.saveOperatorCode;
+  const input = button.closest('tr')?.querySelector('[data-operator-code]');
+  const kode = String(input?.value || '').trim().toUpperCase();
+  if (!/^[A-Z0-9-]{2,20}$/.test(kode)) {
+    ui.operatorCodesStatus.textContent = 'Kode harus 2 sampai 20 karakter: huruf, angka, atau tanda hubung.';
+    return;
+  }
+  button.disabled = true;
+  try {
+    if (app.server) {
+      const credentials = requireStudentRules();
+      const { error } = await app.supabase.rpc('save_payment_operator_code_v1', {
+        ...credentials,
+        p_idpemakai: idpemakai,
+        p_kode_operator: kode
+      });
+      if (error) throw error;
+      await loadOperatorCodes();
+    } else {
+      const duplicate = app.operatorCodes.some((item) => (
+        item.idpemakai !== idpemakai && String(item.kode_operator || '').toUpperCase() === kode
+      ));
+      if (duplicate) throw new Error('Kode operator sudah dipakai akun lain.');
+      app.state.operatorCodes = app.state.operatorCodes || {};
+      app.state.operatorCodes[idpemakai] = kode;
+      saveLocalData();
+      await loadOperatorCodes();
+    }
+    ui.operatorCodesStatus.textContent = `Kode operator ${kode} tersimpan.`;
+  } catch (error) {
+    ui.operatorCodesStatus.textContent = error.message || 'Kode operator gagal disimpan.';
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function printPaymentBatch(batchId, correction) {
+  let batch;
+  let items;
+  if (app.server) {
+    const [batchResult, itemsResult] = await Promise.all([
+      app.supabase.from('spp_app_payment_batch_list').select('*').eq('id', batchId).single(),
+      app.supabase.from('spp_app_payment_batch_items').select('*').eq('batch_id', batchId).order('payment_id')
+    ]);
+    if (batchResult.error) throw batchResult.error;
+    if (itemsResult.error) throw itemsResult.error;
+    batch = batchResult.data;
+    items = itemsResult.data || [];
+  } else {
+    batch = getLocalPaymentBatches().find((item) => item.id === String(batchId));
+    if (!batch) throw new Error('Data slip tidak ditemukan.');
+    items = batch.items || [];
+  }
+  if (!batch || !items.length) throw new Error('Rincian slip tidak tersedia.');
+  if (correction && !batch.correction_no) throw new Error('Nomor slip koreksi belum tersedia.');
+  renderPaymentReceipt(batch, items, correction);
+  document.body.classList.add('printing-payment');
+  window.print();
+}
+
+function renderPaymentReceipt(batch, items, correction) {
+  const isCorrection = correction === true;
+  const itemRows = items.map((item) => `
+    <tr>
+      <td>${escapeHtml(item.nama || batch.nama || 'Siswa')}${item.kdkls ? `<br>Kelas ${escapeHtml(item.kdkls)}` : ''}</td>
+      <td>${escapeHtml(getPaymentComponentLabel(item.component))}</td>
+      <td>${escapeHtml(item.periode ? formatPeriodLabel(item.periode) : '-')}</td>
+      <td>${formatRupiah(isCorrection ? -Math.abs(Number(item.nominal || 0)) : Number(item.nominal || 0))}</td>
+    </tr>
+  `).join('');
+  const issuedAt = isCorrection ? batch.correction_created_at : batch.created_at;
+  const operatorCode = isCorrection ? batch.correction_operator_code : batch.operator_code;
+  const total = items.reduce((sum, item) => sum + Number(item.nominal || 0), 0);
+  const bosTotal = items.reduce((sum, item) => (
+    sum + (batch.source === 'bos' || item.component === 'spp_bos' ? Number(item.nominal || 0) : 0)
+  ), 0);
+  const parentTotal = total - bosTotal;
+  const organization = getSchoolName(batch.kdsek) || 'Yayasan Santo Dominikus Cimahi';
+  const amountText = (amount) => formatRupiah(isCorrection ? -Math.abs(amount) : amount);
+  const correctionDetails = isCorrection ? `
+    <p><strong>Mengoreksi bukti:</strong> ${escapeHtml(batch.receipt_no)}</p>
+    <p><strong>Alasan:</strong> ${escapeHtml(batch.void_reason || '')}</p>
+  ` : '';
+  ui.paymentPrintSheet.innerHTML = `
+    <article class="payment-print">
+      <h1>${isCorrection ? 'Slip Koreksi Pembayaran' : (batch.source === 'bos' ? 'Bukti Alokasi BOS' : 'Bukti Pembayaran SPP')}</h1>
+      <p class="payment-print-org">Yayasan Santo Dominikus Cimahi · ${escapeHtml(organization)}</p>
+      <dl class="payment-print-meta">
+        <dt>No. bukti</dt><dd>${escapeHtml(isCorrection ? batch.correction_no : batch.receipt_no)}</dd>
+        <dt>Sumber</dt><dd>${escapeHtml(bosTotal > 0 && batch.source !== 'bos' ? `${getPaymentSourceLabel(batch.source)} + BOS` : getPaymentSourceLabel(batch.source))}</dd>
+        <dt>Tanggal uang masuk</dt><dd>${escapeHtml(formatLongDate(batch.tglbyr))}</dd>
+        <dt>Dicatat / diunggah</dt><dd>${escapeHtml(formatDateTime(issuedAt))}</dd>
+        <dt>Kode operator</dt><dd>${escapeHtml(operatorCode || '-')}</dd>
+      </dl>
+      ${correctionDetails}
+      ${batch.notes ? `<p><strong>Keterangan:</strong> ${escapeHtml(batch.notes)}</p>` : ''}
+      <table>
+        <thead><tr><th>Siswa</th><th>Komponen</th><th>Periode</th><th>Nominal</th></tr></thead>
+        <tbody>${itemRows}</tbody>
+      </table>
+      <p><strong>${isCorrection ? 'Penerimaan orang tua dikoreksi' : 'Penerimaan orang tua'}:</strong> ${amountText(parentTotal)}</p>
+      <p><strong>${isCorrection ? 'Alokasi BOS dikoreksi' : 'Alokasi BOS'}:</strong> ${amountText(bosTotal)}</p>
+      <p class="payment-print-total">${isCorrection ? 'Total tagihan yang dikoreksi' : 'Total tagihan tertutup'}: ${amountText(total)}</p>
+      <div class="payment-print-signatures">
+        <div>${batch.source === 'bos' ? 'Petugas' : 'Kasir'}<span>(____________________)</span></div>
+        <div>${batch.source === 'bos' ? 'Penerima alokasi' : 'Penyetor'}<span>(____________________)</span></div>
+      </div>
+    </article>`;
+}
+
+function formatLongDate(value) {
+  if (!value) return '-';
+  const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString('id-ID', { dateStyle: 'long' });
+}
+
+window.addEventListener('afterprint', () => {
+  document.body.classList.remove('printing-payment');
+  if (ui.paymentPrintSheet) ui.paymentPrintSheet.replaceChildren();
+});
 
 function getAccessibleStudentRows() {
   if (!app.user || app.user.role === 'superadmin' || app.user.role === 'yayasan') {
@@ -1293,15 +1626,16 @@ function getAccessibleStudentRows() {
   return app.state.siswa.filter((row) => row.kdsek === app.user.unit);
 }
 
-function getAccessibleTransactionRows() {
-  if (!app.user || app.user.role === 'superadmin' || app.user.role === 'yayasan') {
-    return app.state.transaksi;
-  }
-  return app.state.transaksi.filter((row) => row.kdsek === app.user.unit);
+function getAccessibleTransactionRows(includeVoided = false) {
+  const rows = (!app.user || app.user.role === 'superadmin' || app.user.role === 'yayasan')
+    ? app.state.transaksi
+    : app.state.transaksi.filter((row) => row.kdsek === app.user.unit);
+  return includeVoided ? rows : rows.filter((row) => !row.voided_at);
 }
 
 function getPaymentComponentLabel(component) {
   if (component === 'legacy' || !component) return 'Belum dialokasikan';
+  if (component === 'spp_bos') return 'SPP ditanggung BOS';
   return PAYMENT_COMPONENTS.find(([key]) => key === component)?.[1] || 'Lainnya';
 }
 
@@ -1344,7 +1678,6 @@ function populateStudentYearOptions(selectedYear = '') {
 function populateStudentPeriodOptions() {
   const year = ui.studentTahun.value || currentAcademicYear();
   const months = academicMonths(year);
-  const currentMonth = localMonthInputValue();
   const populate = (select, preferred, fallback) => {
     const previous = preferred || select.value;
     select.innerHTML = months.map((month) => (
@@ -1354,7 +1687,7 @@ function populateStudentPeriodOptions() {
       ? previous
       : (months.some((month) => month.key === fallback) ? fallback : months[0].key);
   };
-  populate(ui.studentPeriode, '', year === currentAcademicYear() ? currentMonth : months[0].key);
+  populate(ui.studentPeriode, '', months[0].key);
   populate(ui.studentEffective, '', months[0].key);
 }
 
@@ -1429,7 +1762,7 @@ function renderActivityList(rows) {
         <strong>${escapeHtml(item.nospp || '-')}</strong>
         <small>${escapeHtml(item.nama || 'Siswa')} &bull; ${escapeHtml(item.tglbyr || '-')}</small>
       </div>
-      <strong>${formatRupiah(Number(item.nominal || 0))}</strong>
+      <strong>${formatRupiah(Number(item.parent_nominal ?? item.nominal ?? 0))}</strong>
     </li>
   `).join('') || '<li class="empty-state">Belum ada aktivitas pembayaran.</li>';
 }
@@ -1455,7 +1788,7 @@ function renderPriorYearRevenue(rows) {
 let dashboardFetchSeq = 0;
 
 function showRevenueLoadError(message) {
-  ui.revenueChart.innerHTML = `<p class="empty-state">Dashboard gagal dimuat: ${escapeHtml(message)}. Pastikan migration 016 sudah dijalankan dan schema Supabase sudah diperbarui.</p>`;
+  ui.revenueChart.innerHTML = `<p class="empty-state">Dashboard gagal dimuat: ${escapeHtml(message)}. Pastikan migration 018 sudah dijalankan dan schema Supabase sudah diperbarui.</p>`;
   ui.revenueLegend.innerHTML = '';
   ui.revenueTableHead.innerHTML = '';
   ui.revenueTableBody.innerHTML = '';
@@ -1514,7 +1847,8 @@ async function fetchDashboard() {
         p_password: app.dashboardCredentials.password,
         p_tahun: year
       }),
-      app.supabase.from('spp_app_payment_list').select('nospp,nama,tglbyr,nominal')
+      app.supabase.from('spp_app_payment_batch_list').select('nospp,nama,tglbyr,parent_nominal,nominal')
+        .is('voided_at', null).neq('source', 'bos')
         .order('tglbyr', { ascending: false }).order('id', { ascending: false }).limit(5)
     ]);
     if (seq !== dashboardFetchSeq) return;
@@ -1538,6 +1872,7 @@ async function fetchDashboard() {
 
 function renderDashboard() {
   if (!app.user) return;
+  if (app.user.role !== 'unit') fetchDailyPaymentSummary();
   if (app.server) {
     fetchDashboard();
     return;
@@ -1559,6 +1894,7 @@ function renderDashboard() {
   const transactions = getAccessibleTransactionRows();
   const startYear = Number(year.slice(0, 4));
   const rows = transactions
+    .filter((item) => item.source !== 'bos' && item.component !== 'spp_bos' && !item.voided_at)
     .filter((item) => {
       const transactionDate = new Date(`${item.tglbyr}T00:00:00`);
       return transactionDate >= new Date(startYear, 6, 1) && transactionDate < new Date(startYear + 1, 6, 1);
@@ -1578,7 +1914,11 @@ function renderDashboard() {
   ui.paymentThisMonth.textContent = formatRupiah(totals.currentMonthRevenue);
   ui.totalTransaksi.textContent = totals.totalTransactions.toLocaleString('id-ID');
   renderPriorYearRevenue([]);
-  renderActivityList([...transactions].sort((a, b) => new Date(b.tglbyr) - new Date(a.tglbyr)).slice(0, 5));
+  const recentPayments = getLocalPaymentBatches()
+    .filter((batch) => !batch.voided_at && batch.source !== 'bos' && batch.parent_nominal > 0)
+    .sort((a, b) => new Date(b.tglbyr) - new Date(a.tglbyr))
+    .slice(0, 5);
+  renderActivityList(recentPayments);
 }
 
 let arrearsFetchSeq = 0;
@@ -2263,7 +2603,8 @@ async function applyBulkDelete() {
 const IMPORT_COLUMNS = ['jenis', 'tahun_ajaran', 'id_siswa', 'nama', 'no_wa', 'kdsek', 'kdkls', 'periode_masuk', 'dpp', 'dsp', 'seragam', 'giat', 'spp', 'komp'];
 
 const BACKUP_TABLES = ['mastsek', 'mastank', 'mastspp', 'pembayaran', 'spp_app_bank_settings', 'spp_app_school_settings',
-  'spp_app_school_classes', 'spp_app_va_settings', 'spp_app_students', 'spp_app_enrollments', 'spp_app_arrears', 'spp_app_payments'];
+  'spp_app_school_classes', 'spp_app_va_settings', 'spp_app_students', 'spp_app_enrollments', 'spp_app_arrears',
+  'spp_app_payments', 'spp_app_payment_batches'];
 
 async function backupData() {
   if (!app.supabase) {
@@ -2427,7 +2768,7 @@ async function parsePaymentImportFile(file) {
     nospp: findColumn('nosp', 'nomorspp'),
     nama: findColumn('nama', 'namasiswa', 'siswa'),
     nominal: findColumn('nominal', 'jumlah', 'jumlahbayar', 'amount', 'total'),
-    tanggal: findColumn('tanggal', 'tanggalbayar', 'tglbyr', 'date', 'transactiondate'),
+    tanggal: findColumn('tanggal', 'tanggalbayar', 'tanggaluangmasuk', 'tanggaltransfer', 'tglbyr', 'date', 'transactiondate'),
     periode: findColumn('periode', 'periodetagihan', 'bulan')
   };
   if (columns.nominal < 0 || (columns.nama < 0 && columns.nospp < 0)) {
@@ -2442,12 +2783,14 @@ async function parsePaymentImportFile(file) {
     if ((!nama && !nospp) || nominal <= 0) {
       throw new Error(`Baris ${index + 2}: Nama/No. SPP dan Nominal harus diisi.`);
     }
+    const rawDate = value(columns.tanggal);
     return {
       sourceRow: index + 2,
       sourceName: nama,
       sourceNoSpp: nospp,
       nominal,
-      tglbyr: importDateValue(value(columns.tanggal)),
+      tglbyr: importDateValue(rawDate),
+      dateWasDefaulted: rawDate === '' || rawDate === null || rawDate === undefined,
       importedPeriod: importPeriodValue(value(columns.periode))
     };
   }).filter(Boolean);
@@ -2472,7 +2815,8 @@ async function searchPaymentStudents(query) {
     .slice(0, 8)
     .map((item) => ({
       id: String(item.id), nama: item.nama, kdsek: item.kdsek, kdkls: item.kdkls,
-      nospp: item.nospp, spp: item.spp, komp: item.komp, tahunAjaran: item.tahunAjaran
+      nospp: item.nospp, spp: item.spp, komp: item.komp, tahunAjaran: item.tahunAjaran,
+      periodeMasuk: item.periodeMasuk || item.periode_masuk || ''
     }));
 }
 
@@ -2532,8 +2876,11 @@ async function loadPaymentImportBilling(row) {
   if (!row.selectedStudent) return;
   try {
     row.billing = await getPaymentBilling(row.selectedStudent);
-    const yearMonths = academicMonths(row.billing.tahun_ajaran).map((month) => toPeriode(month.key));
-    if (!yearMonths.includes(row.period)) row.period = oldestAnyDuePeriod(row.billing);
+    const schedule = row.billing.payment_periods || row.billing.periode_bulanan || [];
+    const availablePeriods = schedule.map((item) => item.periode);
+    if (!availablePeriods.includes(row.period)) {
+      row.period = oldestAnyDuePeriod(row.billing) || availablePeriods[0] || '';
+    }
   } catch (error) {
     row.billingError = error.message || 'Tagihan tidak dapat dimuat.';
   }
@@ -2546,11 +2893,14 @@ function renderPaymentImportRows() {
   )).join('');
   ui.paymentImportRows.innerHTML = rows.map((row, index) => {
     const year = row.billing?.tahun_ajaran || currentAcademicYear();
-    const periodOptions = academicMonths(year).map((month) => {
-      const value = toPeriode(month.key);
-      return `<option value="${value}">${escapeHtml(formatPeriodLabel(value))}</option>`;
-    }).join('');
-    const validPeriod = academicMonths(year).some((month) => toPeriode(month.key) === row.period);
+    const schedule = row.billing?.payment_periods || row.billing?.periode_bulanan || [];
+    const allowedPeriods = schedule.length
+      ? schedule.map((item) => item.periode)
+      : academicMonths(year).map((month) => toPeriode(month.key));
+    const periodOptions = allowedPeriods.map((value) => (
+      `<option value="${value}">${escapeHtml(formatPeriodLabel(value))}</option>`
+    )).join('');
+    const validPeriod = allowedPeriods.includes(row.period);
     const canConfirm = Boolean(row.selectedStudent?.nospp && row.component && row.nominal > 0
       && ((row.component !== 'spp' && row.component !== 'komp')
         || (row.billing && !row.billingError && validPeriod
@@ -2570,7 +2920,7 @@ function renderPaymentImportRows() {
       <td><select data-import-period aria-label="Pilih periode mulai pada baris ${row.sourceRow}" ${row.component === 'spp' || row.component === 'komp' ? '' : 'disabled'}>
         <option value="">Periode terlama yang disarankan</option>${periodOptions}</select>
         <small>${row.billing && Number(row.billing.belum_dialokasikan || 0) > 0 ? 'Rekonsiliasi pembayaran lama dahulu.' : periodLabel}</small></td>
-      <td>${escapeHtml(row.tglbyr)}${row.tglbyr === localDateInputValue() ? '<small>Tanggal file kosong: gunakan hari ini</small>' : ''}</td>
+      <td>${escapeHtml(row.tglbyr)}${row.dateWasDefaulted ? '<small>Tanggal file kosong: gunakan hari ini</small>' : ''}</td>
       <td>${formatRupiah(row.nominal)}</td>
       <td><label class="import-confirm"><input type="checkbox" data-import-confirm ${row.confirmed ? 'checked' : ''} ${canConfirm && !row.skipped ? '' : 'disabled'}>Konfirmasi</label>
         <label class="import-skip"><input type="checkbox" data-import-skip ${row.skipped ? 'checked' : ''}>Lewati</label></td>
@@ -2587,7 +2937,7 @@ function renderPaymentImportRows() {
   const skipped = rows.filter((row) => row.skipped).length;
   ui.importPaymentsBtn.disabled = !app.server || !canAccessPayment() || !confirmed || confirmed + skipped !== rows.length;
   ui.paymentImportStatus.textContent = `${rows.length} baris · ${confirmed} dikonfirmasi · ${skipped} dilewati.`
-    + (!app.server ? ' Impor memerlukan Supabase dan migration 017.' : '');
+    + (!app.server ? ' Impor memerlukan Supabase dan migration 018.' : '');
 }
 
 async function importPaymentFile(file) {
@@ -2615,14 +2965,15 @@ function downloadPaymentTemplate() {
   }
   const workbook = window.XLSX.utils.book_new();
   const template = window.XLSX.utils.aoa_to_sheet([
-    ['no_spp', 'nama', 'nominal', 'tanggal', 'periode'],
+    ['no_spp', 'nama', 'nominal', 'tanggal_uang_masuk', 'periode'],
     ['', '', '', '', '']
   ]);
   template['!cols'] = [{ wch: 20 }, { wch: 28 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
   const instructions = window.XLSX.utils.aoa_to_sheet([
     ['Panduan impor pembayaran'],
     ['Isi Nama atau No. SPP dan Nominal.'],
-    ['Tanggal memakai format YYYY-MM-DD; boleh dikosongkan untuk memakai tanggal hari ini.'],
+    ['Tanggal uang masuk memakai format YYYY-MM-DD; boleh dikosongkan untuk memakai tanggal hari ini.'],
+    ['Waktu file diunggah dicatat otomatis oleh sistem dan tidak menggantikan tanggal uang masuk.'],
     ['Periode opsional; jika kosong, aplikasi menyarankan periode tunggakan terlama.'],
     ['Komponen dan siswa dikonfirmasi satu per satu setelah file dibaca.'],
     ['Simpan satu transaksi pembayaran per baris. Maksimal 500 baris.']
@@ -2654,16 +3005,16 @@ async function submitPaymentImport() {
       }
       return { nospp: row.selectedStudent.nospp, tglbyr: row.tglbyr, items };
     });
-    const { data, error } = await app.supabase.rpc('import_payment_components_v1', {
+    const { data, error } = await app.supabase.rpc('import_payment_batches_v1', {
       ...credentials,
       p_rows: payload
     });
     if (error) throw error;
-    const importedCount = Number(data || 0);
+    const importedCount = Array.isArray(data) ? data.length : 0;
     app.paymentImportRows = [];
     ui.paymentImportReview.hidden = true;
     await reloadStudentData();
-    alert(`${confirmed.length} transaksi berhasil diimpor (${importedCount} alokasi).`);
+    alert(`${importedCount} transaksi berhasil diimpor. Slip tersedia di Riwayat Pembayaran.`);
   } catch (error) {
     ui.paymentImportStatus.textContent = `Impor gagal: ${error.message || 'Kesalahan tidak diketahui.'}`;
     ui.importPaymentsBtn.disabled = false;
@@ -2771,27 +3122,81 @@ async function showStudentLog() {
   }
 }
 
-async function deletePayment(id) {
-  const confirmed = window.confirm('Hapus riwayat pembayarannya?');
-  if (!confirmed) return;
+function openPaymentCorrection(batchId) {
+  app.pendingPaymentCorrection = String(batchId);
+  ui.paymentCorrectionReason.value = '';
+  ui.paymentCorrectionDialog.showModal();
+  ui.paymentCorrectionReason.focus();
+}
 
+async function voidPaymentBatch(event) {
+  event.preventDefault();
+  const batchId = app.pendingPaymentCorrection;
+  const reason = ui.paymentCorrectionReason.value.trim();
+  if (!batchId || reason.length < 5 || reason.length > 500) {
+    alert('Alasan koreksi wajib diisi 5 sampai 500 karakter.');
+    return;
+  }
+  ui.paymentCorrectionSubmit.disabled = true;
   if (app.server) {
+    let correctionError;
     try {
       const credentials = requireStudentRules();
-      const { error } = await app.supabase.rpc('delete_payment_v1', { ...credentials, p_id: Number(id) });
+      const { error } = await app.supabase.rpc('void_payment_batch_v1', {
+        ...credentials,
+        p_batch_id: Number(batchId),
+        p_reason: reason
+      });
       if (error) throw error;
+    } catch (error) {
+      correctionError = error;
+    } finally {
+      ui.paymentCorrectionSubmit.disabled = false;
+    }
+    if (correctionError) {
+      alert(correctionError.message || 'Transaksi gagal dikoreksi.');
+      return;
+    }
+    ui.paymentCorrectionDialog.close();
+    app.pendingPaymentCorrection = null;
+    try {
+      await printPaymentBatch(batchId, true);
+    } catch (error) {
+      alert(`Koreksi tersimpan, tetapi slip koreksi gagal dimuat atau dicetak: ${error.message || 'Kesalahan tidak diketahui.'}`);
+    }
+    try {
       await reloadStudentData();
     } catch (error) {
-      alert(error.message || 'Pembayaran gagal dihapus.');
+      alert(`Koreksi tersimpan, tetapi daftar pembayaran gagal diperbarui: ${error.message || 'Kesalahan tidak diketahui.'}`);
     }
     return;
   }
 
-  app.state.transaksi = app.state.transaksi.filter((item) => item.id !== id);
+  const correctionNo = `KOR-${new Date().getFullYear()}-${Date.now()}`;
+  app.state.transaksi.forEach((item) => {
+    if (String(item.batch_id || item.id) === batchId) {
+      Object.assign(item, {
+        voided_at: new Date().toISOString(),
+        void_reason: reason,
+        correction_no: correctionNo,
+        correction_created_at: new Date().toISOString(),
+        correction_operator_code: getCurrentOperatorCode()
+      });
+    }
+  });
   saveLocalData();
+  ui.paymentCorrectionDialog.close();
   renderPaymentList();
   renderDashboard();
   renderReport();
+  app.pendingPaymentCorrection = null;
+  try {
+    await printPaymentBatch(batchId, true);
+  } catch (error) {
+    alert(`Koreksi tersimpan, tetapi slip koreksi gagal dimuat atau dicetak: ${error.message || 'Kesalahan tidak diketahui.'}`);
+  } finally {
+    ui.paymentCorrectionSubmit.disabled = false;
+  }
 }
 
 function paymentBillingCutoff(year) {
@@ -2807,8 +3212,12 @@ function paymentPeriodSequence(period) {
 }
 
 function buildLocalPaymentBilling(student, year, cutoff) {
-  const months = academicMonths(year).filter((month) => month.key <= cutoff);
-  const transactions = app.state.transaksi.filter((item) => item.nospp === student.nospp);
+  const entryPeriod = String(student.periodeMasuk || student.periode_masuk || '');
+  const months = academicMonths(year).filter((month) => (
+    month.key <= cutoff
+    && (!entryPeriod || paymentPeriodSequence(toPeriode(month.key)) >= paymentPeriodSequence(entryPeriod))
+  ));
+  const transactions = app.state.transaksi.filter((item) => item.nospp === student.nospp && !item.voided_at);
   let sppCredit = 0;
   let kompCredit = 0;
   let sppTotal = 0;
@@ -2817,7 +3226,7 @@ function buildLocalPaymentBilling(student, year, cutoff) {
     const period = toPeriode(month.key);
     const sppTarget = Number(student.spp || 0);
     const kompTarget = Number(student.komp || 0);
-    const sppPaid = transactions.filter((item) => item.component === 'spp' && item.periode === period)
+    const sppPaid = transactions.filter((item) => ['spp', 'spp_bos'].includes(item.component) && item.periode === period)
       .reduce((sum, item) => sum + Number(item.nominal || 0), 0);
     const kompPaid = transactions.filter((item) => item.component === 'komp' && item.periode === period)
       .reduce((sum, item) => sum + Number(item.nominal || 0), 0);
@@ -2884,7 +3293,8 @@ async function appendFuturePaymentPeriods(student, billing) {
       const { data, error } = await app.supabase.from('spp_app_payment_list')
         .select('component,periode,nominal')
         .eq('nospp', student.nospp)
-        .in('component', ['spp', 'komp'])
+        .is('voided_at', null)
+        .in('component', ['spp', 'spp_bos', 'komp'])
         .in('periode', futurePeriods);
       if (error) throw error;
       futurePayments = data || [];
@@ -2892,8 +3302,8 @@ async function appendFuturePaymentPeriods(student, billing) {
     historyRows = historyResult.data || [];
   } else {
     futurePayments = app.state.transaksi.filter((item) => (
-      item.nospp === student.nospp && ['spp', 'komp'].includes(item.component)
-      && futurePeriods.includes(item.periode)
+      item.nospp === student.nospp && ['spp', 'spp_bos', 'komp'].includes(item.component)
+      && futurePeriods.includes(item.periode) && !item.voided_at
     ));
   }
 
@@ -2923,7 +3333,7 @@ async function appendFuturePaymentPeriods(student, billing) {
       sppTarget = Number(rate.spp);
       kompTarget = Number(rate.komp);
     }
-    const sppPaid = futurePayments.filter((item) => item.component === 'spp' && item.periode === period)
+    const sppPaid = futurePayments.filter((item) => ['spp', 'spp_bos'].includes(item.component) && item.periode === period)
       .reduce((sum, item) => sum + Number(item.nominal || 0), 0);
     const kompPaid = futurePayments.filter((item) => item.component === 'komp' && item.periode === period)
       .reduce((sum, item) => sum + Number(item.nominal || 0), 0);
@@ -3073,6 +3483,7 @@ function updateMonthlyPaymentRow(row, forceFill = false) {
   const period = select.value;
   const inputs = {
     spp: row.querySelector('.payment-spp-amount'),
+    bos: row.querySelector('.payment-bos-amount'),
     komp: row.querySelector('.payment-komp-amount')
   };
   select.disabled = !schedule.length;
@@ -3084,6 +3495,7 @@ function updateMonthlyPaymentRow(row, forceFill = false) {
 
   const periodBilling = schedule.find((item) => item.periode === period);
   const changedPeriod = row.dataset.paymentPeriod !== period;
+  if (changedPeriod) inputs.bos.value = '';
   ['spp', 'komp'].forEach((component) => {
     const input = inputs[component];
     const autoValue = Number(periodBilling?.[component]?.sisa || 0);
@@ -3108,6 +3520,10 @@ function makePaymentComponentRow(period = '') {
     <label>
       <span>SPP</span>
       <input class="money-input payment-component-amount payment-spp-amount" type="text" inputmode="numeric" aria-label="Nominal SPP" disabled />
+    </label>
+    <label>
+      <span>BOS</span>
+      <input class="money-input payment-bos-amount" type="text" inputmode="numeric" aria-label="Nominal BOS untuk SPP" placeholder="Rp 0" disabled />
     </label>
     <label>
       <span>Komputer</span>
@@ -3143,7 +3559,10 @@ function makeOneTimePaymentRow() {
 function updatePaymentAllocationTotal() {
   const total = [...ui.paymentComponentRows.querySelectorAll('.payment-component-amount')]
     .reduce((sum, input) => sum + parseMoney(input.value), 0);
-  ui.paymentAllocationTotal.textContent = formatRupiah(total);
+  const bosTotal = [...ui.paymentComponentRows.querySelectorAll('.payment-bos-amount')]
+    .reduce((sum, input) => sum + parseMoney(input.value), 0);
+  ui.paymentBosTotal.textContent = formatRupiah(bosTotal);
+  ui.paymentAllocationTotal.textContent = formatRupiah(total - bosTotal);
 }
 
 function updatePaymentAllocationRows() {
@@ -3170,6 +3589,7 @@ function resetMonthlyPaymentRows() {
   ui.paymentComponentRows.querySelectorAll('.payment-monthly-row').forEach((row) => {
     row.querySelector('.payment-period').value = '';
     row.querySelector('.payment-spp-amount').value = '';
+    row.querySelector('.payment-bos-amount').value = '';
     row.querySelector('.payment-komp-amount').value = '';
     delete row.dataset.paymentPeriod;
     delete row.dataset.autoSpp;
@@ -3232,14 +3652,35 @@ async function collectPaymentItems() {
   for (const row of monthlyRows) {
     const period = row.querySelector('.payment-period').value;
     const sppAmount = parseMoney(row.querySelector('.payment-spp-amount').value);
+    const bosAmount = parseMoney(row.querySelector('.payment-bos-amount').value);
     const kompAmount = parseMoney(row.querySelector('.payment-komp-amount').value);
-    if (sppAmount <= 0 && kompAmount <= 0) continue;
-    if (!period) throw new Error('Pilih periode untuk setiap pembayaran SPP atau Komputer.');
+    if (sppAmount <= 0 && bosAmount <= 0 && kompAmount <= 0) continue;
+    if (!period) throw new Error('Pilih periode untuk setiap pembayaran SPP, BOS, atau Komputer.');
     if (!app.paymentBilling) throw new Error('Pilih siswa yang tagihannya berhasil dimuat terlebih dahulu.');
     if (Number(app.paymentBilling.belum_dialokasikan || 0) > 0) {
       throw new Error('Rekonsiliasi pembayaran lama yang belum dialokasikan sebelum memakai alokasi otomatis.');
     }
-    if (sppAmount > 0) items.push(...allocateMonthlyPayment('spp', sppAmount, app.paymentBilling, period));
+    const periodBilling = paymentSchedule(app.paymentBilling).find((item) => item.periode === period);
+    if (bosAmount > 0 && (sppAmount <= 0 || bosAmount > sppAmount)) {
+      throw new Error('Nominal BOS tidak boleh melebihi total SPP pada periode yang dipilih.');
+    }
+    if (bosAmount > Number(periodBilling?.spp?.sisa || 0)) {
+      throw new Error('Nominal BOS tidak boleh melebihi sisa tagihan SPP pada periode yang dipilih.');
+    }
+    if (sppAmount > 0) {
+      const allocations = allocateMonthlyPayment('spp', sppAmount, app.paymentBilling, period);
+      let bosRemaining = bosAmount;
+      allocations.forEach((item) => {
+        const bosForPeriod = item.periode === period ? Math.min(bosRemaining, item.nominal) : 0;
+        const parentAmount = item.nominal - bosForPeriod;
+        if (parentAmount > 0) items.push({ ...item, nominal: parentAmount });
+        if (bosForPeriod > 0) {
+          items.push({ ...item, component: 'spp_bos', nominal: bosForPeriod });
+          bosRemaining -= bosForPeriod;
+        }
+      });
+      if (bosRemaining > 0) throw new Error('Nominal BOS tidak dapat dialokasikan ke periode yang dipilih.');
+    }
     if (kompAmount > 0) items.push(...allocateMonthlyPayment('komp', kompAmount, app.paymentBilling, period));
   }
   for (const row of oneTimeRows) {
@@ -3257,7 +3698,15 @@ async function collectPaymentItems() {
     if (current) current.nominal += item.nominal;
     else merged.set(key, { ...item });
   });
-  return [...merged.values()];
+  const mergedItems = [...merged.values()];
+  const monthlySppSchedule = paymentSchedule(app.paymentBilling);
+  mergedItems.filter((item) => item.component === 'spp_bos').forEach((item) => {
+    const remaining = Number(monthlySppSchedule.find((period) => period.periode === item.periode)?.spp?.sisa || 0);
+    if (item.nominal > remaining) {
+      throw new Error(`Total BOS periode ${formatPeriodLabel(item.periode)} melebihi sisa tagihan SPP.`);
+    }
+  });
+  return mergedItems;
 }
 
 async function handlePaymentSubmit(event) {
@@ -3270,6 +3719,7 @@ async function handlePaymentSubmit(event) {
   const form = event.currentTarget;
   const formData = new FormData(form);
   const nospp = String(formData.get('nospp') || '').trim();
+  const paymentDate = ui.paymentDate.value;
   const nama = app.selectedPaymentStudent?.nama || '';
   let items;
   try {
@@ -3283,37 +3733,62 @@ async function handlePaymentSubmit(event) {
     alert('Nomor SPP harus diisi.');
     return;
   }
+  if (!paymentDate) {
+    alert('Tanggal uang masuk / transfer wajib diisi.');
+    return;
+  }
+  if (paymentDate > localDateInputValue()) {
+    alert('Tanggal uang masuk / transfer tidak boleh di masa depan.');
+    return;
+  }
 
   if (app.server) {
+    let batchId;
     try {
       const credentials = requireStudentRules();
-      const { error } = await app.supabase.rpc('add_payment_components_v1', {
+      const { data, error } = await app.supabase.rpc('save_payment_batch_v1', {
         ...credentials,
         p_nospp: nospp,
+        p_tglbyr: paymentDate,
         p_items: items
       });
       if (error) throw error;
+      batchId = String(data);
       form.reset();
+      ui.paymentDate.value = localDateInputValue();
       setPickerValue('paymentNospp', '');
       resetPaymentAllocationForm();
       app.paging.payments = 0;
+      try {
+        await printPaymentBatch(batchId, false);
+      } catch (printError) {
+        alert(`Pembayaran tersimpan (${batchId}), tetapi slip gagal dimuat atau dicetak: ${printError.message || 'Kesalahan tidak diketahui.'}`);
+      }
       await reloadStudentData();
-      alert('Pembayaran berhasil disimpan.');
     } catch (error) {
       const message = error.message || 'Pembayaran gagal disimpan.';
       const migrationHint = /function.*not found|schema cache/i.test(message)
-        ? ' Jalankan migration 016 dan 017, lalu perbarui schema Supabase.'
+        ? ' Jalankan migration 018, lalu perbarui schema Supabase.'
         : '';
-      alert(`${message}${migrationHint}`);
+      alert(batchId
+        ? `Pembayaran tersimpan (${batchId}), tetapi daftar gagal diperbarui: ${message}${migrationHint}`
+        : `${message}${migrationHint}`);
     }
     return;
   }
 
   const student = app.state.siswa.find((item) => item.nospp === nospp);
-  const paymentDate = new Date().toISOString().slice(0, 10);
+  const batchId = `local-${Date.now()}`;
+  const receiptNo = `SPP-${new Date().getFullYear()}-${Date.now()}`;
+  const createdAt = new Date().toISOString();
   items.forEach((item, index) => {
     app.state.transaksi.push({
       id: `tx-${Date.now()}-${index}`,
+      batch_id: batchId,
+      receipt_no: receiptNo,
+      source: 'manual',
+      created_at: createdAt,
+      operator_code: getCurrentOperatorCode(),
       nospp,
       nama: nama || (student ? student.nama : 'Siswa'),
       kdsek: student ? student.kdsek : '',
@@ -3327,13 +3802,14 @@ async function handlePaymentSubmit(event) {
   });
   saveLocalData();
   event.currentTarget.reset();
+  ui.paymentDate.value = localDateInputValue();
   setPickerValue('paymentNospp', '');
   resetPaymentAllocationForm();
   renderDashboard();
   renderPaymentList();
   renderReport();
   renderStudentTable();
-  alert('Pembayaran berhasil disimpan.');
+  await printPaymentBatch(batchId, false);
 }
 
 function normalizeLoginValue(value) {
@@ -3593,6 +4069,8 @@ async function handleBankSettingsSubmit(event) {
 }
 
 function setupEvents() {
+  ui.paymentDate.value = localDateInputValue();
+  ui.dailyPaymentDate.value = localDateInputValue();
   document.querySelectorAll('.nav').forEach((button) => {
     button.addEventListener('click', () => setPage(button.dataset.page));
   });
@@ -3725,7 +4203,8 @@ function setupEvents() {
   document.addEventListener('input', (event) => {
     if (event.target.classList && event.target.classList.contains('money-input')) {
       formatMoneyInput(event.target);
-      if (event.target.classList.contains('payment-component-amount')) updatePaymentAllocationTotal();
+      if (event.target.classList.contains('payment-component-amount')
+          || event.target.classList.contains('payment-bos-amount')) updatePaymentAllocationTotal();
     }
   });
   formatAllMoneyInputs();
@@ -3781,6 +4260,19 @@ function setupEvents() {
   ui.downloadPaymentTemplate.addEventListener('click', downloadPaymentTemplate);
   ui.importPaymentsBtn.addEventListener('click', submitPaymentImport);
   ui.paymentForm.addEventListener('submit', handlePaymentSubmit);
+  ui.paymentCorrectionDialog.querySelector('form').addEventListener('submit', voidPaymentBatch);
+  document.getElementById('paymentCorrectionClose').addEventListener('click', () => {
+    ui.paymentCorrectionDialog.close();
+    app.pendingPaymentCorrection = null;
+  });
+  document.getElementById('paymentCorrectionCancel').addEventListener('click', () => {
+    ui.paymentCorrectionDialog.close();
+    app.pendingPaymentCorrection = null;
+  });
+  ui.operatorCodesTableBody.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-save-operator-code]');
+    if (button) savePaymentOperatorCode(button);
+  });
   ui.schoolSettingsForm.addEventListener('submit', handleSchoolSettingsSubmit);
   ui.bankSettingsForm.addEventListener('submit', handleBankSettingsSubmit);
   ui.addSchoolBtn.addEventListener('click', () => {
@@ -3935,8 +4427,10 @@ function setupEvents() {
   ui.paymentList.addEventListener('click', (event) => {
     const target = event.target.closest('button');
     if (!target) return;
-    if (target.dataset.action === 'delete-payment') {
-      deletePayment(target.dataset.id);
+    if (target.dataset.action === 'correct-payment') openPaymentCorrection(target.dataset.id);
+    if (target.dataset.action === 'print-payment' || target.dataset.action === 'print-correction') {
+      printPaymentBatch(target.dataset.id, target.dataset.action === 'print-correction')
+        .catch((error) => alert(error.message || 'Slip gagal dimuat.'));
     }
   });
 

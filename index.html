@@ -32,6 +32,7 @@
           <div class="admin-nav">
             <button class="nav admin-only" data-page="sekolah" hidden>Sekolah</button>
             <button class="nav admin-only" data-page="bank" hidden>Bank</button>
+            <button class="nav admin-only" data-page="operator" hidden>Operator</button>
           </div>
         </nav>
 
@@ -111,6 +112,29 @@
                   <tbody id="revenueTableBody"></tbody>
                 </table>
               </div>
+            </div>
+
+            <div class="panel daily-summary-panel">
+              <div class="panel-header">
+                <div>
+                  <h2>Rekap Penerimaan Harian</h2>
+                  <p class="muted-copy">Dikelompokkan menurut tanggal uang masuk. Waktu input atau unggah dicatat terpisah.</p>
+                </div>
+                <label class="daily-summary-date">
+                  <span>Tanggal uang masuk</span>
+                  <input id="dailyPaymentDate" type="date" />
+                </label>
+              </div>
+              <div class="table-wrap">
+                <table class="daily-summary-table">
+                  <thead><tr><th>Sumber</th><th>Transaksi</th><th>Nominal</th></tr></thead>
+                  <tbody id="dailyPaymentSummary">
+                    <tr><td colspan="3" class="empty-state">Pilih tanggal untuk memuat rekap.</td></tr>
+                  </tbody>
+                  <tfoot id="dailyPaymentSummaryTotal"></tfoot>
+                </table>
+              </div>
+              <p class="settings-status" id="dailyPaymentSummaryStatus" role="status" aria-live="polite"></p>
             </div>
 
             <div class="panel prior-year-panel">
@@ -257,8 +281,9 @@
                   </select>
                 </label>
                 <label data-for="baru">
-                  <span>Periode Masuk (SPP tidak ditagih)</span>
+                  <span>Periode masuk (awal tagihan SPP)</span>
                   <select id="studentPeriode" required></select>
+                  <small class="field-hint">Bulan sebelumnya tidak ditagih. Default mengikuti awal tahun ajaran (Juli).</small>
                 </label>
                 <label data-for="baru ubah">
                   <span>Nominal DPP</span>
@@ -287,7 +312,7 @@
                 <label data-for="ubah">
                   <span>SPP &amp; Komputer berlaku mulai</span>
                   <select id="studentEffective"></select>
-                  <small class="field-hint">Isi bila SPP/Komputer diubah. Bulan sebelumnya tidak berubah.</small>
+                  <small class="field-hint">Mengatur tarif baru, bukan awal tagihan siswa. Bulan sebelum tanggal berlaku tetap memakai tarif lama.</small>
                 </label>
               </div>
               <div class="form-actions">
@@ -385,11 +410,16 @@
                   </div>
                   <small class="field-hint">Pilih hasil yang sesuai dengan sekolah dan kelas.</small>
                 </div>
+                <label class="field">
+                  <span>Tanggal uang masuk / transfer</span>
+                  <input id="paymentDate" type="date" name="tglbyr" required />
+                  <small class="field-hint">Tanggal pencatatan saat transaksi disimpan tetap tercatat otomatis.</small>
+                </label>
               </div>
               <p class="payment-billing-status" id="paymentBillingStatus" role="status" aria-live="polite">Pilih siswa untuk melihat sisa tagihan dan urutan alokasi.</p>
               <fieldset class="payment-allocation">
                 <legend>Alokasi pembayaran</legend>
-                <p class="muted-copy">SPP dan Komputer ditampilkan bersama per periode. Pilih periode untuk mengisi saldo tagihan otomatis; nominal tetap bisa disesuaikan untuk pembayaran cicilan.</p>
+                <p class="muted-copy">SPP dan Komputer ditampilkan bersama per periode. Isi kolom BOS untuk memisahkan bantuan dari nominal SPP; penerimaan orang tua otomatis dihitung setelah dikurangi BOS. Untuk siswa baru, tambahkan DPP, DPS, seragam, kegiatan, serta SPP/Komputer bulan masuk dalam satu transaksi.</p>
                 <div id="paymentComponentRows">
                   <div class="payment-component-row payment-monthly-row" data-payment-row="monthly">
                     <label>
@@ -403,6 +433,10 @@
                       <input class="money-input payment-component-amount payment-spp-amount" type="text" inputmode="numeric" aria-label="Nominal SPP" disabled />
                     </label>
                     <label>
+                      <span>BOS</span>
+                      <input class="money-input payment-bos-amount" type="text" inputmode="numeric" aria-label="Nominal BOS untuk SPP" placeholder="Rp 0" disabled />
+                    </label>
+                    <label>
                       <span>Komputer</span>
                       <input class="money-input payment-component-amount payment-komp-amount" type="text" inputmode="numeric" aria-label="Nominal Komputer" disabled />
                     </label>
@@ -414,7 +448,7 @@
                     <button type="button" class="secondary-button small-button" id="addPaymentComponent" disabled>Tambah periode berikutnya</button>
                     <button type="button" class="secondary-button small-button" id="addOneTimePaymentComponent">Tambah komponen lain</button>
                   </div>
-                  <p>Total penerimaan <strong id="paymentAllocationTotal">Rp 0</strong></p>
+                  <p>Alokasi BOS <strong id="paymentBosTotal">Rp 0</strong><br />Penerimaan orang tua <strong id="paymentAllocationTotal">Rp 0</strong></p>
                 </div>
               </fieldset>
               <div class="form-actions">
@@ -465,11 +499,11 @@
               <table>
                 <thead>
                   <tr>
-                    <th>No. SPP</th>
-                    <th>Nama</th>
-                    <th>Komponen</th>
-                    <th>Periode</th>
-                    <th>Tanggal</th>
+                    <th>No. Bukti</th>
+                    <th>Siswa / penerima</th>
+                    <th>Sumber</th>
+                    <th>Uang masuk</th>
+                    <th>Dicatat / diunggah</th>
                     <th>Nominal</th>
                     <th>Aksi</th>
                   </tr>
@@ -611,6 +645,26 @@
             </form>
           </div>
         </section>
+
+        <section class="page" id="operatorPage">
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <h2>Kode Operator</h2>
+                <p class="muted-copy">Kode yang disimpan di sini dicetak pada slip baru dan slip koreksi. Slip lama mempertahankan kode saat transaksi dibuat.</p>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="settings-table">
+                <thead><tr><th>Akun</th><th>Peran</th><th>Kode operator unik</th><th>Aksi</th></tr></thead>
+                <tbody id="operatorCodesTableBody">
+                  <tr><td colspan="4" class="empty-state">Memuat akun operator...</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="settings-status" id="operatorCodesStatus" role="status" aria-live="polite"></p>
+          </div>
+        </section>
       </main>
     </div>
 
@@ -648,7 +702,27 @@
       </div>
     </div>
 
+    <dialog id="paymentCorrectionDialog" class="student-modal payment-correction-dialog">
+      <form method="dialog" class="student-dialog">
+        <div class="dialog-heading">
+          <div>
+            <h2>Koreksi transaksi</h2>
+            <p class="muted-copy">Transaksi asli tetap tersimpan dan akan ditandai dibatalkan.</p>
+          </div>
+          <button type="button" class="modal-close" id="paymentCorrectionClose" aria-label="Tutup">&times;</button>
+        </div>
+        <label class="field">
+          <span>Alasan koreksi <strong aria-hidden="true">*</strong></span>
+          <textarea id="paymentCorrectionReason" rows="4" maxlength="500" required placeholder="Jelaskan alasan transaksi dikoreksi"></textarea>
+        </label>
+        <div class="form-actions">
+          <button type="button" class="secondary-button" id="paymentCorrectionCancel">Batal</button>
+          <button type="submit" class="primary-button" id="paymentCorrectionSubmit">Terbitkan slip koreksi</button>
+        </div>
+      </form>
+    </dialog>
     <div id="arrearsPrintSheet" hidden></div>
+    <div id="paymentPrintSheet" hidden></div>
     <script src="./config.js"></script>
     <script src="./vendor/xlsx.mini.min.js"></script>
     <script src="./app.js"></script>
