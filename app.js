@@ -874,26 +874,27 @@ function billBreakdownMarkup(row, arrearsTotal) {
     ? `<div class="bill-line bill-arrears"><span>Tunggakan tahun lalu</span><strong>${formatRupiah(arrearsTotal)}</strong></div>
        <div class="bill-arrears-list" data-arrears-for="${escapeHtml(row.id)}"><span class="student-sub">Memuat rincian...</span></div>`
     : '';
-  return `<details class="bill-detail" data-bill-id="${escapeHtml(row.id)}">
-    <summary>Lihat rincian</summary>
-    <div class="bill-lines">${lines || '<span class="student-sub">Belum ada tagihan.</span>'}${arrears}</div>
-  </details>`;
+  return `<div class="bill-lines">${lines || '<span class="student-sub">Belum ada tagihan.</span>'}${arrears}</div>`;
 }
 
-async function loadArrearsBreakdown(box) {
-  const id = box.dataset.arrearsFor;
+async function hydrateArrearsBreakdown() {
+  const boxes = [...ui.studentTableBody.querySelectorAll('[data-arrears-for]')];
+  if (!boxes.length) return;
+  const ids = [...new Set(boxes.map((box) => box.dataset.arrearsFor))];
   let items;
   if (app.server) {
     const { data, error } = await app.supabase.from('spp_app_arrears_list').select('*')
-      .eq('id_siswa', id).order('tahun_ajaran');
-    if (error) { box.textContent = 'Rincian gagal dimuat.'; return; }
-    items = (data || []).map((a) => ({ tahunAjaran: a.tahun_ajaran, jenis: a.jenis, keterangan: a.keterangan, nominal: Number(a.nominal) }));
+      .in('id_siswa', ids).order('tahun_ajaran');
+    if (error) { boxes.forEach((box) => { box.textContent = 'Rincian gagal dimuat.'; }); return; }
+    items = (data || []).map((a) => ({ idSiswa: String(a.id_siswa), tahunAjaran: a.tahun_ajaran, jenis: a.jenis, keterangan: a.keterangan, nominal: Number(a.nominal) }));
   } else {
-    items = (app.state.arrears || []).filter((a) => a.idSiswa === String(id));
+    items = app.state.arrears || [];
   }
-  box.innerHTML = items.map((a) => `<div class="bill-line bill-sub"><span>${escapeHtml(a.jenis)} ${escapeHtml(a.tahunAjaran)}${a.keterangan ? ` &middot; ${escapeHtml(a.keterangan)}` : ''}</span><strong>${formatRupiah(a.nominal)}</strong></div>`).join('')
-    || '<span class="student-sub">Tidak ada rincian.</span>';
-  box.dataset.loaded = '1';
+  boxes.forEach((box) => {
+    const mine = items.filter((a) => String(a.idSiswa) === box.dataset.arrearsFor);
+    box.innerHTML = mine.map((a) => `<div class="bill-line bill-sub"><span>${escapeHtml(a.jenis)} ${escapeHtml(a.tahunAjaran)}${a.keterangan ? ` &middot; ${escapeHtml(a.keterangan)}` : ''}</span><strong>${formatRupiah(a.nominal)}</strong></div>`).join('')
+      || '<span class="student-sub">Tidak ada rincian.</span>';
+  });
 }
 
 function renderPager(key, total) {
@@ -1030,6 +1031,7 @@ function drawStudentTable() {
       </tr>
     `;
   }).join('');
+  hydrateArrearsBreakdown();
   updateSelectionUi(rows);
 }
 
@@ -2515,13 +2517,6 @@ function setupEvents() {
     renderBankVASettings();
     setSettingsStatus(ui.bankSettingsStatus, 'Bank VA dihapus dari daftar. Simpan perubahan untuk menerapkannya.', 'success');
   });
-
-  ui.studentTableBody.addEventListener('toggle', (event) => {
-    const details = event.target;
-    if (!details.open || !details.classList || !details.classList.contains('bill-detail')) return;
-    const box = details.querySelector('[data-arrears-for]');
-    if (box && !box.dataset.loaded) loadArrearsBreakdown(box);
-  }, true);
 
   ui.studentTableBody.addEventListener('click', (event) => {
     const target = event.target.closest('button');

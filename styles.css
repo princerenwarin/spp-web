@@ -1430,3 +1430,6 @@ label {
 .bill-arrears{margin-top:4px;padding-top:6px;border-top:1px dashed var(--border)}
 .bill-arrears-list{display:flex;flex-direction:column;gap:3px;padding-left:10px}
 .bill-sub{font-size:.78rem}
+.bill-lines{margin-top:8px;max-width:300px}
+.bill-total{font-size:1.05rem}
+.bill-lines .bill-line:not(.bill-sub):not(.bill-arrears){padding:2px 0;border-bottom:1px dotted var(--border)}
