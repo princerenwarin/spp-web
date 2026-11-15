@@ -1391,3 +1391,6 @@ label {
 .skeleton{display:block;height:16px;border-radius:8px;background:linear-gradient(90deg,rgba(148,163,184,.15) 25%,rgba(148,163,184,.3) 50%,rgba(148,163,184,.15) 75%);background-size:200% 100%;animation:skeleton-shimmer 1.2s infinite}
 .skeleton-row td{padding:14px 12px}
 @keyframes skeleton-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+.danger-button{color:#b91c1c;border-color:rgba(185,28,28,.4)}
+.danger-button:hover{background:rgba(185,28,28,.08)}

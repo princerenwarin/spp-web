@@ -480,6 +480,13 @@ function saveLocalData() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(app.state));
 }
 
+function matchingSchoolCodes(keyword) {
+  const needle = String(keyword).toLowerCase();
+  return app.state.schools
+    .filter((school) => `${school.nmsek || ''} ${school.kdsek}`.toLowerCase().includes(needle))
+    .map((school) => String(school.kdsek).replace(/[^\w-]/g, ''));
+}
+
 function getSchoolName(kdsek) {
   const school = app.state.schools.find((item) => item.kdsek === kdsek);
   return school ? school.nmsek : '-';
@@ -877,7 +884,10 @@ async function fetchStudentPage() {
   const keyword = cleanKeyword(ui.searchStudent.value);
   if (year) query = query.eq('tahun_ajaran', year);
   if (school) query = query.eq('kdsek', school);
-  if (keyword) query = query.or(`nama.ilike.%${keyword}%,nospp.ilike.${keyword}%,kdkls.ilike.${keyword}%,id_siswa.eq.${keyword}`);
+  if (keyword) {
+    const schoolCodes = matchingSchoolCodes(keyword).map((code) => `kdsek.eq.${code}`);
+    query = query.or([`nama.ilike.%${keyword}%`, `nospp.ilike.${keyword}%`, `kdkls.ilike.${keyword}%`, `id_siswa.eq.${keyword}`, ...schoolCodes].join(','));
+  }
   const from = app.paging.students * PAGE_SIZE;
   const { data, count, error } = await query
     .order('nama').order('id_siswa').order('tahun_ajaran', { ascending: false })
@@ -902,7 +912,7 @@ function getFilteredStudents() {
 
   return app.state.siswa.filter((row) => {
     const matchSchool = schoolFilter === 'all' || row.kdsek === schoolFilter;
-    const haystack = `${row.nospp || ''} ${row.nama || ''} ${row.kdkls || ''} ${row.id || ''} ${row.kdsek || ''}`.toLowerCase();
+    const haystack = `${row.nospp || ''} ${row.nama || ''} ${row.kdkls || ''} ${row.id || ''} ${row.kdsek || ''} ${getSchoolName(row.kdsek)}`.toLowerCase();
     const matchKeyword = !keyword || haystack.includes(keyword);
     return matchSchool && matchKeyword;
   });
@@ -964,6 +974,7 @@ function drawStudentTable() {
             <button class="action-btn edit" data-action="edit-student" data-nospp="${escapeHtml(row.nospp)}">Ubah SPP</button>
           ` : ''}
           ${admin && selectable ? `<button class="action-btn edit" data-action="arrear-student" data-id="${escapeHtml(row.id)}">Tunggakan</button>` : ''}
+          ${admin && selectable ? `<button class="action-btn edit" data-action="rename-student" data-id="${escapeHtml(row.id)}" data-name="${escapeHtml(row.nama)}">Ubah Nama</button>` : ''}
           ${admin ? '' : '-'}
         </td>
       </tr>
@@ -1031,7 +1042,7 @@ function drawArrears() {
       const student = students.get(item.idSiswa);
       return `
         <tr>
-          <td>${escapeHtml(item.nama || (student ? student.nama : item.idSiswa))} (${escapeHtml(item.idSiswa)})</td>
+          <td>${escapeHtml(item.nama || (student ? student.nama : item.idSiswa))} (${escapeHtml(item.idSiswa)})${canManageSettings() ? ` <button type="button" class="action-btn edit" data-rename-id="${escapeHtml(item.idSiswa)}" data-rename-name="${escapeHtml(item.nama || (student ? student.nama : ''))}">Ubah nama</button>` : ''}</td>
           <td>${escapeHtml(item.tahunAjaran)}</td>
           <td>${escapeHtml(item.jenis)}</td>
           <td>${escapeHtml(item.keterangan)}</td>
@@ -1634,6 +1645,48 @@ async function applyBulkStaff() {
   }
 }
 
+async function renameStudent(id, current) {
+  const input = window.prompt('Nama siswa:', current || '');
+  if (input === null) return;
+  const nama = titleCase(input.trim());
+  if (!nama) {
+    alert('Nama tidak boleh kosong.');
+    return;
+  }
+  try {
+    const credentials = requireStudentRules();
+    const { error } = await app.supabase.rpc('rename_student_v1', { ...credentials, p_id_siswa: String(id), p_nama: nama });
+    if (error) throw error;
+    app.selectedNames.delete(String(id));
+    app.pickerCache.delete(String(id));
+    await reloadStudentData();
+  } catch (error) {
+    alert(error.message || 'Nama gagal diubah. Pastikan migration 013 sudah dijalankan.');
+  }
+}
+
+async function applyBulkDelete() {
+  const ids = getSelectedStudentIds();
+  if (!ids.length) {
+    alert('Centang siswa di tabel terlebih dahulu.');
+    return;
+  }
+  const year = currentYearScope();
+  const scope = year ? `data SPP tahun ajaran ${year}` : 'SELURUH data (semua tahun, tunggakan, dan data siswa)';
+  if (!window.confirm(`Hapus ${scope} untuk ${ids.length} siswa terpilih? Tindakan ini tidak bisa dibatalkan.`)) return;
+  try {
+    const credentials = requireStudentRules();
+    const { error } = await app.supabase.rpc('delete_students_v1', { ...credentials, p_ids: ids, p_tahun: year || null });
+    if (error) throw error;
+    app.selectedStudents.clear();
+    app.selectedNames.clear();
+    app.pickerCache.clear();
+    await reloadStudentData();
+  } catch (error) {
+    alert(error.message || 'Data gagal dihapus. Pastikan migration 013 sudah dijalankan.');
+  }
+}
+
 const IMPORT_COLUMNS = ['jenis', 'tahun_ajaran', 'id_siswa', 'nama', 'no_wa', 'kdsek', 'kdkls', 'periode_masuk', 'dpp', 'dsp', 'seragam', 'giat', 'spp', 'komp'];
 
 const BACKUP_TABLES = ['mastsek', 'mastank', 'mastspp', 'pembayaran', 'spp_app_bank_settings', 'spp_app_school_settings',
@@ -2145,6 +2198,11 @@ function setupEvents() {
   ui.studentType.addEventListener('change', updateStudentFormMode);
   document.getElementById('bulkGiatBtn').addEventListener('click', applyBulkActivity);
   document.getElementById('bulkStaffBtn').addEventListener('click', applyBulkStaff);
+  document.getElementById('bulkDeleteBtn').addEventListener('click', applyBulkDelete);
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-rename-id]');
+    if (button) renameStudent(button.dataset.renameId, button.dataset.renameName);
+  });
   document.getElementById('templateBtn').addEventListener('click', downloadImportTemplate);
   document.getElementById('backupBtn').addEventListener('click', backupData);
   document.getElementById('arrearAddBtn').addEventListener('click', addArrear);
@@ -2344,6 +2402,9 @@ function setupEvents() {
     const { action, nospp, id } = target.dataset;
     if (action === 'edit-student') {
       changeStudentSpp(nospp);
+    }
+    if (action === 'rename-student') {
+      renameStudent(id, target.dataset.name);
     }
     if (action === 'arrear-student') {
       setPickerValue('arrearStudent', id);

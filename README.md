@@ -34,3 +34,4 @@ Aplikasi ini adalah starter web yang menggunakan Supabase sebagai backend untuk 
 - Form siswa, Ubah SPP, kegiatan massal, anak guru, dan import CSV (bukan .xlsx) hanya untuk Admin dan ditulis ke Supabase. Login ulang sebagai Admin setelah deploy.
 - Jalankan `./supabase/012_scalability.sql` setelah 011. Data dipaginasi 25 per halaman, dicari & dihitung di database (siap 5000+ siswa, 100rb transaksi), ada filter tahun ajaran.
 - Pembayaran disimpan di Supabase (`spp_app_payments`) setelah migration 012; tanpa 012 hanya di browser.
+- Jalankan `./supabase/013_student_edit_delete.sql` setelah 012: ubah nama siswa dan hapus massal data SPP siswa terpilih (ditolak jika masih ada pembayaran).
