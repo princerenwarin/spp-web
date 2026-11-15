@@ -556,7 +556,7 @@ function getStudentVirtualAccounts(student) {
 
   return getActiveVABanks().map((bank) => ({
     bankName: bank.bankName,
-    number: `${bank.vaPrefix}${school.vaCode}${student.id}`
+    number: `${bank.vaPrefix}${school.vaCode}${String(student.id).padStart(4, '0')}`
   }));
 }
 
@@ -592,6 +592,20 @@ function renderSchoolClassSettings() {
       </section>
     `;
   }).join('');
+}
+
+function parseMoney(value) {
+  return Number(String(value || '').replace(/\D/g, '')) || 0;
+}
+
+function formatMoneyInput(input) {
+  input.value = input.value.replace(/\D/g, '') === '' && input.id === 'bulkGiat' ? '' : formatRupiah(parseMoney(input.value));
+}
+
+function formatAllMoneyInputs() {
+  document.querySelectorAll('.money-input').forEach((input) => {
+    if (input.value !== '') formatMoneyInput(input);
+  });
 }
 
 function formatRupiah(value) {
@@ -964,7 +978,7 @@ function resetStudentForm() {
   ui.studentType.value = 'baru';
   ui.studentTahun.value = currentAcademicYear();
   ['studentDpp', 'studentDsp', 'studentSeragam', 'studentGiat', 'studentSpp', 'studentKomp'].forEach((key) => {
-    ui[key].value = 0;
+    ui[key].value = formatRupiah(0);
   });
   populateExistingStudents();
   populateStudentClassSelect();
@@ -1026,12 +1040,12 @@ async function addOrUpdateStudent(event) {
       kdsek: ui.studentSekolah.value,
       kdkls: ui.studentKelas.value.trim(),
       periode_masuk: toPeriode(ui.studentPeriode.value),
-      dpp: ui.studentDpp.value,
-      dsp: ui.studentDsp.value,
-      seragam: ui.studentSeragam.value,
-      giat: ui.studentGiat.value,
-      spp: ui.studentSpp.value,
-      komp: ui.studentKomp.value
+      dpp: parseMoney(ui.studentDpp.value),
+      dsp: parseMoney(ui.studentDsp.value),
+      seragam: parseMoney(ui.studentSeragam.value),
+      giat: parseMoney(ui.studentGiat.value),
+      spp: parseMoney(ui.studentSpp.value),
+      komp: parseMoney(ui.studentKomp.value)
     });
     const { data, error } = await app.supabase.rpc('save_student_v1', { ...credentials, p_row: row });
     if (error) throw error;
@@ -1071,14 +1085,14 @@ async function changeStudentSpp(nospp) {
 }
 
 async function applyBulkActivity() {
-  const giat = Number(ui.bulkGiat.value);
+  const giat = parseMoney(ui.bulkGiat.value);
   const schoolFilter = ui.schoolFilter.value === 'all' ? '' : ui.schoolFilter.value;
   const tahun = ui.studentTahun.value.trim();
   if (ui.bulkGiat.value === '' || !(giat >= 0)) {
     alert('Isi nominal kegiatan.');
     return;
   }
-  if (!window.confirm(`Set kegiatan Rp ${giat} untuk semua siswa ${tahun}${schoolFilter ? ` di sekolah ${schoolFilter}` : ''}?`)) return;
+  if (!window.confirm(`Set kegiatan ${formatRupiah(giat)} untuk semua siswa ${tahun}${schoolFilter ? ` di sekolah ${schoolFilter}` : ''}?`)) return;
   try {
     const credentials = requireStudentRules();
     const { data, error } = await app.supabase.rpc('bulk_set_activity_fee_v1', {
@@ -1264,7 +1278,7 @@ function handlePaymentSubmit(event) {
   const nospp = String(formData.get('nospp') || '').trim();
   const nama = String(formData.get('nama') || '').trim();
   const periode = String(formData.get('periode') || '').trim();
-  const nominal = Number(formData.get('nominal') || 0);
+  const nominal = parseMoney(formData.get('nominal'));
 
   if (!nospp || nominal <= 0) {
     alert('Nomor SPP dan nominal pembayaran harus diisi.');
@@ -1560,6 +1574,10 @@ function setupEvents() {
   document.getElementById('bulkStaffBtn').addEventListener('click', applyBulkStaff);
   document.getElementById('templateBtn').addEventListener('click', downloadImportTemplate);
   document.getElementById('backupBtn').addEventListener('click', backupData);
+  document.addEventListener('input', (event) => {
+    if (event.target.classList && event.target.classList.contains('money-input')) formatMoneyInput(event.target);
+  });
+  formatAllMoneyInputs();
   document.getElementById('logBtn').addEventListener('click', showStudentLog);
   ui.importFile.addEventListener('change', () => {
     if (ui.importFile.files[0]) importStudentsFile(ui.importFile.files[0]);
