@@ -1402,6 +1402,7 @@ label {
   .students-table td.empty-state::before { display: none; }
   .students-table td[data-label="Siswa"],
   .students-table td[data-label="Virtual Account"],
+  .students-table td[data-label="Rincian tagihan"],
   .students-table td[data-label="Aksi"] { grid-column: 1 / -1; }
   .students-table td[data-label="Siswa"]::before { display: none; }
   .students-table td[data-label="Siswa"] .student-name { font-size: 1.02rem; }
@@ -1443,19 +1444,73 @@ label {
 .bill-detail summary{cursor:pointer;color:var(--accent,#2563eb);font-size:.8rem;font-weight:600;list-style:none}
 .bill-detail summary::-webkit-details-marker{display:none}
 .bill-detail[open] summary{margin-bottom:6px}
-.bill-lines{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 12px;min-width:210px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:rgba(100,116,139,.06)}
-.bill-lines>.bill-line{align-content:start;display:grid;gap:2px;min-width:0}
-.bill-lines>.bill-line span{color:var(--muted);font-size:.78rem;line-height:1.2}
-.bill-lines>.bill-line strong{font-variant-numeric:tabular-nums;font-size:.82rem;text-align:right;white-space:nowrap}
-.bill-arrears{grid-column:1/-1;margin-top:4px;padding-top:6px;border-top:1px dashed var(--border)}
+.bill-lines {
+  display: grid;
+  gap: 0;
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: 8px;
+  max-width: 300px;
+  min-width: 210px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-alt);
+}
+.bill-lines > .bill-line {
+  align-items: baseline;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 7px 0;
+}
+.bill-lines > .bill-line span {
+  color: var(--muted);
+  font-size: .8rem;
+  line-height: 1.35;
+  min-width: 0;
+}
+.bill-lines > .bill-line strong {
+  flex: 0 1 auto;
+  font-variant-numeric: tabular-nums;
+  font-size: .84rem;
+  overflow-wrap: anywhere;
+  text-align: right;
+  white-space: normal;
+}
+.bill-arrears{grid-column:1/-1;margin-top:6px;padding-top:8px;border-top:1px dashed var(--border)}
 .bill-arrears-list{display:flex;flex-direction:column;gap:3px;padding-left:10px}
+.bill-arrears-list > .bill-line {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 3px 0;
+}
+.bill-arrears-list > .bill-line span {
+  color: var(--muted);
+  min-width: 0;
+}
+.bill-arrears-list > .bill-line strong {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .bill-lines>.bill-arrears-list,.bill-lines>.student-sub{grid-column:1/-1}
 .bill-sub{font-size:.78rem}
-.bill-lines{margin-top:8px;max-width:300px}
 .bill-total{font-size:1.05rem}
-.bill-lines .bill-line:not(.bill-sub):not(.bill-arrears){padding:2px 0;border-bottom:1px dotted var(--border)}
 .payment-history-note{display:block;color:var(--muted);font-size:.82rem;font-variant-numeric:tabular-nums}
 .payment-history-note + .small-button{margin-top:7px}
+
+@media (max-width:760px) {
+  .bill-lines {
+    max-width: none;
+    min-width: 0;
+    width: 100%;
+  }
+}
+
 .payment-history-dialog{
   background:var(--panel);
   border:1px solid var(--border);
@@ -2403,6 +2458,28 @@ input[type='radio'] {
 .revenue-panel {
   margin-bottom: 20px;
   overflow: hidden;
+}
+
+.dashboard-overview-grid {
+  align-items: start;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.9fr);
+  margin-bottom: 20px;
+}
+
+.dashboard-overview-grid > .panel {
+  min-width: 0;
+}
+
+.dashboard-overview-grid .revenue-panel {
+  margin-bottom: 0;
+}
+
+@media (max-width: 900px) {
+  .dashboard-overview-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .prior-year-panel {
@@ -3834,6 +3911,398 @@ input[type='radio'] {
 
   .daily-payment-detail-table tbody td {
     padding: 8px 6px;
+  }
+}
+
+/* Shared operations polish */
+button:active,
+.primary-button:active,
+.secondary-button:active {
+  transform: translateY(0);
+}
+
+.topbar-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.filter-pill label {
+  font-weight: 600;
+}
+
+.panel,
+.stat-card,
+.report-summary-card,
+.report-hero {
+  box-shadow: 0 8px 24px rgba(36, 33, 54, 0.045);
+}
+
+.panel-header {
+  gap: 16px;
+}
+
+table {
+  font-variant-numeric: tabular-nums;
+}
+
+.empty-state {
+  font-style: normal;
+  padding: 20px 14px;
+  text-align: center;
+}
+
+.form-panel {
+  max-width: none;
+}
+
+.students-panel .students-toolbar {
+  background: var(--panel);
+  padding: 18px 22px;
+}
+
+.students-title {
+  min-width: 160px;
+}
+
+.students-title h3 {
+  font-size: 1.55rem;
+  line-height: 1.05;
+}
+
+.students-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.search-field {
+  flex-basis: 340px;
+  max-width: 500px;
+}
+
+.search-field input {
+  background: var(--panel-alt);
+  border-radius: 10px;
+  min-height: 44px;
+}
+
+.search-field input:focus {
+  background: var(--panel);
+}
+
+.toolbar-actions {
+  gap: 8px;
+}
+
+.selection-bar {
+  animation: none;
+  background: #f3f1fb;
+  border-color: #d7d2ef;
+  box-shadow: 0 6px 18px rgba(41, 38, 61, 0.06);
+}
+
+.selection-head {
+  color: var(--primary-2);
+}
+
+.chip {
+  border-color: #d7d2ef;
+  color: var(--primary-2);
+}
+
+.students-scroll {
+  margin-top: 0;
+  max-height: min(68vh, 760px);
+  min-height: 0;
+}
+
+.students-table thead th {
+  background: #f6f5f2;
+}
+
+.students-table td {
+  padding: 10px 12px;
+}
+
+.students-table tbody tr:nth-child(even):not(.empty-row) td {
+  background: #fcfbfe;
+}
+
+.students-table tbody tr:hover:not(.is-selected) td {
+  background: #f7f5fc;
+}
+
+.students-table tbody tr.is-selected td {
+  background: #f1effb;
+}
+
+.student-name {
+  font-size: 0.92rem;
+}
+
+.student-sub {
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.students-table td.row-actions {
+  min-width: 190px;
+}
+
+.row-actions .action-btn {
+  border: 1px solid transparent;
+  font-size: 0.74rem;
+  line-height: 1.25;
+  padding: 7px 6px;
+}
+
+.row-actions .action-btn:hover {
+  background: #e9e6f7;
+  border-color: #d8d3ee;
+}
+
+.bill-detail {
+  max-width: 300px;
+}
+
+.bill-detail > summary {
+  align-items: center;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--primary-2);
+  display: flex;
+  font-size: 0.78rem;
+  gap: 10px;
+  justify-content: space-between;
+  list-style: none;
+  min-height: 36px;
+  padding: 7px 10px;
+}
+
+.bill-detail > summary::-webkit-details-marker {
+  display: none;
+}
+
+.bill-detail > summary strong {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.bill-detail > summary::after {
+  border-bottom: 1.5px solid var(--muted);
+  border-right: 1.5px solid var(--muted);
+  content: '';
+  flex: 0 0 7px;
+  height: 7px;
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 160ms ease;
+  width: 7px;
+}
+
+.bill-detail[open] > summary {
+  background: var(--panel);
+  border-radius: 9px 9px 0 0;
+  border-bottom-color: transparent;
+}
+
+.bill-detail[open] > summary::after {
+  transform: rotate(225deg) translate(-2px, -1px);
+}
+
+.bill-lines {
+  border-radius: 0 0 9px 9px;
+  margin-top: 0;
+  max-width: 300px;
+  min-width: 0;
+  padding: 6px 10px;
+  width: 100%;
+}
+
+.bill-lines > .bill-line {
+  padding: 6px 0;
+}
+
+.pager {
+  border-top: 1px solid var(--border);
+  justify-content: flex-end;
+  padding: 14px 20px;
+}
+
+.pager button {
+  min-height: 38px;
+}
+
+.payment-list-panel {
+  margin-top: 20px;
+}
+
+.payment-list-panel .panel-header {
+  align-items: center;
+}
+
+.payment-list-panel .table-wrap {
+  max-height: min(62vh, 700px);
+  overscroll-behavior: contain;
+}
+
+.payment-list-panel th,
+.report-table-wrap th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.payment-list-panel td {
+  vertical-align: middle;
+}
+
+.payment-list-panel td:nth-child(6) {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.payment-list-panel td:last-child {
+  min-width: 220px;
+}
+
+.payment-list-panel .inline-search {
+  max-width: 360px;
+  min-height: 42px;
+}
+
+#pembayaranPage .bank-payment-note {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+#pembayaranPage .payment-allocation {
+  background: #fbfaf7;
+  border-color: var(--border);
+}
+
+.report-table-wrap {
+  max-height: min(68vh, 760px);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.report-table-wrap tbody tr:nth-child(even):not(.class-group-row) td {
+  background: #fcfbfe;
+}
+
+.report-error {
+  background: #fff6f5;
+  color: #8d3a43;
+  line-height: 1.55;
+  text-align: left;
+}
+
+.school-class-card {
+  background: var(--panel-alt);
+}
+
+.school-class-card h4 {
+  color: var(--primary-2);
+}
+
+.school-class-item {
+  background: var(--panel);
+}
+
+.report-item {
+  background: linear-gradient(180deg, #fff, var(--panel-alt));
+}
+
+.report-badge {
+  background: #efedf8;
+  color: var(--primary-2);
+}
+
+.login-partnership {
+  background: var(--panel-alt);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.login-title-wrap h1 {
+  font-size: 1.8rem;
+  line-height: 1.05;
+}
+
+.login-hint {
+  background: var(--panel-alt);
+  border-color: var(--border);
+}
+
+@media (max-width: 900px) {
+  .students-panel .students-toolbar {
+    padding: 14px 16px;
+  }
+
+  .students-scroll {
+    max-height: none;
+  }
+
+  .payment-list-panel .table-wrap,
+  .report-table-wrap {
+    max-height: 68vh;
+  }
+}
+
+@media (max-width: 575px) {
+  .topbar-actions {
+    justify-content: flex-start;
+  }
+
+  .daily-summary-panel .panel-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .daily-summary-actions,
+  .daily-summary-date {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .students-panel .students-toolbar {
+    padding: 14px;
+  }
+
+  .students-title {
+    min-width: 0;
+  }
+
+  .students-table {
+    min-width: 0;
+  }
+
+  .bill-detail {
+    max-width: none;
+    width: 100%;
+  }
+
+  .bill-lines {
+    max-width: none;
+  }
+
+  .pager {
+    justify-content: center;
+    padding: 12px;
+  }
+
+  .payment-list-panel .panel-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .payment-list-panel .inline-search {
+    max-width: none;
+    width: 100%;
   }
 }
 

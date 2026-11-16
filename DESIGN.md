@@ -147,6 +147,8 @@ The desktop shell keeps the brand, four-stage course, and account actions togeth
 
 At `1100px`, navigation moves below the brand row. At `900px`, dashboard metrics use two columns and the chart/activity pair stacks. On narrow screens the course can scroll horizontally; metrics remain two-up until `380px`, then become one column. The spacing rhythm is built from compact `8–12px` groups and wider `18–24px` section gaps.
 
+The student directory is designed for large school populations: it stays paginated at 25 rows, keeps search and school/year scope immediately available, and collapses fee components behind a per-student disclosure so the list remains scannable. Expanding a row reveals the existing full breakdown without changing amounts or payment history.
+
 ## Elevation & Depth
 
 The system uses thin neutral borders with low, offset shadows to separate white work surfaces from the map ground. Depth stays quiet; the navigation route, type scale, and spacing carry more hierarchy than elevation.

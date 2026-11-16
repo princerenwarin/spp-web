@@ -49,7 +49,7 @@
       <main class="main-panel">
         <header class="topbar">
           <div>
-            <h2 id="pageTitle">Overview</h2>
+            <h2 id="pageTitle">Dashboard</h2>
           </div>
           <div class="topbar-actions">
             <div class="filter-pill">
@@ -96,6 +96,7 @@
             </article>
           </div>
 
+          <div class="dashboard-overview-grid">
             <div class="panel revenue-panel">
               <div class="panel-header">
                 <div>
@@ -113,6 +114,14 @@
                 </table>
               </div>
             </div>
+
+            <div class="panel activity-panel">
+              <div class="panel-header">
+                <h3>Aktivitas Terbaru</h3>
+              </div>
+              <ul class="activity-list" id="activityList"></ul>
+            </div>
+          </div>
 
             <div class="panel daily-summary-panel">
               <div class="panel-header">
@@ -183,13 +192,6 @@
                 </table>
               </div>
             </div>
-
-            <div class="panel">
-              <div class="panel-header">
-                <h3>Aktivitas Terbaru</h3>
-              </div>
-              <ul class="activity-list" id="activityList"></ul>
-            </div>
           </div>
         </section>
 
@@ -198,11 +200,11 @@
             <div class="students-toolbar">
               <div class="students-title">
                 <h3>Data Siswa</h3>
-                <span class="students-count" id="studentCount"></span>
+                <span class="students-count" id="studentCount" aria-live="polite"></span>
               </div>
               <div class="search-field">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
-                <input id="searchStudent" type="search" placeholder="Cari nama, ID, atau kelas" autocomplete="off" />
+                <input id="searchStudent" type="search" aria-label="Cari siswa berdasarkan nama, nomor SPP, ID, atau kelas" placeholder="Cari nama, No. SPP, ID, atau kelas" autocomplete="off" />
               </div>
               <div class="toolbar-actions admin-only" hidden>
                 <button type="button" class="primary-button small-button" id="openStudentFormBtn">+ Siswa / Naik Kelas</button>
@@ -531,7 +533,7 @@
           <div class="panel payment-list-panel">
             <div class="panel-header">
               <h3>Riwayat Pembayaran</h3>
-              <input type="search" id="paymentSearch" class="inline-search" placeholder="Cari nama / No. SPP" />
+              <input type="search" id="paymentSearch" class="inline-search" aria-label="Cari pembayaran berdasarkan nomor bukti, siswa, atau nomor SPP" placeholder="Cari no. bukti, siswa, atau No. SPP" />
             </div>
             <div class="table-wrap">
               <table>

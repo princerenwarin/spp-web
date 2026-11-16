@@ -813,7 +813,7 @@ function setPage(pageName) {
   requestAnimationFrame(updateCourseIndicator);
 
   ui.pageTitle.textContent = {
-    dashboard: 'Overview',
+    dashboard: 'Dashboard',
     siswa: 'Data Siswa',
     pembayaran: 'Pembayaran',
     laporan: 'Laporan',
@@ -1003,8 +1003,8 @@ const FEE_LABELS = [
 ];
 
 function billBreakdownMarkup(row, arrearsTotal) {
-  const lines = FEE_LABELS
-    .filter(([key]) => Number(row[key] || 0) > 0)
+  const feeRows = FEE_LABELS.filter(([key]) => Number(row[key] || 0) > 0);
+  const lines = feeRows
     .map(([key, label]) => {
       const detailLabel = key === 'spp' || key === 'komp' ? `${label} · per bulan` : label;
       return `<div class="bill-line"><span>${detailLabel}</span><strong>${formatRupiah(row[key])}</strong></div>`;
@@ -1014,7 +1014,12 @@ function billBreakdownMarkup(row, arrearsTotal) {
     ? `<div class="bill-arrears"><span>Tunggakan tahun lalu</span></div>
        <div class="bill-arrears-list" data-arrears-for="${escapeHtml(row.id)}"><span class="student-sub">Memuat rincian...</span></div>`
     : '';
-  return `<div class="bill-lines" aria-label="Rincian tagihan per komponen">${lines || '<span class="student-sub">Belum ada tagihan.</span>'}${arrears}</div>`;
+  if (!feeRows.length && !arrears) return '<span class="student-sub">Belum ada tagihan.</span>';
+  const summary = feeRows.length ? `${feeRows.length} komponen` : 'Tunggakan tahun lalu';
+  return `<details class="bill-detail">
+    <summary><span>Rincian tagihan</span><strong>${summary}</strong></summary>
+    <div class="bill-lines" aria-label="Rincian tagihan per komponen">${lines}${arrears}</div>
+  </details>`;
 }
 
 async function hydrateArrearsBreakdown() {
@@ -3420,7 +3425,7 @@ async function fetchArrearsReport(append = false) {
   });
   if (seq !== arrearsFetchSeq) return;
   if (error) {
-    ui.arrearsReportTable.innerHTML = `<tr><td colspan="6" class="empty-state">Laporan gagal dimuat: ${escapeHtml(error.message)}. Periksa migration 016 dan 019.</td></tr>`;
+    ui.arrearsReportTable.innerHTML = `<tr><td colspan="6" class="empty-state report-error" role="alert">Laporan gagal dimuat: ${escapeHtml(error.message)}. Periksa migration 016 dan 019.</td></tr>`;
     ui.arrearsReportCount.textContent = 'Laporan tidak dapat dimuat.';
     ui.loadMoreArrears.hidden = true;
     return;
