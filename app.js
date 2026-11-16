@@ -56,6 +56,8 @@ const app = {
   settingsReady: false,
   adminCredentials: null,
   dashboardCredentials: null,
+  cardPrintCredentials: null,
+  studentCardPrintContext: null,
   selectedStudents: new Set(),
   selectedNames: new Map(),
   pickerCache: new Map(),
@@ -122,6 +124,15 @@ const ui = {
   dailyCashPrint: document.getElementById('printDailyCashBtn'),
   dailyCashPrintSheet: document.getElementById('dailyCashPrintSheet'),
   studentCardPrintSheet: document.getElementById('studentCardPrintSheet'),
+  studentCardPrintDialog: document.getElementById('studentCardPrintDialog'),
+  studentCardPrintStudent: document.getElementById('studentCardPrintStudent'),
+  studentCardPrintStatus: document.getElementById('studentCardPrintStatus'),
+  studentCardPrintOptions: document.getElementById('studentCardPrintOptions'),
+  studentCardPrintPreview: document.getElementById('studentCardPrintPreview'),
+  studentCardPrintPreviewCaption: document.getElementById('studentCardPrintPreviewCaption'),
+  studentCardPrintSubmit: document.getElementById('studentCardPrintSubmit'),
+  studentCardPrintClose: document.getElementById('studentCardPrintClose'),
+  studentCardPrintCancel: document.getElementById('studentCardPrintCancel'),
   studentTableBody: document.getElementById('studentTableBody'),
   studentForm: document.getElementById('studentForm'),
   studentNama: document.getElementById('studentNama'),
@@ -1344,13 +1355,7 @@ function getStudentCardAcademicYearRange() {
 
 async function loadStudentCardTransactions(student, range) {
   if (!app.server) {
-    return getAccessibleTransactionRows(false).filter((row) => (
-      String(row.nospp || '') === student.nospp
-      && String(row.kdsek || '') === student.kdsek
-      && (!row.id_siswa || !student.id || String(row.id_siswa) === student.id)
-      && String(row.tglbyr || '').slice(0, 10) >= range.start
-      && String(row.tglbyr || '').slice(0, 10) < range.end
-    ));
+    throw new Error('Cetak kartu bersama memerlukan koneksi Supabase aktif dan migration cetak kartu terbaru.');
   }
 
   const rows = [];
@@ -1420,6 +1425,8 @@ function buildStudentCardRows(items) {
           date,
           sortDate,
           period,
+          section: 'monthly',
+          batchId,
           periodOrder: Number(period.slice(2)) * 100 + Number(period.slice(0, 2)),
           spp: 0,
           komp: 0,
@@ -1447,10 +1454,14 @@ function buildStudentCardRows(items) {
       return;
     }
 
-    if (!oneTimeRows.has(itemKey)) {
-      oneTimeRows.set(itemKey, {
+    const oneTimeKey = `${batchId}|once`;
+    if (!oneTimeRows.has(oneTimeKey)) {
+      oneTimeRows.set(oneTimeKey, {
         date,
         sortDate,
+        section: 'one_time',
+        batchId,
+        period: '',
         dpp: 0,
         dps: 0,
         giat: 0,
@@ -1458,7 +1469,7 @@ function buildStudentCardRows(items) {
         orderId: batchId
       });
     }
-    const row = oneTimeRows.get(itemKey);
+    const row = oneTimeRows.get(oneTimeKey);
     row[oneTimeColumn] += amount;
     if (sortDate && (!row.sortDate || sortDate < row.sortDate)) {
       row.sortDate = sortDate;
@@ -1483,10 +1494,14 @@ function formatStudentCardAmount(value) {
 }
 
 function renderStudentCardGrid(rows, fields) {
-  const gridRows = [...rows, ...Array.from(
-    { length: Math.max(0, STUDENT_CARD_ROW_COUNT - rows.length) },
-    () => null
-  )];
+  const gridRows = Array.from({ length: STUDENT_CARD_ROW_COUNT }, () => null);
+  rows.forEach((row) => {
+    const rowIndex = Number(row.rowNumber) - 1;
+    if (!Number.isInteger(rowIndex) || rowIndex < 0 || rowIndex >= STUDENT_CARD_ROW_COUNT) {
+      throw new Error('Nomor baris cetak kartu tidak valid. Posisi cetak tidak diubah; silakan muat ulang.');
+    }
+    gridRows[rowIndex] = row;
+  });
   return gridRows.map((row) => `
     <div class="spp-card-row">
       ${fields.map(({ key, align = 'amount' }) => {
@@ -1499,15 +1514,9 @@ function renderStudentCardGrid(rows, fields) {
   `).join('');
 }
 
-function renderStudentSppCard(student, rows, year) {
-  ui.studentCardPrintSheet.innerHTML = `
+function studentSppCardMarkup(rows) {
+  return `
     <article class="spp-card">
-      <header class="spp-card-identification">
-        <div><span>Nama</span><strong>${escapeHtml(student.nama)}</strong></div>
-        <div><span>Kelas</span><strong>${escapeHtml(student.kdkls || '-')}</strong></div>
-        <div><span>No. SPP</span><strong>${escapeHtml(student.nospp)}</strong></div>
-        <div><span>Tahun Ajaran</span><strong>${escapeHtml(year)}</strong></div>
-      </header>
       <section class="spp-card-grid spp-card-grid-one-time" aria-label="Pembayaran nonbulanan">
         ${renderStudentCardGrid(rows.oneTimeRows, [
           { key: 'date', align: 'date' },
@@ -1531,13 +1540,275 @@ function renderStudentSppCard(student, rows, year) {
         ])}
       </section>
     </article>`;
+}
+
+function renderStudentSppCard(rows) {
+  ui.studentCardPrintSheet.innerHTML = studentSppCardMarkup(rows);
   ui.studentCardPrintSheet.hidden = false;
   document.body.classList.add('printing-spp-card');
   window.print();
 }
 
-async function printStudentSppCard(candidate) {
-  if (!app.user) throw new Error('Silakan masuk terlebih dahulu untuk mencetak kartu SPP.');
+function studentCardPrintRowKey(section, batchId, period) {
+  return `${section}|${batchId}|${period || ''}`;
+}
+
+function studentCardPrintErrorMessage(error) {
+  const message = String(error && error.message || '');
+  if ((error && error.code === 'PGRST202') || /could not find the function|function .* does not exist/i.test(message)) {
+    return 'Fitur posisi cetak kartu belum tersedia di Supabase. Jalankan migration 020_card_print_tracking.sql dan 021_card_print_cursor.sql, lalu muat ulang aplikasi.';
+  }
+  return message || 'Kartu SPP gagal dimuat.';
+}
+
+function formatStudentCardOptionSummary(row, section) {
+  const columns = section === 'monthly'
+    ? [['SPP', row.spp], ['Komputer', row.komp], ['Kegiatan', row.giat]]
+    : [['DPP', row.dpp], ['DPS', row.dps], ['Kegiatan', row.giat], ['Adm./Seragam', row.admin]];
+  return columns
+    .filter(([, amount]) => Number(amount) > 0)
+    .map(([label, amount]) => `${label} Rp${Number(amount).toLocaleString('id-ID')}`)
+    .join(' · ');
+}
+
+function renderStudentCardPrintGroup(title, section, rows, statusByKey, nextRow, selectedKeys = null) {
+  const tableName = section === 'monthly' ? 'tabel periode' : 'tabel pembayaran lainnya';
+  const positionLabel = nextRow > STUDENT_CARD_ROW_COUNT
+    ? `Penuh · baris terakhir #${STUDENT_CARD_ROW_COUNT}`
+    : `Baris berikutnya #${nextRow} · ${nextRow > 1 ? `terakhir #${nextRow - 1}` : 'belum ada cetakan'}`;
+  const body = rows.length
+    ? rows.map((row) => {
+      const key = studentCardPrintRowKey(section, row.batchId, row.period);
+      const state = statusByKey.get(key);
+      const checked = selectedKeys ? selectedKeys.has(key) : !state;
+      const status = state
+        ? `Sudah dicetak ${state.count} kali · baris terakhir #${state.lastRow}`
+        : 'Belum pernah dicetak';
+      const details = formatStudentCardOptionSummary(row, section) || 'Rincian nominal tidak tersedia';
+      const periodLabel = section === 'monthly' ? `Periode ${row.period}` : 'Pembayaran nonperiode';
+      const index = row.optionIndex;
+      return `
+        <label class="card-print-option">
+          <input type="checkbox" data-card-print-index="${index}"${checked ? ' checked' : ''}>
+          <span class="card-print-option-copy">
+            <strong>${escapeHtml(periodLabel)} <span>${escapeHtml(row.date || '-')}</span></strong>
+            <small>${escapeHtml(details)}</small>
+            <small class="card-print-option-status${state ? ' is-printed' : ''}">${escapeHtml(status)}</small>
+            <small class="card-print-option-slot" data-card-print-slot="${index}">Tidak dipilih</small>
+          </span>
+        </label>`;
+    }).join('')
+    : '<p class="card-print-empty">Belum ada pembayaran yang dapat dicetak.</p>';
+
+  return `
+    <section class="card-print-group" aria-label="${escapeHtml(title)}">
+      <div class="card-print-group-heading">
+        <h3>${escapeHtml(title)}</h3>
+        <div class="card-print-group-meta">
+          <p data-card-cursor="${section}">${positionLabel}</p>
+          <button type="button" class="secondary-button small-button" data-card-reset="${section}" aria-label="Atur baris awal ${escapeHtml(tableName)}">Atur baris awal</button>
+        </div>
+      </div>
+      <div class="card-print-options">${body}</div>
+    </section>`;
+}
+
+function renderStudentCardPrintOptions(context, printHistory, preserveSelection = false, resetSection = '') {
+  const selectedKeys = new Set();
+  if (preserveSelection) {
+    ui.studentCardPrintOptions.querySelectorAll('[data-card-print-index]:checked').forEach((input) => {
+      const row = context.rows[Number(input.dataset.cardPrintIndex)];
+      if (row) selectedKeys.add(studentCardPrintRowKey(row.section, row.batchId, row.period));
+    });
+  }
+
+  const statusByKey = new Map();
+  const nextRows = { one_time: 1, monthly: 1 };
+  printHistory.forEach((entry) => {
+    const section = String(entry.section || '');
+    if (!Object.prototype.hasOwnProperty.call(nextRows, section)) return;
+    const nextRow = Number(entry.next_row);
+    if (Number.isInteger(nextRow) && nextRow >= 1 && nextRow <= STUDENT_CARD_ROW_COUNT + 1) {
+      nextRows[section] = nextRow;
+    }
+    if (entry.batch_id == null) return;
+    const rowNumber = Number(entry.last_row || 0);
+    const key = studentCardPrintRowKey(section, String(entry.batch_id || ''), String(entry.period || '').trim());
+    statusByKey.set(key, {
+      count: Number(entry.print_count || 0),
+      lastRow: rowNumber
+    });
+  });
+
+  context.statusByKey = statusByKey;
+  context.nextRows = nextRows;
+  const oneTimeRows = context.rows.filter((row) => row.section === 'one_time');
+  const monthlyRows = context.rows.filter((row) => row.section === 'monthly');
+  ui.studentCardPrintOptions.innerHTML = [
+    renderStudentCardPrintGroup(
+      'Pembayaran nonperiode',
+      'one_time',
+      oneTimeRows,
+      statusByKey,
+      nextRows.one_time,
+      preserveSelection && resetSection !== 'one_time' ? selectedKeys : null
+    ),
+    renderStudentCardPrintGroup(
+      'Pembayaran per periode',
+      'monthly',
+      monthlyRows,
+      statusByKey,
+      nextRows.monthly,
+      preserveSelection && resetSection !== 'monthly' ? selectedKeys : null
+    )
+  ].join('');
+  updateStudentCardPrintSelectionUi();
+}
+
+function updateStudentCardPrintSelectionUi() {
+  const context = app.studentCardPrintContext;
+  if (!context) return;
+
+  const selected = [...ui.studentCardPrintOptions.querySelectorAll('[data-card-print-index]:checked')]
+    .map((input) => context.rows[Number(input.dataset.cardPrintIndex)])
+    .filter(Boolean);
+  const counts = { one_time: 0, monthly: 0 };
+  const scheduledRows = new Map();
+  selected.forEach((row) => {
+    const rowNumber = context.nextRows[row.section] + counts[row.section];
+    counts[row.section] += 1;
+    scheduledRows.set(row.optionIndex, rowNumber);
+  });
+  ui.studentCardPrintOptions.querySelectorAll('[data-card-print-slot]').forEach((slot) => {
+    const rowNumber = scheduledRows.get(Number(slot.dataset.cardPrintSlot));
+    slot.textContent = rowNumber
+      ? (rowNumber <= STUDENT_CARD_ROW_COUNT ? `Akan dicetak di baris #${rowNumber}` : `Melebihi kapasitas · baris #${rowNumber}`)
+      : 'Tidak dipilih';
+  });
+
+  const overCapacity = Object.keys(counts).some((section) => (
+    context.nextRows[section] - 1 + counts[section] > STUDENT_CARD_ROW_COUNT
+  ));
+  const previewRows = { oneTimeRows: [], monthlyRows: [] };
+  const previewCounts = { one_time: 0, monthly: 0 };
+  selected.forEach((row) => {
+    const section = row.section;
+    const rowNumber = context.nextRows[section] + previewCounts[section];
+    previewCounts[section] += 1;
+    if (rowNumber <= STUDENT_CARD_ROW_COUNT) {
+      previewRows[section === 'one_time' ? 'oneTimeRows' : 'monthlyRows'].push({ ...row, rowNumber });
+    }
+  });
+  ui.studentCardPrintPreview.innerHTML = studentSppCardMarkup(previewRows);
+  fitStudentCardPreview();
+  ui.studentCardPrintPreviewCaption.textContent = selected.length
+    ? `${selected.length} pembayaran dipilih · ${counts.one_time} nonperiode · ${counts.monthly} per periode`
+    : 'Pilih pembayaran untuk melihat hasil cetak.';
+  ui.studentCardPrintSubmit.disabled = !selected.length || overCapacity;
+  ui.studentCardPrintSubmit.textContent = `Cetak pilihan (${selected.length})`;
+  if (overCapacity) {
+    ui.studentCardPrintStatus.textContent = 'Pilihan melebihi sisa baris pada salah satu tabel. Kurangi pilihan sebelum mencetak.';
+    ui.studentCardPrintStatus.className = 'card-print-status is-error';
+  } else if (selected.length) {
+    ui.studentCardPrintStatus.textContent = 'Pratinjau menunjukkan baris yang akan diisi. Cetakan dimulai pada nomor baris berikutnya di masing-masing tabel.';
+    ui.studentCardPrintStatus.className = 'card-print-status';
+  } else {
+    ui.studentCardPrintStatus.textContent = context.rows.length
+      ? `Pilih pembayaran yang ingin dicetak. Pembayaran yang belum pernah dicetak sudah dipilih.${context.unallocatedCount ? ` ${context.unallocatedCount} transaksi lama tanpa rincian komponen tidak dapat dicetak.` : ''}`
+      : `Tidak ada pembayaran dengan rincian komponen yang dapat dicetak pada tahun ajaran ini.${context.unallocatedCount ? ` ${context.unallocatedCount} transaksi lama tanpa rincian komponen tidak dapat dicetak.` : ''}`;
+    ui.studentCardPrintStatus.className = 'card-print-status';
+  }
+}
+
+function fitStudentCardPreview() {
+  const viewport = ui.studentCardPrintPreview.closest('.card-print-preview-viewport');
+  const card = ui.studentCardPrintPreview.querySelector('.spp-card');
+  if (!viewport || !card || !viewport.clientWidth || !card.offsetWidth) return;
+  const scale = Math.min(viewport.clientWidth / card.offsetWidth, 1);
+  card.style.transform = `scale(${scale})`;
+}
+
+async function loadStudentCardPrintStatus(student, year) {
+  const credentials = app.cardPrintCredentials;
+  if (!credentials) throw new Error('Sesi login tidak tersedia untuk menyimpan posisi cetak bersama. Silakan masuk kembali.');
+  const { data, error } = await app.supabase.rpc('get_spp_card_print_state_v2', {
+    p_username: credentials.username,
+    p_password: credentials.password,
+    p_id_siswa: student.id,
+    p_nospp: student.nospp,
+    p_kdsek: student.kdsek,
+    p_tahun_ajaran: year
+  });
+  if (error) throw error;
+  return data || [];
+}
+
+async function resetStudentCardPrintPosition(section) {
+  const context = app.studentCardPrintContext;
+  const credentials = app.cardPrintCredentials;
+  if (!context || !credentials) return;
+
+  const tableName = section === 'monthly' ? 'tabel periode' : 'tabel pembayaran nonperiode';
+  const confirmed = window.confirm(
+    `Atur ulang posisi ${tableName} untuk ${context.student.nama || context.student.nospp}? ` +
+    'Ini memulai putaran cetak baru. Riwayat cetak sebelumnya tetap tersimpan.'
+  );
+  if (!confirmed) return;
+  const rowInput = window.prompt(
+    `Masukkan nomor BARIS BERIKUTNYA untuk ${tableName} (1–${STUDENT_CARD_ROW_COUNT}).`,
+    String(Math.min(context.nextRows[section] || 1, STUDENT_CARD_ROW_COUNT))
+  );
+  if (rowInput === null) return;
+  const rowValue = rowInput.trim();
+  if (!/^(?:[1-9]|1[0-6])$/.test(rowValue)) {
+    window.alert(`Nomor baris harus berupa angka 1 sampai ${STUDENT_CARD_ROW_COUNT}.`);
+    return;
+  }
+  const nextRow = Number(rowValue);
+  if (!window.confirm(
+    `Konfirmasi posisi ${tableName}: pembayaran terpilih berikutnya dimulai dari baris #${nextRow}. ` +
+    'Transaksi pada putaran baru akan tersedia untuk dipilih kembali.'
+  )) return;
+
+  ui.studentCardPrintStatus.textContent = `Mereset posisi ${tableName}…`;
+  ui.studentCardPrintStatus.className = 'card-print-status';
+  ui.studentCardPrintSubmit.disabled = true;
+  ui.studentCardPrintOptions.querySelectorAll('[data-card-reset]').forEach((button) => { button.disabled = true; });
+  try {
+    const { error } = await app.supabase.rpc('reset_spp_card_print_position_v2', {
+      p_username: credentials.username,
+      p_password: credentials.password,
+      p_id_siswa: context.student.id,
+      p_nospp: context.student.nospp,
+      p_kdsek: context.student.kdsek,
+      p_tahun_ajaran: context.range.year,
+      p_section: section,
+      p_next_row: nextRow
+    });
+    if (error) throw error;
+
+    const printHistory = await loadStudentCardPrintStatus(context.student, context.range.year);
+    renderStudentCardPrintOptions(context, printHistory, true, section);
+    ui.studentCardPrintStatus.textContent = `Posisi ${tableName} diatur. Pembayaran yang dipilih dimulai dari baris #${nextRow}; riwayat cetak lama tetap tersimpan.`;
+    ui.studentCardPrintStatus.className = 'card-print-status is-success';
+  } catch (error) {
+    console.error('Unable to reset SPP card print position:', error);
+    ui.studentCardPrintOptions.querySelectorAll('[data-card-reset]').forEach((button) => { button.disabled = false; });
+    updateStudentCardPrintSelectionUi();
+    ui.studentCardPrintStatus.textContent = studentCardPrintErrorMessage(error);
+    ui.studentCardPrintStatus.className = 'card-print-status is-error';
+  }
+}
+
+async function openStudentCardPrintDialog(candidate) {
+  if (!app.user) {
+    alert('Silakan masuk terlebih dahulu untuk mencetak kartu SPP.');
+    return;
+  }
+  if (!app.server || !app.cardPrintCredentials) {
+    alert('Cetak kartu dengan posisi bersama memerlukan koneksi Supabase aktif. Silakan masuk kembali setelah migration cetak kartu diterapkan.');
+    return;
+  }
   const currentStudent = app.state.siswa.find((row) => (
     String(row.nospp || '') === String(candidate.nospp || '')
     && String(row.kdsek || '') === String(candidate.kdsek || '')
@@ -1550,30 +1821,148 @@ async function printStudentSppCard(candidate) {
     kdkls: String(candidate.kdkls || (currentStudent && currentStudent.kdkls) || '').trim()
   };
   if (!student.nospp || !student.kdsek) {
-    throw new Error('Identitas siswa belum lengkap untuk mencetak kartu SPP.');
+    alert('Identitas siswa belum lengkap untuk mencetak kartu SPP.');
+    return;
   }
   if (app.user.role === 'unit' && student.kdsek !== app.user.unit) {
-    throw new Error('Anda tidak memiliki akses ke kartu siswa dari unit lain.');
+    alert('Anda tidak memiliki akses ke kartu siswa dari unit lain.');
+    return;
   }
 
-  const range = getStudentCardAcademicYearRange();
-  const items = await loadStudentCardTransactions(student, range);
-  const firstItem = items[0] || {};
-  student.nama = student.nama || firstItem.nama || '';
-  student.kdkls = student.kdkls || firstItem.kdkls || '';
-  if (!student.nama) throw new Error('Nama siswa tidak ditemukan untuk kartu SPP.');
+  if (!student.id) {
+    alert('ID siswa tidak tersedia untuk menyimpan posisi cetak bersama.');
+    return;
+  }
 
-  const rows = buildStudentCardRows(items);
-  if (
-    rows.oneTimeRows.length > STUDENT_CARD_ROW_COUNT
-    || rows.monthlyRows.length > STUDENT_CARD_ROW_COUNT
-  ) {
-    throw new Error('Jumlah transaksi melebihi kapasitas baris kartu. Hubungi Admin sebelum mencetak.');
+  ui.studentCardPrintStudent.textContent = `${student.nama || 'Siswa'} · No. SPP ${student.nospp} · Tahun ajaran ${currentYearScope() || currentAcademicYear()}`;
+  ui.studentCardPrintStatus.textContent = 'Memuat transaksi dan posisi cetak bersama…';
+  ui.studentCardPrintStatus.className = 'card-print-status';
+  ui.studentCardPrintOptions.innerHTML = '<p class="card-print-loading">Memuat daftar pembayaran…</p>';
+  ui.studentCardPrintPreview.replaceChildren();
+  ui.studentCardPrintPreviewCaption.textContent = 'Memuat pratinjau kartu…';
+  ui.studentCardPrintSubmit.disabled = true;
+  ui.studentCardPrintSubmit.textContent = 'Memuat…';
+  app.studentCardPrintContext = null;
+  if (!ui.studentCardPrintDialog.open) ui.studentCardPrintDialog.showModal();
+
+  try {
+    const range = getStudentCardAcademicYearRange();
+    const [items, printHistory] = await Promise.all([
+      loadStudentCardTransactions(student, range),
+      loadStudentCardPrintStatus(student, range.year)
+    ]);
+    const firstItem = items[0] || {};
+    student.nama = student.nama || firstItem.nama || '';
+    student.kdkls = student.kdkls || firstItem.kdkls || '';
+    const rowGroups = buildStudentCardRows(items);
+    const rows = [...rowGroups.oneTimeRows, ...rowGroups.monthlyRows];
+    rows.forEach((row, index) => { row.optionIndex = index; });
+    app.studentCardPrintContext = {
+      student,
+      range,
+      rows,
+      nextRows: { one_time: 1, monthly: 1 },
+      statusByKey: new Map(),
+      unallocatedCount: rowGroups.unallocatedCount
+    };
+
+    renderStudentCardPrintOptions(app.studentCardPrintContext, printHistory);
+  } catch (error) {
+    console.error('Unable to load SPP card print options:', error);
+    ui.studentCardPrintStatus.textContent = studentCardPrintErrorMessage(error);
+    ui.studentCardPrintStatus.className = 'card-print-status is-error';
+    ui.studentCardPrintPreviewCaption.textContent = 'Pratinjau tersedia setelah transaksi dan posisi cetak berhasil dimuat.';
+    ui.studentCardPrintOptions.replaceChildren();
+    ui.studentCardPrintSubmit.disabled = true;
+    ui.studentCardPrintSubmit.textContent = 'Cetak pilihan';
   }
-  if (rows.unallocatedCount) {
-    alert(`${rows.unallocatedCount} transaksi lama belum memiliki rincian komponen dan tidak dimasukkan ke kartu.`);
+}
+
+async function submitStudentCardPrint() {
+  const context = app.studentCardPrintContext;
+  if (!context) return;
+  const selected = [...ui.studentCardPrintOptions.querySelectorAll('[data-card-print-index]:checked')]
+    .map((input) => context.rows[Number(input.dataset.cardPrintIndex)])
+    .filter(Boolean);
+  if (!selected.length) return;
+
+  const credentials = app.cardPrintCredentials;
+  if (!credentials) {
+    ui.studentCardPrintStatus.textContent = 'Sesi login tidak tersedia. Silakan masuk kembali sebelum mencetak.';
+    ui.studentCardPrintStatus.className = 'card-print-status is-error';
+    return;
   }
-  renderStudentSppCard(student, rows, range.year);
+
+  ui.studentCardPrintSubmit.disabled = true;
+  ui.studentCardPrintSubmit.textContent = 'Menyimpan posisi…';
+  ui.studentCardPrintStatus.textContent = 'Mengunci baris berikutnya di Supabase…';
+  ui.studentCardPrintStatus.className = 'card-print-status';
+  try {
+    const requestRows = selected.map((row) => {
+      const state = context.statusByKey.get(studentCardPrintRowKey(row.section, row.batchId, row.period));
+      return {
+        section: row.section,
+        batch_id: row.batchId,
+        period: row.period || null,
+        reprint: Boolean(state)
+      };
+    });
+    const { data, error } = await app.supabase.rpc('reserve_spp_card_print_rows_v2', {
+      p_username: credentials.username,
+      p_password: credentials.password,
+      p_id_siswa: context.student.id,
+      p_nospp: context.student.nospp,
+      p_kdsek: context.student.kdsek,
+      p_tahun_ajaran: context.range.year,
+      p_rows: requestRows,
+      p_expected_one_time_next_row: selected.some((row) => row.section === 'one_time')
+        ? context.nextRows.one_time : null,
+      p_expected_monthly_next_row: selected.some((row) => row.section === 'monthly')
+        ? context.nextRows.monthly : null
+    });
+    if (error && error.code === '40001') {
+      const printHistory = await loadStudentCardPrintStatus(context.student, context.range.year);
+      renderStudentCardPrintOptions(context, printHistory, true);
+      ui.studentCardPrintStatus.textContent = 'Posisi cetak berubah karena ada proses lain. Pratinjau sudah diperbarui; periksa kembali sebelum mencetak.';
+      ui.studentCardPrintStatus.className = 'card-print-status is-warning';
+      return;
+    }
+    if (error) throw error;
+    if (!Array.isArray(data) || data.length !== selected.length) {
+      throw new Error('Posisi cetak tidak lengkap dikembalikan Supabase. Muat ulang sebelum mencoba lagi.');
+    }
+
+    const printedRows = { oneTimeRows: [], monthlyRows: [] };
+    const historyUpdates = [];
+    selected.forEach((row, index) => {
+      const assignment = data.find((entry) => Number(entry.request_index) === index + 1);
+      if (!assignment || Number(assignment.row_no) < 1 || Number(assignment.row_no) > STUDENT_CARD_ROW_COUNT) {
+        throw new Error('Supabase mengembalikan nomor baris kartu yang tidak valid.');
+      }
+      const rowNumber = Number(assignment.row_no);
+      const key = studentCardPrintRowKey(row.section, row.batchId, row.period);
+      const previousState = context.statusByKey.get(key);
+      historyUpdates.push({
+        key,
+        row,
+        rowNumber,
+        count: (previousState ? previousState.count : 0) + 1
+      });
+      const assignedRow = { ...row, rowNumber };
+      printedRows[row.section === 'one_time' ? 'oneTimeRows' : 'monthlyRows'].push(assignedRow);
+    });
+    historyUpdates.forEach(({ key, row, rowNumber, count }) => {
+      context.statusByKey.set(key, { count, lastRow: rowNumber });
+      context.nextRows[row.section] = Math.max(context.nextRows[row.section], rowNumber + 1);
+    });
+    renderStudentSppCard(printedRows);
+  } catch (error) {
+    console.error('Unable to reserve SPP card print rows:', error);
+    ui.studentCardPrintStatus.textContent = studentCardPrintErrorMessage(error);
+    ui.studentCardPrintStatus.className = 'card-print-status is-error';
+    ui.studentCardPrintSubmit.disabled = false;
+    updateStudentCardPrintSelectionUi();
+  }
 }
 
 function normalizeSupabasePaymentBatch(row) {
@@ -2341,9 +2730,15 @@ window.addEventListener('afterprint', () => {
 });
 
 window.addEventListener('afterprint', () => {
+  const wasPrintingCard = document.body.classList.contains('printing-spp-card');
   document.body.classList.remove('printing-spp-card');
   ui.studentCardPrintSheet.hidden = true;
   ui.studentCardPrintSheet.replaceChildren();
+  ui.studentCardPrintPreview.replaceChildren();
+  if (wasPrintingCard) {
+    if (ui.studentCardPrintDialog.open) ui.studentCardPrintDialog.close();
+    app.studentCardPrintContext = null;
+  }
 });
 
 function getAccessibleStudentRows() {
@@ -4652,6 +5047,7 @@ async function login(username, password) {
     app.dashboardCredentials = ['superadmin', 'yayasan'].includes(mappedUser.role)
       ? { username: username.trim(), password }
       : null;
+    app.cardPrintCredentials = { username: username.trim(), password };
     ui.userName.textContent = mappedUser.jabatan || mappedUser.idpemakai;
     ui.sidebar.hidden = false;
     applyUserAccess();
@@ -4664,6 +5060,7 @@ async function login(username, password) {
     app.user = localUser;
     app.adminCredentials = null;
     app.dashboardCredentials = null;
+    app.cardPrintCredentials = null;
     ui.userName.textContent = localUser.jabatan || localUser.idpemakai;
     ui.sidebar.hidden = false;
     applyUserAccess();
@@ -4840,6 +5237,7 @@ async function handleBankSettingsSubmit(event) {
 }
 
 function setupEvents() {
+  window.addEventListener('resize', fitStudentCardPreview);
   ui.paymentDate.value = localDateInputValue();
   ui.dailyPaymentDate.value = localDateInputValue();
   ui.dailyPaymentDate.addEventListener('change', fetchDailyPaymentSummary);
@@ -4912,6 +5310,20 @@ function setupEvents() {
   ui.studentCloseBtn.addEventListener('click', () => { closeStudentDialog(); resetStudentForm(); });
   ui.studentDialog.addEventListener('click', (event) => {
     if (event.target === ui.studentDialog) closeStudentDialog();
+  });
+  ui.studentCardPrintOptions.addEventListener('change', updateStudentCardPrintSelectionUi);
+  ui.studentCardPrintOptions.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-card-reset]');
+    if (button) resetStudentCardPrintPosition(button.dataset.cardReset);
+  });
+  ui.studentCardPrintSubmit.addEventListener('click', submitStudentCardPrint);
+  ui.studentCardPrintClose.addEventListener('click', () => ui.studentCardPrintDialog.close());
+  ui.studentCardPrintCancel.addEventListener('click', () => ui.studentCardPrintDialog.close());
+  ui.studentCardPrintDialog.addEventListener('click', (event) => {
+    if (event.target === ui.studentCardPrintDialog) ui.studentCardPrintDialog.close();
+  });
+  ui.studentCardPrintDialog.addEventListener('close', () => {
+    if (!document.body.classList.contains('printing-spp-card')) app.studentCardPrintContext = null;
   });
   document.getElementById('openStudentFormBtn').addEventListener('click', () => openStudentDialog('baru'));
   ui.studentType.addEventListener('change', updateStudentFormMode);
@@ -5184,13 +5596,13 @@ function setupEvents() {
     if (!target) return;
     const { action, nospp, id } = target.dataset;
     if (action === 'print-spp-card') {
-      printStudentSppCard({
+      openStudentCardPrintDialog({
         id,
         nospp,
         kdsek: target.dataset.kdsek,
         nama: target.dataset.nama,
         kdkls: target.dataset.kdkls
-      }).catch((error) => alert(error.message || 'Kartu SPP gagal dimuat.'));
+      });
     }
     if (action === 'edit-student') {
       changeStudentSpp(nospp);
@@ -5211,12 +5623,12 @@ function setupEvents() {
     if (!target) return;
     if (target.dataset.action === 'correct-payment') openPaymentCorrection(target.dataset.id);
     if (target.dataset.action === 'print-spp-card') {
-      printStudentSppCard({
+      openStudentCardPrintDialog({
         id: target.dataset.id,
         nospp: target.dataset.nospp,
         kdsek: target.dataset.kdsek,
         nama: target.dataset.nama
-      }).catch((error) => alert(error.message || 'Kartu SPP gagal dimuat.'));
+      });
     }
     if (target.dataset.action === 'print-payment' || target.dataset.action === 'print-correction') {
       printPaymentBatch(target.dataset.id, target.dataset.action === 'print-correction')
@@ -5228,6 +5640,8 @@ function setupEvents() {
     app.user = null;
     app.adminCredentials = null;
     app.dashboardCredentials = null;
+    app.cardPrintCredentials = null;
+    app.studentCardPrintContext = null;
     applyUserAccess();
     ui.sidebar.hidden = true;
     ui.loginScreen.classList.remove('hidden');

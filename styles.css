@@ -2908,6 +2908,397 @@ input[type='radio'] {
   margin: 8px 0 18px;
 }
 
+.student-card-print-dialog {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  color: var(--text);
+  max-height: min(90vh, 900px);
+  max-width: min(1280px, calc(100vw - 24px));
+  padding: 22px;
+  width: 100%;
+}
+
+.student-card-print-dialog::backdrop {
+  background: rgba(25, 23, 39, 0.48);
+}
+
+.student-card-print-dialog > form {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  max-height: calc(min(90vh, 900px) - 44px);
+  overflow-y: auto;
+}
+
+.card-print-dialog-heading,
+.card-print-group-heading {
+  align-items: start;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+}
+
+.card-print-dialog-heading h2,
+.card-print-group-heading h3 {
+  margin: 0;
+}
+
+.card-print-dialog-heading .muted-copy {
+  margin: 6px 0 0;
+}
+
+.card-print-status {
+  background: #f0f5fb;
+  border: 1px solid #d4dfeb;
+  border-radius: 9px;
+  color: #294767;
+  font-size: 0.88rem;
+  margin: 0;
+  padding: 10px 12px;
+}
+
+.card-print-status.is-warning {
+  background: #fff8e6;
+  border-color: #ead9a8;
+  color: #765300;
+}
+
+.card-print-status.is-success {
+  background: #eef8f1;
+  border-color: #c9e3d0;
+  color: #245c35;
+}
+
+.card-print-status.is-error {
+  background: #fff0ef;
+  border-color: #e7c2bf;
+  color: #8d2923;
+}
+
+.card-print-workspace {
+  align-items: start;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  min-height: 0;
+}
+
+.card-print-groups {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+
+.card-print-note {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  margin: -8px 0 0;
+}
+
+.card-print-group {
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.card-print-group-heading {
+  background: #f5f8fc;
+  border-bottom: 1px solid var(--border);
+  display: block;
+  padding: 12px 14px;
+}
+
+.card-print-group-heading h3 {
+  font-size: 0.98rem;
+}
+
+.card-print-group-heading p {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  margin: 5px 0 0;
+}
+
+.card-print-group-meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.card-print-group-meta .small-button {
+  min-height: 32px;
+  padding: 6px 9px;
+}
+
+.card-print-group-meta button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.card-print-options {
+  max-height: 25vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.card-print-option {
+  align-items: flex-start;
+  border-bottom: 1px solid #e8edf3;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  padding: 11px 13px;
+}
+
+.card-print-option:last-child {
+  border-bottom: 0;
+}
+
+.card-print-option:hover {
+  background: #f8fafd;
+}
+
+.card-print-option:focus-within {
+  outline: 2px solid #4f6eea;
+  outline-offset: -2px;
+}
+
+.card-print-option input {
+  accent-color: var(--primary);
+  flex: 0 0 auto;
+  height: 17px;
+  margin: 2px 0 0;
+  width: 17px;
+}
+
+.card-print-option-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.card-print-option-copy strong {
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.87rem;
+  gap: 5px 9px;
+  justify-content: space-between;
+}
+
+.card-print-option-copy strong span,
+.card-print-option-copy small {
+  color: var(--muted);
+  font-size: 0.77rem;
+  font-weight: 400;
+}
+
+.card-print-option-copy small {
+  line-height: 1.4;
+}
+
+.card-print-option-copy .card-print-option-slot {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.card-print-option-copy .card-print-option-status.is-printed {
+  color: #52657b;
+}
+
+.card-print-empty,
+.card-print-loading {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0;
+  padding: 16px;
+}
+
+.student-card-print-dialog .form-actions {
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  justify-content: flex-end;
+  margin: 0;
+  padding-top: 12px;
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+}
+
+.card-print-preview-panel {
+  min-width: 0;
+  position: sticky;
+  top: 0;
+}
+
+.card-print-preview-heading {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.card-print-preview-heading h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.card-print-preview-heading span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.card-print-preview-viewport {
+  aspect-ratio: 214 / 162;
+  background: #eeece6;
+  border: 1px solid #d5d2c9;
+  border-radius: 4px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.card-print-preview-stage {
+  height: 100%;
+  width: 100%;
+}
+
+.card-print-preview-stage .spp-card {
+  box-shadow: 0 2px 6px rgba(32, 29, 46, 0.14);
+  transform-origin: top left;
+}
+
+.card-print-preview-stage .spp-card-grid {
+  background: #fff;
+  box-sizing: border-box;
+  border: 0.25mm solid #b9b6ae;
+}
+
+.card-print-preview-stage .spp-card-row:not(:last-child) {
+  box-sizing: border-box;
+  border-bottom: 0.2mm solid #d7d4cc;
+}
+
+.card-print-preview-stage .spp-card-cell:not(:last-child) {
+  box-sizing: border-box;
+  border-right: 0.15mm solid #e2dfd8;
+}
+
+.card-print-preview-caption {
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin: 10px 0 0;
+}
+
+.card-print-preview-guide,
+.card-print-preview-columns {
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.4;
+  margin: 5px 0 0;
+}
+
+.card-print-preview-columns {
+  border-top: 1px solid var(--border);
+  margin-top: 9px;
+  padding-top: 8px;
+}
+
+.spp-card {
+  box-sizing: border-box;
+  color: #111;
+  font-family: Arial, sans-serif;
+  height: 162mm;
+  overflow: hidden;
+  position: relative;
+  width: 214mm;
+}
+
+.spp-card-grid {
+  display: grid;
+  grid-template-rows: repeat(16, 1fr);
+  height: 102mm;
+  position: absolute;
+  top: 38.5mm;
+}
+
+.spp-card-grid-one-time {
+  grid-template-columns: 13.9mm 15.6mm 15.3mm 13.1mm 12.3mm 15mm 14.5mm;
+  left: 4.2mm;
+  width: 99.7mm;
+}
+
+.spp-card-grid-monthly {
+  grid-template-columns: 13.2mm 14.6mm 14.6mm 11.5mm 10.3mm 14.6mm 14.5mm;
+  left: 112.5mm;
+  width: 93.3mm;
+}
+
+.spp-card-row {
+  display: grid;
+  min-height: 0;
+}
+
+.spp-card-grid-one-time .spp-card-row {
+  grid-template-columns: 13.9mm 15.6mm 15.3mm 13.1mm 12.3mm 15mm 14.5mm;
+}
+
+.spp-card-grid-monthly .spp-card-row {
+  grid-template-columns: 13.2mm 14.6mm 14.6mm 11.5mm 10.3mm 14.6mm 14.5mm;
+}
+
+.spp-card-cell {
+  align-self: center;
+  font-size: 5.2pt;
+  line-height: 1;
+  overflow: hidden;
+  padding: 0 0.5mm;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.spp-card-cell-date,
+.spp-card-cell-period {
+  font-size: 5.6pt;
+  text-align: center;
+}
+
+.spp-card-cell-blank {
+  visibility: hidden;
+}
+
+@media (max-width: 700px) {
+  .student-card-print-dialog {
+    padding: 16px;
+  }
+
+  .student-card-print-dialog > form {
+    max-height: calc(90vh - 32px);
+  }
+
+  .card-print-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .card-print-preview-panel {
+    order: -1;
+  }
+
+  .card-print-options {
+    max-height: 30vh;
+  }
+}
+
 @page payment-receipt {
   margin: 12mm;
   size: A4 portrait;
@@ -3263,99 +3654,7 @@ input[type='radio'] {
   }
 
   .spp-card {
-    box-sizing: border-box;
-    color: #111;
-    font-family: Arial, sans-serif;
-    height: 162mm;
-    overflow: hidden;
     page: spp-card;
-    position: relative;
-    width: 214mm;
-  }
-
-  .spp-card-identification {
-    display: grid;
-    gap: 2mm 4mm;
-    grid-template-columns: 2.4fr 0.8fr 1.2fr 1.35fr;
-    height: 15mm;
-    left: 5mm;
-    position: absolute;
-    right: 5mm;
-    top: 6mm;
-  }
-
-  .spp-card-identification div {
-    display: flex;
-    flex-direction: column;
-    gap: 1mm;
-    min-width: 0;
-  }
-
-  .spp-card-identification span {
-    font-size: 5.2pt;
-    line-height: 1;
-  }
-
-  .spp-card-identification strong {
-    font-size: 8pt;
-    font-weight: 600;
-    line-height: 1.1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .spp-card-grid {
-    display: grid;
-    grid-template-rows: repeat(16, 1fr);
-    height: 102mm;
-    position: absolute;
-    top: 38.5mm;
-  }
-
-  .spp-card-grid-one-time {
-    grid-template-columns: 13.9mm 15.6mm 15.3mm 13.1mm 12.3mm 15mm 14.5mm;
-    left: 4.2mm;
-    width: 99.7mm;
-  }
-
-  .spp-card-grid-monthly {
-    grid-template-columns: 13.2mm 14.6mm 14.6mm 11.5mm 10.3mm 14.6mm 14.5mm;
-    left: 112.5mm;
-    width: 93.3mm;
-  }
-
-  .spp-card-row {
-    display: grid;
-    min-height: 0;
-  }
-
-  .spp-card-grid-one-time .spp-card-row {
-    grid-template-columns: 13.9mm 15.6mm 15.3mm 13.1mm 12.3mm 15mm 14.5mm;
-  }
-
-  .spp-card-grid-monthly .spp-card-row {
-    grid-template-columns: 13.2mm 14.6mm 14.6mm 11.5mm 10.3mm 14.6mm 14.5mm;
-  }
-
-  .spp-card-cell {
-    align-self: center;
-    font-size: 5.2pt;
-    line-height: 1;
-    overflow: hidden;
-    padding: 0 0.5mm;
-    text-align: right;
-    white-space: nowrap;
-  }
-
-  .spp-card-cell-date,
-  .spp-card-cell-period {
-    font-size: 5.6pt;
-    text-align: center;
-  }
-
-  .spp-card-cell-blank {
-    visibility: hidden;
   }
 
   .print-letter {

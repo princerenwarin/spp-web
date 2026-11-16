@@ -744,6 +744,38 @@
         </div>
       </form>
     </dialog>
+    <dialog id="studentCardPrintDialog" class="student-card-print-dialog">
+      <form method="dialog">
+        <div class="card-print-dialog-heading">
+          <div>
+            <h2>Cetak Kartu SPP</h2>
+            <p id="studentCardPrintStudent" class="muted-copy"></p>
+          </div>
+          <button type="button" class="modal-close" id="studentCardPrintClose" aria-label="Tutup">&times;</button>
+        </div>
+        <p id="studentCardPrintStatus" class="card-print-status" role="status" aria-live="polite"></p>
+        <p class="card-print-note">Pilih pembayaran untuk melihat posisi cetaknya pada pratinjau. Posisi dikunci sebelum perintah cetak; jika posisi berubah karena proses lain, pratinjau diperbarui sebelum cetak dilanjutkan. Jika cetak dibatalkan setelah posisi dikunci, pilih transaksi yang sama untuk dicetak ulang pada baris berikutnya.</p>
+        <div class="card-print-workspace">
+          <div id="studentCardPrintOptions" class="card-print-groups"></div>
+          <aside class="card-print-preview-panel" aria-labelledby="studentCardPrintPreviewTitle">
+            <div class="card-print-preview-heading">
+              <h3 id="studentCardPrintPreviewTitle">Pratinjau kartu</h3>
+              <span>214 × 162 mm</span>
+            </div>
+            <div class="card-print-preview-viewport">
+              <div id="studentCardPrintPreview" class="card-print-preview-stage" aria-live="polite"></div>
+            </div>
+            <p id="studentCardPrintPreviewCaption" class="card-print-preview-caption">Pilih pembayaran untuk melihat hasil cetak.</p>
+            <p class="card-print-preview-columns">Nonperiode: tanggal, DPP, DPS, kegiatan, administrasi/seragam. Per periode: tanggal, periode, SPP, komputer, kegiatan.</p>
+            <p class="card-print-preview-guide">Garis tabel pada pratinjau hanya panduan layar; tidak ikut dicetak.</p>
+          </aside>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="secondary-button" id="studentCardPrintCancel">Batal</button>
+          <button type="button" class="primary-button" id="studentCardPrintSubmit" disabled>Cetak pilihan</button>
+        </div>
+      </form>
+    </dialog>
     <div id="arrearsPrintSheet" hidden></div>
     <div id="paymentPrintSheet" hidden></div>
     <div id="dailyCashPrintSheet" hidden></div>
