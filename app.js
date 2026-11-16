@@ -115,7 +115,10 @@ const ui = {
   dailyPaymentDate: document.getElementById('dailyPaymentDate'),
   dailyPaymentSummary: document.getElementById('dailyPaymentSummary'),
   dailyPaymentSummaryTotal: document.getElementById('dailyPaymentSummaryTotal'),
+  dailyPaymentBreakdown: document.getElementById('dailyPaymentBreakdown'),
   dailyPaymentSummaryStatus: document.getElementById('dailyPaymentSummaryStatus'),
+  dailyCashPrint: document.getElementById('printDailyCashBtn'),
+  dailyCashPrintSheet: document.getElementById('dailyCashPrintSheet'),
   studentTableBody: document.getElementById('studentTableBody'),
   studentForm: document.getElementById('studentForm'),
   studentNama: document.getElementById('studentNama'),
@@ -250,7 +253,6 @@ function normalizeSchoolClasses(rows) {
         ? true
         : activeValue === true || activeValue === 1 || activeValue === 'true'
     });
-    ui.dailyPaymentDate.addEventListener('change', fetchDailyPaymentSummary);
   });
 
   return [...classes.values()].sort((a, b) => (
@@ -1395,13 +1397,17 @@ function formatDateTime(value) {
     : date.toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' });
 }
 
-function renderDailyPaymentSummary(summary) {
-  const rows = [
+function getDailyPaymentSummaryRows(summary) {
+  return [
     ['Manual', summary.manual_transaksi, Number(summary.manual || 0)],
     ['Impor', summary.upload_transaksi, Number(summary.upload || 0)],
     ['BOS · pengurang penerimaan orang tua', summary.bos_transaksi, -Number(summary.bos || 0)],
     ['Riwayat lama · sumber belum tercatat', summary.legacy_transaksi, Number(summary.legacy || 0)]
   ];
+}
+
+function renderDailyPaymentSummary(summary) {
+  const rows = getDailyPaymentSummaryRows(summary);
   ui.dailyPaymentSummary.innerHTML = rows.map(([label, count, amount]) => `
     <tr>
       <th>${escapeHtml(label)}</th>
@@ -1417,17 +1423,187 @@ function renderDailyPaymentSummary(summary) {
   ui.dailyPaymentSummaryStatus.textContent = '';
 }
 
+function getDailyPaymentBreakdownRows(items) {
+  const componentLabels = {
+    dpp: ['DPP', 2],
+    dsp: ['DPS', 3],
+    seragam: ['Seragam', 4],
+    giat: ['Kegiatan', 5],
+    lainnya: ['Lainnya', 7],
+    dpp_tl: ['DPP tahun lalu', 8],
+    spp_tl: ['SPP tahun lalu', 9],
+    komp_tl: ['Komputer tahun lalu', 10],
+    legacy: ['Pembayaran lama belum dialokasikan', 11]
+  };
+  const sourceOrder = { manual: 0, upload: 1, bos: 2, legacy: 3 };
+  const sourceLabels = { manual: 'Manual', upload: 'Impor', bos: 'BOS', legacy: 'Riwayat lama' };
+  const groups = new Map();
+
+  const addItem = (item, type, typeOrder, sourceLabel, amount) => {
+    const period = String(item.periode || '');
+    const notes = String(item.notes || '').trim();
+    const detail = [period ? formatPeriodLabel(period) : '', notes].filter(Boolean).join(' · ') || '-';
+    const key = `${type}|${sourceLabel}|${period}|${notes}`;
+    const group = groups.get(key);
+    if (group) {
+      group.amount += amount;
+      group.count += 1;
+    } else {
+      groups.set(key, {
+        type,
+        typeOrder,
+        source: sourceLabel,
+        sourceOrder: sourceOrder[item.source] ?? sourceOrder.legacy,
+        period: period ? paymentPeriodSequence(period) : Number.MAX_SAFE_INTEGER,
+        detail,
+        amount,
+        count: 1
+      });
+    }
+  };
+
+  items.forEach((item) => {
+    const component = String(item.component || 'legacy');
+    const source = Object.prototype.hasOwnProperty.call(sourceLabels, item.source)
+      ? item.source
+      : 'legacy';
+    const amount = Number(item.nominal || 0);
+    const sourceLabel = sourceLabels[source];
+    if (source === 'bos') {
+      addItem(item, 'Potongan BOS', 6, 'BOS', -Math.abs(amount));
+      return;
+    }
+    if (component === 'spp_bos') {
+      addItem(item, 'SPP + Komputer', 1, sourceLabel, amount);
+      addItem(item, 'Potongan BOS', 6, `${sourceLabel} / BOS`, -Math.abs(amount));
+      return;
+    }
+    const label = component === 'spp' || component === 'komp'
+      ? ['SPP + Komputer', 1]
+      : (componentLabels[component] || [getPaymentComponentLabel(component), 11]);
+    addItem(item, label[0], label[1], sourceLabel, amount);
+  });
+
+  return [...groups.values()].sort((a, b) => (
+    a.typeOrder - b.typeOrder
+      || a.sourceOrder - b.sourceOrder
+      || a.period - b.period
+      || a.detail.localeCompare(b.detail, 'id')
+  ));
+}
+
+function renderDailyPaymentBreakdown(items) {
+  const rows = getDailyPaymentBreakdownRows(items);
+  ui.dailyPaymentBreakdown.innerHTML = rows.length
+    ? rows.map((row, index) => `
+      <tr>
+        <td data-label="No.">${index + 1}</td>
+        <td data-label="Jenis penerimaan / sumber">${escapeHtml(row.type)} <span class="cash-source-label">${escapeHtml(row.source)}</span></td>
+        <td data-label="Bulan / keterangan">${escapeHtml(row.detail)}</td>
+        <td data-label="Jumlah (Rp)">${formatRupiah(row.amount)}</td>
+      </tr>
+    `).join('')
+    : '<tr><td colspan="4" class="empty-state">Tidak ada transaksi pada tanggal ini.</td></tr>';
+}
+
+let dailyPaymentSummaryData = null;
+let dailyPaymentBreakdownData = null;
 let dailyPaymentSummaryFetchSeq = 0;
+
+function indonesianNumberWords(value) {
+  const number = Math.floor(Math.abs(Number(value) || 0));
+  const units = ['', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan'];
+  const spell = (amount) => {
+    if (amount === 0) return '';
+    if (amount < 10) return units[amount];
+    if (amount < 12) return amount === 10 ? 'sepuluh' : 'sebelas';
+    if (amount < 20) return `${spell(amount - 10)} belas`;
+    if (amount < 100) return `${spell(Math.floor(amount / 10))} puluh ${spell(amount % 10)}`.trim();
+    if (amount < 200) return `seratus ${spell(amount - 100)}`.trim();
+    if (amount < 1000) return `${spell(Math.floor(amount / 100))} ratus ${spell(amount % 100)}`.trim();
+    if (amount < 2000) return `seribu ${spell(amount - 1000)}`.trim();
+    if (amount < 1000000) return `${spell(Math.floor(amount / 1000))} ribu ${spell(amount % 1000)}`.trim();
+    if (amount < 1000000000) return `${spell(Math.floor(amount / 1000000))} juta ${spell(amount % 1000000)}`.trim();
+    if (amount < 1000000000000) {
+      return `${spell(Math.floor(amount / 1000000000))} miliar ${spell(amount % 1000000000)}`.trim();
+    }
+    return `${number.toLocaleString('id-ID')} rupiah`;
+  };
+  const words = spell(number).replace(/\s+/g, ' ').trim() || 'nol';
+  return `${Number(value) < 0 ? 'minus ' : ''}${words} rupiah`;
+}
+
+function printDailyCashReport() {
+  if (!dailyPaymentSummaryData || !dailyPaymentBreakdownData || !ui.dailyPaymentDate.value) {
+    ui.dailyPaymentSummaryStatus.textContent = 'Muat rekap dan rincian tanggal terlebih dahulu sebelum mencetak.';
+    return;
+  }
+  const date = ui.dailyPaymentDate.value;
+  const rows = getDailyPaymentBreakdownRows(dailyPaymentBreakdownData);
+  const itemRows = rows.map((row, index) => `
+    <tr>
+      <td>${index + 1}</td>
+      <td>${escapeHtml(row.type)}<br><small>${escapeHtml(row.source)}</small></td>
+      <td>${escapeHtml(row.detail)}</td>
+      <td>${formatRupiah(row.amount)}</td>
+    </tr>
+  `).join('');
+  const printedAt = new Date().toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' });
+  const cashTotal = Number(dailyPaymentSummaryData.net_orang_tua || 0);
+
+  ui.dailyCashPrintSheet.innerHTML = `
+    <article class="print-letter print-cash-report">
+      <header class="cash-receipt-header">
+        <img src="./assets/yayasan.png" alt="Logo Yayasan Santo Dominikus" />
+        <div class="cash-receipt-title">
+          <p>Yayasan Santo Dominikus Cimahi</p>
+          <h1>Laporan Penerimaan Harian</h1>
+          <p>Rekap kas · Semua sekolah</p>
+        </div>
+        <dl>
+          <dt>No.</dt><dd>LKH-${escapeHtml(date.replace(/-/g, ''))}</dd>
+          <dt>Tanggal</dt><dd>${escapeHtml(formatLongDate(date))}</dd>
+        </dl>
+      </header>
+      <div class="print-cash-meta">
+        <p>Dicetak ${escapeHtml(printedAt)}</p>
+      </div>
+      <table>
+        <thead><tr><th>No.</th><th>Jenis pembayaran / sumber</th><th>Bulan / keterangan</th><th>Jumlah (Rp)</th></tr></thead>
+        <tbody>${itemRows || '<tr><td colspan="4">Tidak ada transaksi pada tanggal ini.</td></tr>'}</tbody>
+        <tfoot>
+          <tr>
+            <th colspan="3">Total penerimaan orang tua setelah potongan BOS</th>
+            <th>${formatRupiah(cashTotal)}</th>
+          </tr>
+        </tfoot>
+      </table>
+      <p class="print-cash-words"><strong>Terbilang:</strong> ${escapeHtml(indonesianNumberWords(cashTotal))}</p>
+      <p class="print-cash-note">Rincian dikelompokkan menurut jenis penerimaan dan sumber transaksi. Potongan BOS mengurangi total penerimaan orang tua.</p>
+      <div class="print-cash-signatures">
+        <div>Penyetor<span>(________________________)</span></div>
+        <div>Kasir<span>(________________________)</span></div>
+      </div>
+    </article>`;
+  ui.dailyCashPrintSheet.hidden = false;
+  document.body.classList.add('printing-daily-cash');
+  window.print();
+}
 
 async function fetchDailyPaymentSummary() {
   if (!ui.dailyPaymentDate || !app.user || app.user.role === 'unit') return;
   const seq = ++dailyPaymentSummaryFetchSeq;
+  dailyPaymentSummaryData = null;
+  dailyPaymentBreakdownData = null;
+  ui.dailyCashPrint.disabled = true;
   if (!ui.dailyPaymentDate.value) ui.dailyPaymentDate.value = localDateInputValue();
   ui.dailyPaymentSummaryStatus.textContent = 'Memuat rekap...';
   ui.dailyPaymentSummary.innerHTML = '<tr><td colspan="3" class="empty-state">Memuat rekap...</td></tr>';
   ui.dailyPaymentSummaryTotal.replaceChildren();
+  ui.dailyPaymentBreakdown.innerHTML = '<tr><td colspan="4" class="empty-state">Memuat rincian...</td></tr>';
   try {
     let summary;
+    let detailItems;
     if (app.server) {
       if (!app.dashboardCredentials) throw new Error('Silakan keluar lalu masuk kembali sebagai Admin atau Yayasan.');
       const { data, error } = await app.supabase.rpc('spp_app_daily_payment_summary_v1', {
@@ -1437,6 +1613,20 @@ async function fetchDailyPaymentSummary() {
       });
       if (error) throw error;
       summary = data;
+      const pageSize = 1000;
+      detailItems = [];
+      for (let from = 0; ; from += pageSize) {
+        const { data: page, error: detailError } = await app.supabase
+          .from('spp_app_payment_batch_items')
+          .select('source,component,periode,nominal,notes')
+          .eq('tglbyr', ui.dailyPaymentDate.value)
+          .is('voided_at', null)
+          .order('payment_id')
+          .range(from, from + pageSize - 1);
+        if (detailError) throw detailError;
+        detailItems.push(...(page || []));
+        if (!page || page.length < pageSize) break;
+      }
     } else {
       const daily = getLocalPaymentBatches().filter((batch) => (
         batch.tglbyr === ui.dailyPaymentDate.value && !batch.voided_at
@@ -1453,12 +1643,22 @@ async function fetchDailyPaymentSummary() {
         }
       });
       summary.net_orang_tua = summary.manual + summary.upload + summary.legacy - summary.bos;
+      detailItems = daily.flatMap((batch) => (batch.items || []).map((item) => ({
+        ...item,
+        source: batch.source,
+        notes: item.notes || batch.notes || ''
+      })));
     }
     if (seq !== dailyPaymentSummaryFetchSeq) return;
-    renderDailyPaymentSummary(summary || {});
+    dailyPaymentSummaryData = summary || {};
+    dailyPaymentBreakdownData = detailItems || [];
+    renderDailyPaymentSummary(dailyPaymentSummaryData);
+    renderDailyPaymentBreakdown(dailyPaymentBreakdownData);
+    ui.dailyCashPrint.disabled = false;
   } catch (error) {
     if (seq !== dailyPaymentSummaryFetchSeq) return;
     ui.dailyPaymentSummary.innerHTML = `<tr><td colspan="3" class="empty-state">Rekap gagal dimuat: ${escapeHtml(error.message || 'Kesalahan tidak diketahui.')}</td></tr>`;
+    ui.dailyPaymentBreakdown.innerHTML = `<tr><td colspan="4" class="empty-state">Rincian gagal dimuat: ${escapeHtml(error.message || 'Kesalahan tidak diketahui.')}</td></tr>`;
     ui.dailyPaymentSummaryStatus.textContent = 'Pastikan migration 018 sudah dijalankan dan akun memiliki akses Admin/Yayasan.';
   }
 }
@@ -1617,6 +1817,11 @@ function formatLongDate(value) {
 window.addEventListener('afterprint', () => {
   document.body.classList.remove('printing-payment');
   if (ui.paymentPrintSheet) ui.paymentPrintSheet.replaceChildren();
+});
+
+window.addEventListener('afterprint', () => {
+  document.body.classList.remove('printing-daily-cash');
+  ui.dailyCashPrintSheet.hidden = true;
 });
 
 function getAccessibleStudentRows() {
@@ -1933,9 +2138,10 @@ function formatPeriodLabel(value) {
 function populateReportPeriods() {
   const year = ui.reportYearFilter.value || currentAcademicYear();
   const activeMonths = academicMonths(year);
-  const months = year === currentAcademicYear()
-    ? activeMonths.filter((month) => month.key <= localMonthInputValue())
-    : activeMonths;
+  const now = new Date();
+  const maximumPeriodDate = new Date(now.getFullYear(), now.getMonth() + 2, 1);
+  const latestPeriod = localMonthInputValue(maximumPeriodDate);
+  const months = activeMonths.filter((month) => month.key <= latestPeriod);
   const previous = ui.reportPeriodFilter.value;
   const values = months.map((month) => {
     const [yyyy, mm] = month.key.split('-');
@@ -1943,9 +2149,9 @@ function populateReportPeriods() {
   });
   ui.reportPeriodFilter.innerHTML = values.map((item) => (
     `<option value="${item.value}">${escapeHtml(item.label)}</option>`
-  )).join('');
+  )).join('') || '<option value="">Belum ada periode dalam rentang dua bulan ke depan</option>';
+  if (!values.length) return;
 
-  const now = new Date();
   const current = `${String(now.getMonth() + 1).padStart(2, '0')}${now.getFullYear()}`;
   const defaultValue = year === currentAcademicYear() ? current : values[values.length - 1]?.value;
   ui.reportPeriodFilter.value = values.some((item) => item.value === previous)
@@ -2118,6 +2324,12 @@ async function fetchArrearsReport(append = false) {
   const seq = ++arrearsFetchSeq;
   const year = ui.reportYearFilter.value || currentAcademicYear();
   const period = ui.reportPeriodFilter.value;
+  if (!period) {
+    ui.arrearsReportTable.innerHTML = '<tr><td colspan="6" class="empty-state">Belum ada periode tagihan yang dapat dipilih.</td></tr>';
+    ui.arrearsReportCount.textContent = 'Periode laporan tersedia sampai dua bulan setelah bulan aktif.';
+    ui.loadMoreArrears.hidden = true;
+    return;
+  }
   if (!append) {
     app.arrearsOffset = 0;
     app.arrearsRows = [];
@@ -2134,7 +2346,7 @@ async function fetchArrearsReport(append = false) {
   });
   if (seq !== arrearsFetchSeq) return;
   if (error) {
-    ui.arrearsReportTable.innerHTML = `<tr><td colspan="6" class="empty-state">Laporan gagal dimuat: ${escapeHtml(error.message)}. Periksa migration 016.</td></tr>`;
+    ui.arrearsReportTable.innerHTML = `<tr><td colspan="6" class="empty-state">Laporan gagal dimuat: ${escapeHtml(error.message)}. Periksa migration 016 dan 019.</td></tr>`;
     ui.arrearsReportCount.textContent = 'Laporan tidak dapat dimuat.';
     ui.loadMoreArrears.hidden = true;
     return;
@@ -3249,6 +3461,7 @@ function buildLocalPaymentBilling(student, year, cutoff) {
   return {
     id_siswa: student.id,
     tahun_ajaran: year,
+    periode_masuk: entryPeriod,
     periode_aktif: periods[periods.length - 1]?.periode || toPeriode(cutoff),
     periode_bulanan: periods,
     sisa_spp: sppTotal,
@@ -3415,18 +3628,27 @@ function renderPaymentBillingStatus() {
     ui.paymentBillingStatus.textContent = 'Memuat tagihan siswa...';
     return;
   }
-  const oldest = [oldestDuePeriod(billing, 'spp'), oldestDuePeriod(billing, 'komp')]
-    .filter(Boolean)
-    .sort((a, b) => {
-      const dateA = new Date(Number(a.slice(2)), Number(a.slice(0, 2)) - 1, 1);
-      const dateB = new Date(Number(b.slice(2)), Number(b.slice(0, 2)) - 1, 1);
-      return dateA - dateB;
-    })[0];
+  const oldest = paymentSchedule(billing).find((period) => (
+    Number(period.spp?.sisa || 0) > 0 || Number(period.komp?.sisa || 0) > 0
+  ))?.periode;
+  const entryPeriod = billing.periode_masuk
+    || billing.periode_bulanan?.[0]?.periode
+    || paymentSchedule(billing)[0]?.periode;
   const legacy = Number(billing.belum_dialokasikan || 0);
   ui.paymentBillingStatus.classList.toggle('is-warning', legacy > 0);
-  ui.paymentBillingStatus.textContent = `Sisa terhitung ${formatRupiah(billing.sisa_total || 0)}`
-    + (oldest ? ` · Periode tertua ${formatPeriodLabel(oldest)}` : '')
-    + (legacy > 0 ? ` · Ada ${formatRupiah(legacy)} pembayaran lama yang belum dialokasikan; alokasi otomatis ditahan sampai direkonsiliasi.` : '');
+  const lines = [
+    'Rincian sisa tagihan',
+    `SPP: ${formatRupiah(billing.sisa_spp || 0)}`,
+    `Komputer: ${formatRupiah(billing.sisa_komp || 0)}`,
+    `Komponen lain: ${formatRupiah(billing.sisa_satu_kali || 0)}`,
+    `Total sisa: ${formatRupiah(billing.sisa_total || 0)}`,
+    `Periode masuk: ${entryPeriod ? formatPeriodLabel(entryPeriod) : 'Belum diatur'}`,
+    `Periode tertua belum lunas: ${oldest ? formatPeriodLabel(oldest) : 'Tidak ada'}`
+  ];
+  if (legacy > 0) {
+    lines.push(`Pembayaran lama belum dialokasikan: ${formatRupiah(legacy)}. Alokasi otomatis ditahan sampai direkonsiliasi.`);
+  }
+  ui.paymentBillingStatus.textContent = lines.join('\n');
 }
 
 let paymentBillingRequest = 0;
@@ -3455,10 +3677,16 @@ function paymentSchedule(billing = app.paymentBilling) {
 
 function defaultPaymentPeriod(billing = app.paymentBilling) {
   const schedule = paymentSchedule(billing);
-  const oldest = oldestAnyDuePeriod(billing);
-  return schedule.some((item) => item.periode === oldest)
-    ? oldest
-    : schedule[0]?.periode || '';
+  const oldestDue = schedule.find((item) => (
+    Number(item.spp?.sisa || 0) > 0 || Number(item.komp?.sisa || 0) > 0
+  ))?.periode;
+  if (oldestDue) return oldestDue;
+  const activePeriod = schedule.find((item) => item.periode === billing?.periode_aktif)?.periode;
+  if (activePeriod) return activePeriod;
+  const entryPeriod = String(billing?.periode_masuk || '');
+  return schedule.find((item) => item.periode === entryPeriod)?.periode
+    || schedule[0]?.periode
+    || '';
 }
 
 function nextPaymentPeriod(period, billing = app.paymentBilling) {
@@ -4071,6 +4299,8 @@ async function handleBankSettingsSubmit(event) {
 function setupEvents() {
   ui.paymentDate.value = localDateInputValue();
   ui.dailyPaymentDate.value = localDateInputValue();
+  ui.dailyPaymentDate.addEventListener('change', fetchDailyPaymentSummary);
+  ui.dailyCashPrint.addEventListener('click', printDailyCashReport);
   document.querySelectorAll('.nav').forEach((button) => {
     button.addEventListener('click', () => setPage(button.dataset.page));
   });

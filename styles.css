@@ -2718,6 +2718,17 @@ input[type='radio'] {
   min-width: 190px;
 }
 
+.daily-summary-actions {
+  align-items: end;
+  display: flex;
+  gap: 10px;
+}
+
+.daily-summary-actions .secondary-button {
+  min-height: 42px;
+  white-space: nowrap;
+}
+
 .daily-summary-date span {
   color: var(--muted);
   font-size: 0.78rem;
@@ -2740,9 +2751,79 @@ input[type='radio'] {
   font-weight: 700;
 }
 
+.daily-summary-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.daily-summary-table th:first-child,
+.daily-summary-table td:first-child {
+  overflow-wrap: anywhere;
+  width: 48%;
+}
+
+.daily-summary-table th:nth-child(2),
+.daily-summary-table td:nth-child(2) {
+  text-align: center;
+  width: 20%;
+}
+
+.daily-summary-table th:last-child,
+.daily-summary-table td:last-child {
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+  width: 32%;
+}
+
 .daily-summary-table .net-row th,
 .daily-summary-table .net-row td {
   color: var(--primary-2);
+}
+
+.daily-payment-breakdown {
+  margin-top: 20px;
+}
+
+.daily-payment-breakdown h3 {
+  font-size: 1.05rem;
+  margin: 0 0 10px;
+}
+
+.daily-payment-detail-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.daily-payment-detail-table th:first-child,
+.daily-payment-detail-table td:first-child {
+  text-align: center;
+  width: 7%;
+}
+
+.daily-payment-detail-table th:nth-child(2),
+.daily-payment-detail-table td:nth-child(2) {
+  width: 34%;
+}
+
+.daily-payment-detail-table th:nth-child(3),
+.daily-payment-detail-table td:nth-child(3) {
+  width: 34%;
+}
+
+.daily-payment-detail-table th:last-child,
+.daily-payment-detail-table td:last-child {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+  width: 25%;
+}
+
+.cash-source-label {
+  color: var(--muted);
+  display: block;
+  font-size: 0.8em;
 }
 
 .operator-code-input {
@@ -2862,6 +2943,7 @@ input[type='radio'] {
   line-height: 1.55;
   margin: 14px 0;
   padding: 11px 14px;
+  white-space: pre-line;
 }
 
 .payment-billing-status.is-warning {
@@ -2963,11 +3045,72 @@ input[type='radio'] {
   .daily-summary-date {
     width: 100%;
   }
+
+  .daily-summary-actions {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .daily-summary-actions .secondary-button {
+    width: 100%;
+  }
+
+  .daily-payment-detail-table {
+    min-width: 0;
+  }
+
+  .daily-payment-detail-table thead {
+    display: none;
+  }
+
+  .daily-payment-detail-table tbody tr:not(.empty-state-row) {
+    display: grid;
+    gap: 3px 8px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 9px 10px;
+  }
+
+  .daily-payment-detail-table tbody td {
+    border: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    padding: 0;
+    width: auto !important;
+  }
+
+  .daily-payment-detail-table tbody td:first-child {
+    display: none;
+  }
+
+  .daily-payment-detail-table tbody td:nth-child(2) {
+    grid-column: 1;
+    font-weight: 700;
+  }
+
+  .daily-payment-detail-table tbody td:nth-child(3) {
+    color: var(--muted);
+    font-size: 0.84rem;
+    grid-column: 1;
+  }
+
+  .daily-payment-detail-table tbody td:last-child {
+    align-self: center;
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    font-size: 0.84rem;
+  }
+
+  .daily-payment-detail-table tbody td.empty-state {
+    display: block;
+    grid-column: 1 / -1;
+  }
 }
 
 @media print {
   body.printing-arrears > *:not(#arrearsPrintSheet),
-  body.printing-payment > *:not(#paymentPrintSheet) {
+  body.printing-payment > *:not(#paymentPrintSheet),
+  body.printing-daily-cash > *:not(#dailyCashPrintSheet) {
     display: none !important;
   }
 
@@ -2993,6 +3136,17 @@ input[type='radio'] {
     width: 100%;
   }
 
+  body.printing-daily-cash #dailyCashPrintSheet {
+    background: #fff;
+    color: #111;
+    display: block !important;
+    inset: 0;
+    padding: 18mm;
+    position: absolute;
+    visibility: visible !important;
+    width: 100%;
+  }
+
   .print-letter {
     font: 12pt/1.6 Georgia, "Times New Roman", serif;
     margin: 0 auto;
@@ -3005,10 +3159,71 @@ input[type='radio'] {
     text-align: center;
   }
 
+  .print-cash-report h1 {
+    font-size: 18pt;
+    margin: 0;
+    text-align: center;
+  }
+
+  .print-cash-meta {
+    border-bottom: 2px solid #1f3a5b;
+    margin-top: 6pt;
+  }
+
+  .print-cash-meta p {
+    font-size: 9pt;
+    margin: 5pt 0;
+    text-align: right;
+  }
+
   .print-letter table {
     border-collapse: collapse;
     margin: 18pt 0;
     width: 100%;
+  }
+
+  .print-cash-report table {
+    min-width: 0;
+    table-layout: fixed;
+    width: 100%;
+  }
+
+  .print-cash-report thead {
+    display: table-header-group;
+  }
+
+  .print-cash-report tbody tr {
+    display: table-row;
+  }
+
+  .print-cash-report th,
+  .print-cash-report td {
+    display: table-cell;
+    padding: 6pt 5pt;
+  }
+
+  .print-cash-report th:first-child,
+  .print-cash-report td:first-child {
+    text-align: center;
+    width: 7%;
+  }
+
+  .print-cash-report th:nth-child(2),
+  .print-cash-report td:nth-child(2) {
+    width: 34%;
+  }
+
+  .print-cash-report th:nth-child(3),
+  .print-cash-report td:nth-child(3) {
+    overflow-wrap: anywhere;
+    width: 34%;
+  }
+
+  .print-cash-report th:last-child,
+  .print-cash-report td:last-child {
+    text-align: right;
+    white-space: nowrap;
+    width: 25%;
   }
 
   .print-letter th,
@@ -3016,6 +3231,78 @@ input[type='radio'] {
     border: 1px solid #777;
     padding: 7pt;
     text-align: left;
+  }
+
+  .print-cash-report tfoot th {
+    border-top: 2px solid #111;
+    font-weight: 700;
+  }
+
+  .cash-receipt-header {
+    align-items: center;
+    border-bottom: 2px solid #1f3a5b;
+    display: grid;
+    gap: 10pt;
+    grid-template-columns: 20mm minmax(0, 1fr) 43mm;
+    padding-bottom: 8pt;
+  }
+
+  .cash-receipt-header > img {
+    height: 18mm;
+    object-fit: contain;
+    width: 18mm;
+  }
+
+  .cash-receipt-title {
+    text-align: center;
+  }
+
+  .cash-receipt-title > p {
+    font-size: 9pt;
+    margin: 0;
+  }
+
+  .cash-receipt-title > h1 {
+    margin: 3pt 0;
+    text-transform: uppercase;
+  }
+
+  .cash-receipt-header dl {
+    border-left: 1px solid #777;
+    display: grid;
+    font-size: 9pt;
+    grid-template-columns: 13mm 1fr;
+    margin: 0;
+    padding-left: 8pt;
+  }
+
+  .cash-receipt-header dt {
+    font-weight: 700;
+  }
+
+  .cash-receipt-header dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .print-cash-words {
+    margin: 12pt 0 24pt;
+  }
+
+  .print-cash-note {
+    font-size: 10pt;
+  }
+
+  .print-cash-signatures {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 35pt;
+    text-align: center;
+  }
+
+  .print-cash-signatures span {
+    display: block;
+    margin-top: 40pt;
   }
 
   .print-date {

@@ -120,10 +120,13 @@
                   <h2>Rekap Penerimaan Harian</h2>
                   <p class="muted-copy">Dikelompokkan menurut tanggal uang masuk. Waktu input atau unggah dicatat terpisah.</p>
                 </div>
-                <label class="daily-summary-date">
-                  <span>Tanggal uang masuk</span>
-                  <input id="dailyPaymentDate" type="date" />
-                </label>
+                <div class="daily-summary-actions">
+                  <label class="daily-summary-date">
+                    <span>Tanggal uang masuk</span>
+                    <input id="dailyPaymentDate" type="date" />
+                  </label>
+                  <button type="button" class="secondary-button" id="printDailyCashBtn" disabled>Cetak laporan kas</button>
+                </div>
               </div>
               <div class="table-wrap">
                 <table class="daily-summary-table">
@@ -133,6 +136,19 @@
                   </tbody>
                   <tfoot id="dailyPaymentSummaryTotal"></tfoot>
                 </table>
+              </div>
+              <div class="daily-payment-breakdown">
+                <h3>Rincian menurut jenis penerimaan</h3>
+                <div class="table-wrap">
+                  <table class="daily-payment-detail-table">
+                    <thead>
+                      <tr><th>No.</th><th>Jenis penerimaan / sumber</th><th>Bulan / keterangan</th><th>Jumlah (Rp)</th></tr>
+                    </thead>
+                    <tbody id="dailyPaymentBreakdown">
+                      <tr><td colspan="4" class="empty-state">Rincian muncul setelah rekap dimuat.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
               <p class="settings-status" id="dailyPaymentSummaryStatus" role="status" aria-live="polite"></p>
             </div>
@@ -723,6 +739,7 @@
     </dialog>
     <div id="arrearsPrintSheet" hidden></div>
     <div id="paymentPrintSheet" hidden></div>
+    <div id="dailyCashPrintSheet" hidden></div>
     <script src="./config.js"></script>
     <script src="./vendor/xlsx.mini.min.js"></script>
     <script src="./app.js"></script>
