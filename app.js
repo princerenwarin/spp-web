@@ -58,6 +58,7 @@ const app = {
   dashboardCredentials: null,
   cardPrintCredentials: null,
   studentCardPrintContext: null,
+  paymentHistoryRequest: 0,
   selectedStudents: new Set(),
   selectedNames: new Map(),
   pickerCache: new Map(),
@@ -87,8 +88,7 @@ const PAYMENT_COMPONENTS = [
   ['komp', 'Komputer bulanan'],
   ['giat', 'Kegiatan'],
   ['dpp', 'DPP'],
-  ['dpp_tl', 'DPP tahun lalu'],
-  ['dsp', 'DSP'],
+  ['dsp', 'DPS'],
   ['seragam', 'Seragam'],
   ['spp_tl', 'SPP tahun lalu'],
   ['komp_tl', 'Komputer tahun lalu'],
@@ -133,6 +133,14 @@ const ui = {
   studentCardPrintSubmit: document.getElementById('studentCardPrintSubmit'),
   studentCardPrintClose: document.getElementById('studentCardPrintClose'),
   studentCardPrintCancel: document.getElementById('studentCardPrintCancel'),
+  paymentHistoryDialog: document.getElementById('paymentHistoryDialog'),
+  paymentHistoryStudent: document.getElementById('paymentHistoryStudent'),
+  paymentHistoryYear: document.getElementById('paymentHistoryYear'),
+  paymentPeriodHistory: document.getElementById('paymentPeriodHistory'),
+  paymentOneTimeHistory: document.getElementById('paymentOneTimeHistory'),
+  paymentTransactionHistory: document.getElementById('paymentTransactionHistory'),
+  paymentHistoryClose: document.getElementById('paymentHistoryClose'),
+  paymentHistoryCancel: document.getElementById('paymentHistoryCancel'),
   studentTableBody: document.getElementById('studentTableBody'),
   studentForm: document.getElementById('studentForm'),
   studentNama: document.getElementById('studentNama'),
@@ -156,6 +164,9 @@ const ui = {
   studentKomp: document.getElementById('studentKomp'),
   studentTools: document.getElementById('studentTools'),
   arrearsTools: document.getElementById('arrearsTools'),
+  arrearCutoffYear: document.getElementById('arrearCutoffYear'),
+  arrearCutoffBtn: document.getElementById('arrearCutoffBtn'),
+  arrearCutoffStatus: document.getElementById('arrearCutoffStatus'),
   arrearStudent: document.getElementById('arrearStudent'),
   arrearTahun: document.getElementById('arrearTahun'),
   arrearJenis: document.getElementById('arrearJenis'),
@@ -1146,7 +1157,14 @@ function drawStudentTable() {
         <td data-label="Sekolah / Kelas"><div>${escapeHtml(getSchoolName(row.kdsek))}</div><div class="student-sub">Kelas ${escapeHtml(row.kdkls)}</div></td>
         <td data-label="Virtual Account">${virtualAccountMarkup}</td>
         <td data-label="Rincian tagihan">${row.isStaffChild && row.showInBilling === false ? 'Tidak ditagih' : billBreakdownMarkup(row, arrearsTotal)}</td>
-        <td data-label="Riwayat pembayaran"><span class="payment-history-note">${totalBayar > 0 ? `Transaksi tercatat ${formatRupiah(totalBayar)}` : 'Belum ada transaksi'}</span></td>
+        <td data-label="Riwayat pembayaran">
+          <span class="payment-history-note">${totalBayar > 0 ? `Transaksi tercatat ${formatRupiah(totalBayar)}` : 'Belum ada transaksi'}</span>
+          <button type="button" class="secondary-button small-button" data-action="payment-history"
+            data-id="${escapeHtml(row.id)}" data-nospp="${escapeHtml(row.nospp)}" data-kdsek="${escapeHtml(row.kdsek)}"
+            data-nama="${escapeHtml(row.nama)}" data-kdkls="${escapeHtml(row.kdkls)}" data-year="${escapeHtml(row.tahunAjaran || '')}">
+            Lihat rincian
+          </button>
+        </td>
         <td data-label="Aksi" class="row-actions">
           <button class="action-btn edit" data-action="print-spp-card" data-id="${escapeHtml(row.id)}" data-nospp="${escapeHtml(row.nospp)}" data-kdsek="${escapeHtml(row.kdsek)}" data-nama="${escapeHtml(row.nama)}" data-kdkls="${escapeHtml(row.kdkls)}">Cetak Kartu</button>
           ${admin && row.tahunAjaran ? `
@@ -1203,7 +1221,9 @@ async function fetchArrears() {
     tahunAjaran: row.tahun_ajaran,
     jenis: row.jenis,
     keterangan: row.keterangan || '',
-    nominal: Number(row.nominal || 0)
+    nominal: Number(row.nominal || 0),
+    periode: row.periode || '',
+    source: row.source || 'manual'
   }));
   drawArrears();
 }
@@ -1224,7 +1244,7 @@ function drawArrears() {
           <td>${escapeHtml(item.nama || (student ? student.nama : item.idSiswa))} (${escapeHtml(item.idSiswa)})${canManageSettings() ? ` <button type="button" class="action-btn edit" data-rename-id="${escapeHtml(item.idSiswa)}" data-rename-name="${escapeHtml(item.nama || (student ? student.nama : ''))}">Ubah nama</button>` : ''}</td>
           <td>${escapeHtml(item.tahunAjaran)}</td>
           <td>${escapeHtml(item.jenis)}</td>
-          <td>${escapeHtml(item.keterangan)}</td>
+          <td>${item.periode ? `<strong>${escapeHtml(formatPeriodLabel(item.periode))}</strong> · ` : ''}${escapeHtml(item.keterangan)}</td>
           <td>${formatRupiah(item.nominal)}</td>
           <td><button type="button" class="action-btn delete" data-arrear-delete="${item.id}">Hapus</button></td>
         </tr>`;
@@ -1256,6 +1276,74 @@ async function addArrear() {
     await reloadStudentData();
   } catch (error) {
     alert(error.message || 'Tagihan tahun lalu gagal disimpan. Pastikan migration 011 sudah dijalankan.');
+  }
+}
+
+function populateArrearCutoffYears() {
+  const selected = ui.arrearCutoffYear.value;
+  const currentStart = Number(currentAcademicYear().slice(0, 4));
+  const years = [...new Set([...(app.years || []), currentAcademicYear(), selected])]
+    .filter((year) => /^\d{4}-\d{4}$/.test(String(year || ''))
+      && Number(String(year).slice(0, 4)) <= currentStart)
+    .sort((a, b) => Number(b.slice(0, 4)) - Number(a.slice(0, 4)));
+  ui.arrearCutoffYear.innerHTML = years.map((year) => (
+    `<option value="${escapeHtml(year)}">${escapeHtml(year)}</option>`
+  )).join('');
+  ui.arrearCutoffYear.value = years.includes(selected)
+    ? selected
+    : (years.includes(currentAcademicYear()) ? currentAcademicYear() : (years[0] || ''));
+  ui.arrearCutoffBtn.disabled = years.length === 0;
+}
+
+async function cutoffAcademicYear() {
+  if (!canManageSettings()) {
+    alert('Hanya Admin yang dapat menutup tahun ajaran.');
+    return;
+  }
+  if (!app.server) {
+    alert('Cut-off memerlukan Supabase aktif dan migration 022.');
+    return;
+  }
+  const year = ui.arrearCutoffYear.value;
+  if (!year) {
+    alert('Pilih tahun ajaran yang akan di-cut-off.');
+    return;
+  }
+  const availableFrom = `${year.slice(5, 9)}-07-01`;
+  if (localDateInputValue() < availableFrom) {
+    alert(`Cut-off tahun ajaran ${year} baru tersedia setelah Juni ${year.slice(5, 9)}.`);
+    return;
+  }
+  if (!window.confirm(
+    `Tutup tahun ajaran ${year}? Sisa SPP dan Komputer akan dipindahkan satu kali ke tunggakan tahun lalu, dengan rincian per periode.`
+  )) return;
+
+  ui.arrearCutoffBtn.disabled = true;
+  ui.arrearCutoffStatus.textContent = `Memproses cut-off ${year}...`;
+  try {
+    const credentials = requireStudentRules();
+    const { data, error } = await app.supabase.rpc('cutoff_academic_year_v1', {
+      ...credentials,
+      p_tahun_ajaran: year
+    });
+    if (error) throw error;
+    app.paymentBillingCache.clear();
+    await reloadStudentData();
+    const result = data || {};
+    if (result.already_closed) {
+      ui.arrearCutoffStatus.textContent = `Tahun ajaran ${year} sudah pernah di-cut-off; tidak ada tunggakan yang ditambahkan ulang.`;
+      alert(`Tahun ajaran ${year} sudah pernah di-cut-off. Tidak ada tagihan yang digandakan.`);
+    } else {
+      ui.arrearCutoffStatus.textContent = `Cut-off ${year} selesai: ${Number(result.period_count || 0)} rincian periode dibuat.`;
+      alert(
+        `Cut-off ${year} selesai.\nSPP: ${formatRupiah(result.spp_total || 0)}\nKomputer: ${formatRupiah(result.komputer_total || 0)}\nRincian periode: ${Number(result.period_count || 0)}`
+      );
+    }
+  } catch (error) {
+    ui.arrearCutoffStatus.textContent = `Cut-off ${year} gagal.`;
+    alert(error.message || 'Cut-off tahun ajaran gagal. Pastikan migration 022 sudah dijalankan.');
+  } finally {
+    populateArrearCutoffYears();
   }
 }
 
@@ -2768,6 +2856,7 @@ function getAccessibleTransactionRows(includeVoided = false) {
 function getPaymentComponentLabel(component) {
   if (component === 'legacy' || !component) return 'Belum dialokasikan';
   if (component === 'spp_bos') return 'SPP ditanggung BOS';
+  if (component === 'dpp_tl') return 'DPP';
   return PAYMENT_COMPONENTS.find(([key]) => key === component)?.[1] || 'Lainnya';
 }
 
@@ -3142,18 +3231,49 @@ function reportDetailMarkup(billing) {
         <div class="arrears-period-items">${components}</div>
       </div>
     `;
-  }).join('');
+  }).filter(Boolean);
+  const monthlySpp = months.reduce((total, item) => total + Number(item.spp.sisa || 0), 0);
+  const monthlyComputer = months.reduce((total, item) => total + Number(item.komp.sisa || 0), 0);
+  const monthlySummary = [
+    ['SPP', billing.sisa_spp == null ? monthlySpp : Number(billing.sisa_spp || 0)],
+    ['Komputer', billing.sisa_komp == null ? monthlyComputer : Number(billing.sisa_komp || 0)]
+  ].filter(([, amount]) => amount > 0)
+    .map(([label, amount]) => `
+      <div class="arrears-balance-line"><span>${label}</span><strong>${formatRupiah(amount)}</strong></div>
+    `).join('');
+  const monthlyGroup = monthlyRows.length || monthlySummary
+    ? `<section class="arrears-detail-group">
+        <strong class="arrears-detail-heading">SPP &amp; Komputer</strong>
+        <div class="arrears-period-items">${monthlySummary || '<span class="student-sub">Tidak ada sisa tagihan.</span>'}</div>
+        ${monthlyRows.length
+          ? `<details class="arrears-period-details">
+              <summary>Rincian ${monthlyRows.length} periode</summary>
+              <div class="arrears-month-grid">${monthlyRows.join('')}</div>
+            </details>`
+          : ''}
+      </section>`
+    : '';
   const components = Object.entries(billing.komponen_satu_kali || {})
     .filter(([, item]) => Number(item.sisa || 0) > 0)
     .map(([key, item]) => `
-      <div class="arrears-balance-line"><span>${escapeHtml(getPaymentComponentLabel(key))}</span><strong>${formatRupiah(item.sisa)}</strong></div>
+      <div class="arrears-one-time-item">
+        <div class="arrears-balance-line"><span>${escapeHtml(getPaymentComponentLabel(key))}</span><strong>${formatRupiah(item.sisa)}</strong></div>
+        ${arrearsPeriodDetailsMarkup(item)}
+      </div>
     `).join('');
+  const oneTimeGroup = components
+    ? `<section class="arrears-detail-group">
+        <strong class="arrears-detail-heading">Komponen lainnya</strong>
+        <div class="arrears-period-items">${components}</div>
+      </section>`
+    : '';
   const reconciliation = Number(billing.belum_dialokasikan || 0) > 0
     ? `<div class="arrears-reconciliation">Pembayaran lama belum dialokasikan <strong>${formatRupiah(billing.belum_dialokasikan)}</strong></div>`
     : '';
-  const items = `${monthlyRows}${components ? `<div class="arrears-period"><strong>Komponen lainnya</strong><div class="arrears-period-items">${components}</div></div>` : ''}${reconciliation}`;
+  const groups = [monthlyGroup, oneTimeGroup].filter(Boolean);
+  const items = `${groups.join('')}${reconciliation}`;
 
-  return `<div class="arrears-breakdown">${items || '<span class="student-sub">Tidak ada rincian sisa tagihan.</span>'}</div>`;
+  return `<div class="arrears-breakdown${groups.length < 2 ? ' is-single' : ''}">${items || '<span class="student-sub">Tidak ada rincian sisa tagihan.</span>'}</div>`;
 }
 
 function normalizeWhatsAppNumber(value) {
@@ -3161,6 +3281,33 @@ function normalizeWhatsAppNumber(value) {
   if (number.startsWith('+')) number = number.slice(1);
   if (number.startsWith('0')) number = `62${number.slice(1)}`;
   return /^\d{8,20}$/.test(number) ? number : '';
+}
+
+function arrearsPeriodDetailsMarkup(item) {
+  const details = Array.isArray(item?.rincian)
+    ? item.rincian.filter((detail) => Number(detail.sisa || 0) > 0)
+    : [];
+  if (!details.length) return '';
+  return `
+    <details class="arrears-period-details">
+      <summary>Rincian ${details.length} ${details.every((detail) => detail.periode) ? 'periode' : 'tagihan'}</summary>
+      <div class="arrears-month-grid">
+        ${details.map((detail) => {
+          const periodLabel = detail.periode
+            ? formatPeriodLabel(detail.periode)
+            : `Periode tidak dicatat · ${detail.tahun_ajaran || 'Tahun sebelumnya'}`;
+          return `
+            <div class="arrears-period">
+              <strong>${escapeHtml(periodLabel)}</strong>
+              <div class="arrears-period-items">
+                <div class="arrears-balance-line">
+                  <span>Sisa</span><strong>${formatRupiah(detail.sisa)}</strong>
+                </div>
+              </div>
+            </div>`;
+        }).join('')}
+      </div>
+    </details>`;
 }
 
 function arrearsRowMarkup(row) {
@@ -4359,11 +4506,17 @@ async function voidPaymentBatch(event) {
   }
 }
 
-function paymentBillingCutoff(year) {
-  const start = Number(String(year || '').slice(0, 4));
-  const currentStart = Number(currentAcademicYear().slice(0, 4));
+function paymentBillingCutoff(year, now = new Date()) {
+  const match = /^(\d{4})-(\d{4})$/.exec(String(year || ''));
+  if (!match || Number(match[2]) !== Number(match[1]) + 1) return '';
+  const start = Number(match[1]);
+  const currentStart = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
   if (start > currentStart) return '';
-  return start === currentStart ? localMonthInputValue() : `${start + 1}-06`;
+  if (start < currentStart) return `${start + 1}-06`;
+  const horizon = new Date(now.getFullYear(), now.getMonth() + 2, 1);
+  const academicEnd = new Date(start + 1, 5, 1);
+  const cutoff = horizon > academicEnd ? academicEnd : horizon;
+  return `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}`;
 }
 
 function paymentPeriodSequence(period) {
@@ -4425,7 +4578,10 @@ async function appendFuturePaymentPeriods(student, billing) {
   const lastCurrentPeriod = currentPeriods[currentPeriods.length - 1]?.periode || billing.periode_aktif;
   const sequenceEnd = paymentPeriodSequence(lastCurrentPeriod);
   const academicPeriods = academicMonths(billing.tahun_ajaran).map((month) => toPeriode(month.key));
-  let futurePeriods = academicPeriods.filter((period) => paymentPeriodSequence(period) > sequenceEnd);
+  const billingEnd = paymentPeriodSequence(toPeriode(paymentBillingCutoff(billing.tahun_ajaran)));
+  let futurePeriods = academicPeriods.filter((period) => (
+    paymentPeriodSequence(period) > sequenceEnd && paymentPeriodSequence(period) <= billingEnd
+  ));
   if (!futurePeriods.length) {
     billing.payment_periods = currentPeriods;
     return billing;
@@ -4553,6 +4709,179 @@ async function getPaymentBilling(student, includeFuturePeriods = false) {
   return billing;
 }
 
+function paymentHistoryStatusMarkup(status) {
+  const label = String(status || '-');
+  const normalized = label.toLowerCase();
+  const stateClass = normalized === 'lunas'
+    ? 'is-paid'
+    : normalized === 'cicilan'
+      ? 'is-partial'
+      : normalized === 'belum bayar'
+        ? 'is-unpaid'
+        : 'is-neutral';
+  return `<span class="payment-state ${stateClass}">${escapeHtml(label)}</span>`;
+}
+
+function getPaymentPeriodStatus(component) {
+  if (component?.status) return component.status;
+  const target = Number(component?.tagihan || 0);
+  if (!target) return '-';
+  if (Number(component?.sisa || 0) === 0) return 'Lunas';
+  if (Number(component?.dibayar || 0) + Number(component?.saldo_dibawa || 0) > 0) return 'Cicilan';
+  return 'Belum bayar';
+}
+
+function groupPaymentHistoryTransactions(transactions) {
+  const groups = new Map();
+  transactions.forEach((item, index) => {
+    const key = item.batch_id != null
+      ? `batch:${item.batch_id}`
+      : item.receipt_no
+        ? `receipt:${item.receipt_no}`
+        : `payment:${item.payment_id || item.id || index}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        receiptNo: item.receipt_no || `#${item.batch_id || item.payment_id || item.id || '-'}`,
+        date: item.tglbyr,
+        allocations: [],
+        total: 0,
+        voided: false,
+        voidReason: ''
+      };
+      groups.set(key, group);
+    }
+    group.allocations.push(item);
+    group.total += Number(item.nominal || 0);
+    group.voided = group.voided || Boolean(item.voided_at);
+    group.voidReason = group.voidReason || item.void_reason || '';
+  });
+  return [...groups.values()];
+}
+
+function renderStudentPaymentDetails(billing, transactions) {
+  const periods = billing?.periode_bulanan || [];
+  ui.paymentPeriodHistory.innerHTML = periods.length
+    ? periods.map((item) => `
+      <tr>
+        <th scope="row">${escapeHtml(formatPeriodLabel(item.periode))}</th>
+        <td>${paymentHistoryStatusMarkup(getPaymentPeriodStatus(item.spp))}
+          <small>${formatRupiah(Number(item.spp?.dibayar || 0))} / ${formatRupiah(Number(item.spp?.tagihan || 0))}</small>
+        </td>
+        <td>${paymentHistoryStatusMarkup(getPaymentPeriodStatus(item.komp))}
+          <small>${formatRupiah(Number(item.komp?.dibayar || 0))} / ${formatRupiah(Number(item.komp?.tagihan || 0))}</small>
+        </td>
+      </tr>
+    `).join('')
+    : '<tr><td colspan="3" class="empty-state">Belum ada periode tagihan pada tahun ajaran ini.</td></tr>';
+
+  const oneTimeComponents = [
+    ['dpp', 'DPP'],
+    ['dsp', 'DPS'],
+    ['seragam', 'Seragam'],
+    ['giat', 'Kegiatan']
+  ];
+  const oneTimeRows = oneTimeComponents
+    .map(([key, label]) => {
+      const component = billing?.komponen_satu_kali?.[key];
+      if (!component || (!Number(component.tagihan || 0) && !Number(component.dibayar || 0))) return '';
+      return `
+        <tr>
+          <th scope="row">${label}</th>
+          <td>${formatRupiah(Number(component.tagihan || 0))}</td>
+          <td>${formatRupiah(Number(component.dibayar || 0))}</td>
+          <td>${formatRupiah(Number(component.sisa || 0))}</td>
+          <td>${paymentHistoryStatusMarkup(getPaymentPeriodStatus(component))}</td>
+        </tr>
+      `;
+    })
+    .filter(Boolean);
+  ui.paymentOneTimeHistory.innerHTML = oneTimeRows.length
+    ? oneTimeRows.join('')
+    : '<tr><td colspan="5" class="empty-state">Belum ada tagihan DPP, DPS, seragam, atau kegiatan.</td></tr>';
+
+  const paymentGroups = groupPaymentHistoryTransactions(transactions);
+  ui.paymentTransactionHistory.innerHTML = paymentGroups.length
+    ? paymentGroups.map((group) => {
+      const allocations = group.allocations.map((item) => {
+        const label = getPaymentComponentLabel(item.component)
+          + (item.periode ? ` · ${formatPeriodLabel(item.periode)}` : '');
+        return `<div class="payment-history-allocation-item">
+          <span>${escapeHtml(label)}</span><strong>${formatRupiah(Number(item.nominal || 0))}</strong>
+        </div>`;
+      }).join('');
+      return `
+        <tr class="${group.voided ? 'is-voided' : ''}">
+          <td>${escapeHtml(formatDateTime(group.date))}</td>
+          <td>${escapeHtml(group.receiptNo)}</td>
+          <td><div class="payment-history-allocation">${allocations}</div></td>
+          <td><strong>${formatRupiah(group.total)}</strong></td>
+          <td><span class="payment-state ${group.voided ? 'is-neutral' : 'is-paid'}"
+            ${group.voided && group.voidReason ? `title="${escapeHtml(group.voidReason)}"` : ''}>${group.voided ? 'Dikoreksi' : 'Tercatat'}</span></td>
+        </tr>
+      `;
+    }).join('')
+    : '<tr><td colspan="5" class="empty-state">Belum ada transaksi pembayaran untuk siswa ini.</td></tr>';
+  ui.paymentHistoryDialog.querySelector('form').scrollTop = 0;
+  ui.paymentHistoryDialog.querySelectorAll('.table-wrap').forEach((wrap) => { wrap.scrollLeft = 0; });
+}
+
+async function loadStudentPaymentDetails(student) {
+  const year = student.tahunAjaran || currentYearScope() || currentAcademicYear();
+  const cutoff = paymentBillingCutoff(year);
+  if (!cutoff) throw new Error(`Tahun ajaran ${year} belum memiliki periode tagihan aktif.`);
+  const period = toPeriode(cutoff);
+  if (app.server) {
+    if (!app.cardPrintCredentials) throw new Error('Sesi login tidak tersedia. Keluar lalu masuk kembali untuk memuat riwayat.');
+    const { data, error } = await app.supabase.rpc('spp_app_student_payment_history_v1', {
+      p_username: app.cardPrintCredentials.username,
+      p_password: app.cardPrintCredentials.password,
+      p_id_siswa: String(student.id),
+      p_nospp: student.nospp,
+      p_kdsek: student.kdsek,
+      p_tahun: year,
+      p_periode: period
+    });
+    if (error) throw error;
+    if (!data || !data.billing) throw new Error('Riwayat atau status periode siswa tidak tersedia.');
+    return { billing: data.billing, transactions: data.transactions || [] };
+  }
+
+  return {
+    billing: buildLocalPaymentBilling(student, year, cutoff),
+    transactions: app.state.transaksi
+      .filter((item) => item.nospp === student.nospp && item.kdsek === student.kdsek)
+      .sort((a, b) => new Date(b.tglbyr) - new Date(a.tglbyr))
+  };
+}
+
+async function openStudentPaymentHistory(student) {
+  if (!app.user) return;
+  if (!student || (app.user.role === 'unit' && student.kdsek !== app.user.unit)) {
+    alert('Anda tidak memiliki akses ke riwayat pembayaran siswa dari unit lain.');
+    return;
+  }
+  const request = ++app.paymentHistoryRequest;
+  ui.paymentHistoryStudent.textContent = `${student.nama} · Kelas ${student.kdkls} · No. SPP ${student.nospp}`;
+  ui.paymentHistoryYear.textContent = `Tahun ajaran ${student.tahunAjaran || currentAcademicYear()}`;
+  ui.paymentPeriodHistory.innerHTML = '<tr><td colspan="3" class="empty-state">Memuat status periode...</td></tr>';
+  ui.paymentOneTimeHistory.innerHTML = '<tr><td colspan="5" class="empty-state">Memuat rincian pembayaran...</td></tr>';
+  ui.paymentTransactionHistory.innerHTML = '<tr><td colspan="5" class="empty-state">Memuat riwayat pembayaran...</td></tr>';
+  if (!ui.paymentHistoryDialog.open) ui.paymentHistoryDialog.showModal();
+  try {
+    const details = await loadStudentPaymentDetails(student);
+    if (request !== app.paymentHistoryRequest) return;
+    renderStudentPaymentDetails(details.billing, details.transactions);
+  } catch (error) {
+    if (request !== app.paymentHistoryRequest) return;
+    console.error('Unable to load student payment history:', error);
+    const message = escapeHtml(error.message || 'Riwayat pembayaran gagal dimuat.');
+    ui.paymentPeriodHistory.innerHTML = `<tr><td colspan="3" class="empty-state">${message}</td></tr>`;
+    ui.paymentOneTimeHistory.innerHTML = `<tr><td colspan="5" class="empty-state">${message}</td></tr>`;
+    ui.paymentTransactionHistory.innerHTML = `<tr><td colspan="5" class="empty-state">${message}</td></tr>`;
+  }
+}
+
 function oldestDuePeriod(billing, component) {
   const period = (billing?.periode_bulanan || []).find((item) => Number(item[component]?.sisa || 0) > 0);
   return period?.periode || billing?.periode_aktif || '';
@@ -4583,20 +4912,44 @@ function renderPaymentBillingStatus() {
     || billing.periode_bulanan?.[0]?.periode
     || paymentSchedule(billing)[0]?.periode;
   const legacy = Number(billing.belum_dialokasikan || 0);
+  const oneTimeBreakdown = Object.entries(billing.komponen_satu_kali || {})
+    .filter(([, item]) => Number(item.sisa || 0) > 0)
+    .map(([key, item]) => `
+      <div class="payment-billing-arrear">
+        <div class="payment-billing-line">
+          <span>${escapeHtml(getPaymentComponentLabel(key))}</span>
+          <b>${formatRupiah(item.sisa)}</b>
+        </div>
+        ${arrearsPeriodDetailsMarkup(item)}
+      </div>
+    `).join('');
   ui.paymentBillingStatus.classList.toggle('is-warning', legacy > 0);
-  const lines = [
-    'Rincian sisa tagihan',
-    `SPP: ${formatRupiah(billing.sisa_spp || 0)}`,
-    `Komputer: ${formatRupiah(billing.sisa_komp || 0)}`,
-    `Komponen lain: ${formatRupiah(billing.sisa_satu_kali || 0)}`,
-    `Total sisa: ${formatRupiah(billing.sisa_total || 0)}`,
-    `Periode masuk: ${entryPeriod ? formatPeriodLabel(entryPeriod) : 'Belum diatur'}`,
-    `Periode tertua belum lunas: ${oldest ? formatPeriodLabel(oldest) : 'Tidak ada'}`
-  ];
-  if (legacy > 0) {
-    lines.push(`Pembayaran lama belum dialokasikan: ${formatRupiah(legacy)}. Alokasi otomatis ditahan sampai direkonsiliasi.`);
-  }
-  ui.paymentBillingStatus.textContent = lines.join('\n');
+  ui.paymentBillingStatus.innerHTML = `
+    <div class="payment-billing-layout">
+      <div class="payment-billing-columns">
+        <section class="payment-billing-group">
+          <strong>SPP &amp; Komputer</strong>
+          <div class="payment-billing-line"><span>SPP</span><b>${formatRupiah(billing.sisa_spp || 0)}</b></div>
+          <div class="payment-billing-line"><span>Komputer</span><b>${formatRupiah(billing.sisa_komp || 0)}</b></div>
+        </section>
+        <section class="payment-billing-group">
+          <strong>Komponen lainnya</strong>
+          ${oneTimeBreakdown || '<div class="payment-billing-empty">Tidak ada sisa komponen lainnya.</div>'}
+          <div class="payment-billing-line payment-billing-subtotal">
+            <span>Total komponen</span>
+            <b>${formatRupiah(billing.sisa_satu_kali || 0)}</b>
+          </div>
+        </section>
+      </div>
+      <div class="payment-billing-meta">
+        <div><span>Total sisa</span><b>${formatRupiah(billing.sisa_total || 0)}</b></div>
+        <div><span>Periode masuk</span><b>${escapeHtml(entryPeriod ? formatPeriodLabel(entryPeriod) : 'Belum diatur')}</b></div>
+        <div><span>Periode tertua belum lunas</span><b>${escapeHtml(oldest ? formatPeriodLabel(oldest) : 'Tidak ada')}</b></div>
+      </div>
+      ${legacy > 0
+        ? `<p class="payment-billing-legacy">Pembayaran lama belum dialokasikan: ${formatRupiah(legacy)}. Alokasi otomatis ditahan sampai direkonsiliasi.</p>`
+        : ''}
+    </div>`;
 }
 
 let paymentBillingRequest = 0;
@@ -4712,7 +5065,7 @@ function makePaymentComponentRow(period = '') {
 
 function makeOneTimePaymentRow() {
   const options = PAYMENT_COMPONENTS
-    .filter(([key]) => key !== 'spp' && key !== 'komp')
+    .filter(([key]) => !['spp', 'komp'].includes(key))
     .map(([key, label]) => (
     `<option value="${key}">${escapeHtml(label)}</option>`
   )).join('');
@@ -5345,6 +5698,12 @@ function setupEvents() {
   ui.studentCardPrintDialog.addEventListener('close', () => {
     if (!document.body.classList.contains('printing-spp-card')) app.studentCardPrintContext = null;
   });
+  ui.paymentHistoryClose.addEventListener('click', () => ui.paymentHistoryDialog.close());
+  ui.paymentHistoryCancel.addEventListener('click', () => ui.paymentHistoryDialog.close());
+  ui.paymentHistoryDialog.addEventListener('click', (event) => {
+    if (event.target === ui.paymentHistoryDialog) ui.paymentHistoryDialog.close();
+  });
+  ui.paymentHistoryDialog.addEventListener('close', () => { app.paymentHistoryRequest += 1; });
   document.getElementById('openStudentFormBtn').addEventListener('click', () => openStudentDialog('baru'));
   ui.studentType.addEventListener('change', updateStudentFormMode);
   document.getElementById('bulkGiatBtn').addEventListener('click', applyBulkActivity);
@@ -5357,6 +5716,7 @@ function setupEvents() {
   document.getElementById('templateBtn').addEventListener('click', downloadImportTemplate);
   document.getElementById('backupBtn').addEventListener('click', backupData);
   document.getElementById('arrearAddBtn').addEventListener('click', addArrear);
+  ui.arrearCutoffBtn.addEventListener('click', cutoffAcademicYear);
   ui.arrearsBody.addEventListener('click', (event) => {
     const button = event.target.closest('[data-arrear-delete]');
     if (button) deleteArrear(button.dataset.arrearDelete);
@@ -5615,6 +5975,16 @@ function setupEvents() {
     const target = event.target.closest('button');
     if (!target) return;
     const { action, nospp, id } = target.dataset;
+    if (action === 'payment-history') {
+      const student = app.state.siswa.find((row) => (
+        String(row.id) === String(id) && row.nospp === nospp && row.kdsek === target.dataset.kdsek
+      ));
+      if (!student) {
+        alert('Data siswa sudah berubah. Muat ulang daftar siswa lalu coba kembali.');
+        return;
+      }
+      openStudentPaymentHistory(student);
+    }
     if (action === 'print-spp-card') {
       openStudentCardPrintDialog({
         id,
@@ -5662,6 +6032,8 @@ function setupEvents() {
     app.dashboardCredentials = null;
     app.cardPrintCredentials = null;
     app.studentCardPrintContext = null;
+    app.paymentHistoryRequest += 1;
+    if (ui.paymentHistoryDialog.open) ui.paymentHistoryDialog.close();
     applyUserAccess();
     ui.sidebar.hidden = true;
     ui.loginScreen.classList.remove('hidden');
@@ -5693,6 +6065,7 @@ function setupEvents() {
 function renderAll() {
   populateSchoolSelect();
   populateYearFilter();
+  populateArrearCutoffYears();
   populateExistingStudents();
   populateStudentYearOptions(currentAcademicYear());
   updateStudentFormMode();

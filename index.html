@@ -366,8 +366,23 @@
             </details>
 
             <details class="fold admin-only" id="arrearsTools" hidden>
-              <summary>Tagihan tahun lalu (input manual)</summary>
+              <summary>Tunggakan &amp; penutupan tahun ajaran</summary>
               <div class="fold-body">
+              <section class="arrears-cutoff-panel" aria-labelledby="arrearCutoffHeading">
+                <h3 id="arrearCutoffHeading">Cut-off SPP dan Komputer</h3>
+                <p class="muted-copy">Setelah Juni berakhir, cut-off memindahkan saldo yang belum lunas ke tunggakan tahun lalu. Rincian SPP dan Komputer tetap disimpan per periode; tiap tahun hanya dapat di-cut-off satu kali.</p>
+                <div class="student-form-grid">
+                  <label>
+                    <span>Tahun ajaran yang ditutup</span>
+                    <select id="arrearCutoffYear"></select>
+                  </label>
+                </div>
+                <div class="form-actions">
+                  <button type="button" class="secondary-button" id="arrearCutoffBtn">Cut-off Tahun Ajaran</button>
+                </div>
+                <p id="arrearCutoffStatus" class="muted-copy" role="status" aria-live="polite"></p>
+              </section>
+              <p class="muted-copy">Input manual di bawah hanya untuk tunggakan lama yang belum tercatat pada tagihan bulanan. DPP, DPS, dan Seragam mengikuti saldo per anak sampai lunas, bukan dibuat ulang setiap tahun ajaran.</p>
               <div class="student-form-grid">
                 <div class="field">
                   <span>Siswa</span>
@@ -439,7 +454,7 @@
                   <small class="field-hint">Tanggal pencatatan saat transaksi disimpan tetap tercatat otomatis.</small>
                 </label>
               </div>
-              <p class="payment-billing-status" id="paymentBillingStatus" role="status" aria-live="polite">Pilih siswa untuk melihat sisa tagihan dan urutan alokasi.</p>
+              <div class="payment-billing-status" id="paymentBillingStatus" role="status" aria-live="polite">Pilih siswa untuk melihat sisa tagihan dan urutan alokasi.</div>
               <fieldset class="payment-allocation">
                 <legend>Alokasi pembayaran</legend>
                 <p class="muted-copy">SPP dan Komputer ditampilkan bersama per periode. Isi kolom BOS untuk memisahkan bantuan dari nominal SPP; penerimaan orang tua otomatis dihitung setelah dikurangi BOS. Untuk siswa baru, tambahkan DPP, DPS, seragam, kegiatan, serta SPP/Komputer bulan masuk dalam satu transaksi.</p>
@@ -773,6 +788,59 @@
         <div class="form-actions">
           <button type="button" class="secondary-button" id="studentCardPrintCancel">Batal</button>
           <button type="button" class="primary-button" id="studentCardPrintSubmit" disabled>Cetak pilihan</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="paymentHistoryDialog" class="payment-history-dialog">
+      <form method="dialog">
+        <div class="card-print-dialog-heading">
+          <div>
+            <h2>Riwayat Pembayaran Siswa</h2>
+            <p id="paymentHistoryStudent" class="muted-copy"></p>
+          </div>
+          <button type="button" class="modal-close" id="paymentHistoryClose" aria-label="Tutup">&times;</button>
+        </div>
+        <section class="payment-history-section" aria-labelledby="paymentPeriodTitle">
+          <div class="payment-history-section-heading">
+            <h3 id="paymentPeriodTitle">Status periode</h3>
+            <span id="paymentHistoryYear" class="report-pill"></span>
+          </div>
+          <p class="muted-copy">Status SPP dan komputer berdasarkan alokasi pembayaran untuk setiap periode tahun ajaran terpilih.</p>
+          <div class="table-wrap">
+            <table class="payment-history-table">
+              <thead><tr><th>Periode</th><th>SPP</th><th>Komputer</th></tr></thead>
+              <tbody id="paymentPeriodHistory">
+                <tr><td colspan="3" class="empty-state">Memuat status periode...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+        <section class="payment-history-section" aria-labelledby="paymentOneTimeTitle">
+          <h3 id="paymentOneTimeTitle">Rincian DPP, DPS, Seragam, dan Kegiatan</h3>
+          <p class="muted-copy">Nominal tagihan dibandingkan dengan pembayaran yang sudah dialokasikan.</p>
+          <div class="table-wrap">
+            <table class="payment-history-table payment-history-one-time-table">
+              <thead><tr><th>Komponen</th><th>Tagihan</th><th>Terbayar</th><th>Sisa</th><th>Status</th></tr></thead>
+              <tbody id="paymentOneTimeHistory">
+                <tr><td colspan="5" class="empty-state">Memuat rincian pembayaran...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+        <section class="payment-history-section" aria-labelledby="paymentTransactionsTitle">
+          <h3 id="paymentTransactionsTitle">Transaksi tercatat</h3>
+          <p class="muted-copy">Satu baris per nomor bukti; rincian alokasi dan total setor ditampilkan bersama.</p>
+          <div class="table-wrap">
+            <table class="payment-history-table">
+              <thead><tr><th>Tanggal</th><th>No. bukti</th><th>Rincian alokasi</th><th>Total setor</th><th>Status</th></tr></thead>
+              <tbody id="paymentTransactionHistory">
+                <tr><td colspan="5" class="empty-state">Memuat riwayat pembayaran...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+        <div class="form-actions">
+          <button type="button" class="secondary-button" id="paymentHistoryCancel">Tutup</button>
         </div>
       </form>
     </dialog>
