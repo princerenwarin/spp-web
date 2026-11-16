@@ -15,7 +15,4 @@ if not defined CHROME (
   exit /b 1
 )
 
-set "PRINT_ARGS=--kiosk-printing"
-if /I "%~1"=="setup" set "PRINT_ARGS="
-
-start "" "%CHROME%" --user-data-dir="%LocalAppData%\SPP-Card-Print-Chrome" %PRINT_ARGS% "%~dp0index.html"
+start "" "%CHROME%" --user-data-dir="%LocalAppData%\SPP-Card-Print-Chrome" "%~dp0index.html"

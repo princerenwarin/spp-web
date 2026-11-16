@@ -2992,6 +2992,31 @@ input[type='radio'] {
   min-width: 0;
 }
 
+.card-print-selection-toolbar {
+  align-items: center;
+  background: #f5f8fc;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.card-print-selection-toolbar p {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.card-print-selection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .card-print-note {
   color: var(--muted);
   font-size: 0.78rem;

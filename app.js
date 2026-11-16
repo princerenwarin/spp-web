@@ -1645,6 +1645,13 @@ function renderStudentCardPrintOptions(context, printHistory, preserveSelection 
   const oneTimeRows = context.rows.filter((row) => row.section === 'one_time');
   const monthlyRows = context.rows.filter((row) => row.section === 'monthly');
   ui.studentCardPrintOptions.innerHTML = [
+    `<div class="card-print-selection-toolbar">
+      <p>Pilih semua juga mencakup transaksi yang sudah pernah dicetak.</p>
+      <div class="card-print-selection-actions">
+        <button type="button" class="secondary-button small-button" data-card-selection="all"${context.rows.length ? '' : ' disabled'}>Pilih semua</button>
+        <button type="button" class="secondary-button small-button" data-card-selection="none"${context.rows.length ? '' : ' disabled'}>Kosongkan pilihan</button>
+      </div>
+    </div>`,
     renderStudentCardPrintGroup(
       'Pembayaran nonperiode',
       'one_time',
@@ -1672,6 +1679,9 @@ function updateStudentCardPrintSelectionUi() {
   const selected = [...ui.studentCardPrintOptions.querySelectorAll('[data-card-print-index]:checked')]
     .map((input) => context.rows[Number(input.dataset.cardPrintIndex)])
     .filter(Boolean);
+  ui.studentCardPrintOptions.querySelectorAll('[data-card-selection]').forEach((button) => {
+    button.disabled = !context.rows.length;
+  });
   const counts = { one_time: 0, monthly: 0 };
   const scheduledRows = new Map();
   selected.forEach((row) => {
@@ -5313,6 +5323,16 @@ function setupEvents() {
   });
   ui.studentCardPrintOptions.addEventListener('change', updateStudentCardPrintSelectionUi);
   ui.studentCardPrintOptions.addEventListener('click', (event) => {
+    const selectionButton = event.target.closest('[data-card-selection]');
+    if (selectionButton) {
+      const checked = selectionButton.dataset.cardSelection === 'all';
+      ui.studentCardPrintOptions.querySelectorAll('[data-card-print-index]').forEach((input) => {
+        input.checked = checked;
+      });
+      updateStudentCardPrintSelectionUi();
+      return;
+    }
+
     const button = event.target.closest('[data-card-reset]');
     if (button) resetStudentCardPrintPosition(button.dataset.cardReset);
   });
