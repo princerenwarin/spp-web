@@ -1433,7 +1433,7 @@ function buildStudentCardRows(items) {
         row.sortDate = sortDate;
         row.date = date;
       }
-      continue;
+      return;
     }
 
     let oneTimeColumn = '';
