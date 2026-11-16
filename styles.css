@@ -2783,7 +2783,7 @@ input[type='radio'] {
 }
 
 .daily-payment-breakdown {
-  margin-top: 20px;
+  display: none;
 }
 
 .daily-payment-breakdown h3 {
@@ -2791,39 +2791,82 @@ input[type='radio'] {
   margin: 0 0 10px;
 }
 
+.daily-payment-breakdown > .muted-copy {
+  font-size: 0.82rem;
+  margin: -4px 0 10px;
+}
+
 .daily-payment-detail-table {
-  min-width: 0;
+  font-variant-numeric: tabular-nums;
+  min-width: 1510px;
   table-layout: fixed;
 }
 
 .daily-payment-detail-table th:first-child,
 .daily-payment-detail-table td:first-child {
   text-align: center;
-  width: 7%;
+  width: 38px;
 }
 
 .daily-payment-detail-table th:nth-child(2),
 .daily-payment-detail-table td:nth-child(2) {
-  width: 34%;
+  width: 96px;
 }
 
 .daily-payment-detail-table th:nth-child(3),
 .daily-payment-detail-table td:nth-child(3) {
-  width: 34%;
+  width: 110px;
+}
+
+.daily-payment-detail-table th:nth-child(4),
+.daily-payment-detail-table td:nth-child(4) {
+  width: 150px;
+}
+
+.daily-payment-detail-table th:nth-child(5),
+.daily-payment-detail-table td:nth-child(5) {
+  width: 62px;
+}
+
+.daily-payment-detail-table th:nth-child(n + 6):nth-child(-n + 13),
+.daily-payment-detail-table td:nth-child(n + 6):nth-child(-n + 13) {
+  text-align: right;
+  white-space: nowrap;
+  width: 104px;
 }
 
 .daily-payment-detail-table th:last-child,
 .daily-payment-detail-table td:last-child {
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  white-space: nowrap;
-  width: 25%;
+  overflow-wrap: anywhere;
+  width: 240px;
 }
 
-.cash-source-label {
-  color: var(--muted);
-  display: block;
-  font-size: 0.8em;
+.daily-payment-detail-table thead th {
+  background: #203b63;
+  color: #fff;
+  white-space: normal;
+}
+
+.daily-payment-detail-table tbody tr:nth-child(even) {
+  background: #f1f5fa;
+}
+
+.daily-payment-detail-table .cash-bos-amount {
+  color: #b34d55;
+}
+
+.daily-payment-detail-table .cash-total-amount {
+  font-weight: 700;
+}
+
+.daily-payment-detail-table tfoot th {
+  background: #e3ebf5;
+  border-top: 2px solid #203b63;
+  color: #203b63;
+}
+
+.daily-payment-detail-table tfoot th:not(:first-child) {
+  white-space: nowrap;
 }
 
 .operator-code-input {
@@ -2865,68 +2908,154 @@ input[type='radio'] {
   margin: 8px 0 18px;
 }
 
-.payment-print {
-  color: #111;
-  font: 11pt/1.5 Georgia, "Times New Roman", serif;
+@page payment-receipt {
+  margin: 12mm;
+  size: A4 portrait;
+}
+
+@page cash-ledger {
+  margin: 8mm;
+  size: A4 landscape;
+}
+
+@page spp-card {
+  margin: 0;
+  size: 214mm 162mm;
+}
+
+.payment-receipt {
+  color: #151515;
+  font: 10pt/1.4 Arial, sans-serif;
   margin: 0 auto;
-  max-width: 170mm;
+  max-width: 186mm;
 }
 
-.payment-print h1 {
-  font-size: 18pt;
+.receipt-header {
+  align-items: start;
+  border-bottom: 2px solid #203b63;
+  display: grid;
+  gap: 12mm;
+  grid-template-columns: minmax(0, 1fr) 48mm;
+  padding-bottom: 7pt;
+}
+
+.receipt-heading {
+  text-align: center;
+}
+
+.receipt-heading h1 {
+  font-size: 15pt;
   margin: 0 0 4pt;
-  text-align: center;
 }
 
-.payment-print .payment-print-org {
-  margin: 0 0 24pt;
-  text-align: center;
+.receipt-heading p,
+.receipt-heading strong {
+  display: block;
+  margin: 2pt 0;
 }
 
-.payment-print table {
+.receipt-heading strong {
+  color: #203b63;
+  font-size: 12pt;
+}
+
+.receipt-number {
+  border-left: 1px solid #8a8a8a;
+  display: grid;
+  gap: 3pt 6pt;
+  grid-template-columns: max-content 1fr;
+  margin: 0;
+  padding-left: 8pt;
+}
+
+.receipt-number dt {
+  font-weight: 700;
+}
+
+.receipt-number dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.receipt-student {
+  margin: 8pt 0 12pt;
+}
+
+.receipt-student p {
+  display: grid;
+  gap: 4pt;
+  grid-template-columns: 25mm 1fr;
+  margin: 3pt 0;
+}
+
+.receipt-note {
+  margin: 8pt 0;
+}
+
+.receipt-table {
   border-collapse: collapse;
-  margin: 16pt 0;
+  table-layout: fixed;
   width: 100%;
 }
 
-.payment-print th,
-.payment-print td {
-  border: 1px solid #777;
-  padding: 6pt;
-  text-align: left;
+.receipt-table th,
+.receipt-table td {
+  border: 1px solid #656565;
+  padding: 4pt 5pt;
 }
 
-.payment-print .payment-print-total {
-  font-size: 12pt;
+.receipt-table thead th {
+  background: #dce7f3;
+  color: #172a46;
   font-weight: 700;
-  text-align: right;
 }
 
-.payment-print .payment-print-signatures {
+.receipt-table th:first-child,
+.receipt-table td:first-child {
+  text-align: center;
+  width: 9mm;
+}
+
+.receipt-table th:nth-child(2),
+.receipt-table td:nth-child(2) {
+  width: 78mm;
+}
+
+.receipt-table th:nth-child(3),
+.receipt-table td:nth-child(3) {
+  width: 52mm;
+}
+
+.receipt-table th:last-child,
+.receipt-table td:last-child {
+  text-align: right;
+  white-space: nowrap;
+  width: 40mm;
+}
+
+.receipt-table tfoot th {
+  border-top: 2px solid #203b63;
+  font-weight: 700;
+}
+
+.receipt-words {
+  margin: 10pt 0 18pt;
+}
+
+.receipt-operator {
+  font-size: 8pt;
+}
+
+.receipt-signatures {
   display: grid;
-  gap: 24pt;
   grid-template-columns: 1fr 1fr;
-  margin-top: 46pt;
+  margin-top: 12pt;
   text-align: center;
 }
 
-.payment-print .payment-print-signatures span {
+.receipt-signatures span {
   display: block;
-  margin-top: 54pt;
-}
-
-.payment-print .payment-print-meta {
-  display: grid;
-  gap: 4pt 12pt;
-  grid-template-columns: max-content 1fr;
-}
-
-.payment-print .payment-print-meta dt {
-  font-weight: 700;
-}
-
-.payment-print .payment-print-meta dd {
-  margin: 0;
+  margin-top: 32pt;
 }
 
 @media (max-width: 1050px) {
@@ -3057,60 +3186,27 @@ input[type='radio'] {
   }
 
   .daily-payment-detail-table {
-    min-width: 0;
+    min-width: 1510px;
   }
 
   .daily-payment-detail-table thead {
-    display: none;
+    display: table-header-group;
   }
 
-  .daily-payment-detail-table tbody tr:not(.empty-state-row) {
-    display: grid;
-    gap: 3px 8px;
-    grid-template-columns: minmax(0, 1fr) auto;
-    padding: 9px 10px;
+  .daily-payment-detail-table tbody tr {
+    display: table-row;
   }
 
   .daily-payment-detail-table tbody td {
-    border: 0;
-    min-width: 0;
-    overflow-wrap: anywhere;
-    padding: 0;
-    width: auto !important;
-  }
-
-  .daily-payment-detail-table tbody td:first-child {
-    display: none;
-  }
-
-  .daily-payment-detail-table tbody td:nth-child(2) {
-    grid-column: 1;
-    font-weight: 700;
-  }
-
-  .daily-payment-detail-table tbody td:nth-child(3) {
-    color: var(--muted);
-    font-size: 0.84rem;
-    grid-column: 1;
-  }
-
-  .daily-payment-detail-table tbody td:last-child {
-    align-self: center;
-    grid-column: 2;
-    grid-row: 1 / span 2;
-    font-size: 0.84rem;
-  }
-
-  .daily-payment-detail-table tbody td.empty-state {
-    display: block;
-    grid-column: 1 / -1;
+    padding: 8px 6px;
   }
 }
 
 @media print {
   body.printing-arrears > *:not(#arrearsPrintSheet),
   body.printing-payment > *:not(#paymentPrintSheet),
-  body.printing-daily-cash > *:not(#dailyCashPrintSheet) {
+  body.printing-daily-cash > *:not(#dailyCashPrintSheet),
+  body.printing-spp-card > *:not(#studentCardPrintSheet) {
     display: none !important;
   }
 
@@ -3130,7 +3226,7 @@ input[type='radio'] {
     color: #111;
     display: block !important;
     inset: 0;
-    padding: 18mm;
+    padding: 0;
     position: absolute;
     visibility: visible !important;
     width: 100%;
@@ -3141,10 +3237,125 @@ input[type='radio'] {
     color: #111;
     display: block !important;
     inset: 0;
-    padding: 18mm;
+    padding: 0;
     position: absolute;
     visibility: visible !important;
     width: 100%;
+  }
+
+  body.printing-spp-card {
+    background: #fff !important;
+    margin: 0 !important;
+  }
+
+  body.printing-spp-card #studentCardPrintSheet {
+    background: #fff;
+    color: #111;
+    display: block !important;
+    height: 162mm;
+    inset: 0;
+    margin: 0;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    visibility: visible !important;
+    width: 214mm;
+  }
+
+  .spp-card {
+    box-sizing: border-box;
+    color: #111;
+    font-family: Arial, sans-serif;
+    height: 162mm;
+    overflow: hidden;
+    page: spp-card;
+    position: relative;
+    width: 214mm;
+  }
+
+  .spp-card-identification {
+    display: grid;
+    gap: 2mm 4mm;
+    grid-template-columns: 2.4fr 0.8fr 1.2fr 1.35fr;
+    height: 15mm;
+    left: 5mm;
+    position: absolute;
+    right: 5mm;
+    top: 6mm;
+  }
+
+  .spp-card-identification div {
+    display: flex;
+    flex-direction: column;
+    gap: 1mm;
+    min-width: 0;
+  }
+
+  .spp-card-identification span {
+    font-size: 5.2pt;
+    line-height: 1;
+  }
+
+  .spp-card-identification strong {
+    font-size: 8pt;
+    font-weight: 600;
+    line-height: 1.1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .spp-card-grid {
+    display: grid;
+    grid-template-rows: repeat(16, 1fr);
+    height: 102mm;
+    position: absolute;
+    top: 38.5mm;
+  }
+
+  .spp-card-grid-one-time {
+    grid-template-columns: 13.9mm 15.6mm 15.3mm 13.1mm 12.3mm 15mm 14.5mm;
+    left: 4.2mm;
+    width: 99.7mm;
+  }
+
+  .spp-card-grid-monthly {
+    grid-template-columns: 13.2mm 14.6mm 14.6mm 11.5mm 10.3mm 14.6mm 14.5mm;
+    left: 112.5mm;
+    width: 93.3mm;
+  }
+
+  .spp-card-row {
+    display: grid;
+    min-height: 0;
+  }
+
+  .spp-card-grid-one-time .spp-card-row {
+    grid-template-columns: 13.9mm 15.6mm 15.3mm 13.1mm 12.3mm 15mm 14.5mm;
+  }
+
+  .spp-card-grid-monthly .spp-card-row {
+    grid-template-columns: 13.2mm 14.6mm 14.6mm 11.5mm 10.3mm 14.6mm 14.5mm;
+  }
+
+  .spp-card-cell {
+    align-self: center;
+    font-size: 5.2pt;
+    line-height: 1;
+    overflow: hidden;
+    padding: 0 0.5mm;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .spp-card-cell-date,
+  .spp-card-cell-period {
+    font-size: 5.6pt;
+    text-align: center;
+  }
+
+  .spp-card-cell-blank {
+    visibility: hidden;
   }
 
   .print-letter {
@@ -3159,71 +3370,10 @@ input[type='radio'] {
     text-align: center;
   }
 
-  .print-cash-report h1 {
-    font-size: 18pt;
-    margin: 0;
-    text-align: center;
-  }
-
-  .print-cash-meta {
-    border-bottom: 2px solid #1f3a5b;
-    margin-top: 6pt;
-  }
-
-  .print-cash-meta p {
-    font-size: 9pt;
-    margin: 5pt 0;
-    text-align: right;
-  }
-
   .print-letter table {
     border-collapse: collapse;
     margin: 18pt 0;
     width: 100%;
-  }
-
-  .print-cash-report table {
-    min-width: 0;
-    table-layout: fixed;
-    width: 100%;
-  }
-
-  .print-cash-report thead {
-    display: table-header-group;
-  }
-
-  .print-cash-report tbody tr {
-    display: table-row;
-  }
-
-  .print-cash-report th,
-  .print-cash-report td {
-    display: table-cell;
-    padding: 6pt 5pt;
-  }
-
-  .print-cash-report th:first-child,
-  .print-cash-report td:first-child {
-    text-align: center;
-    width: 7%;
-  }
-
-  .print-cash-report th:nth-child(2),
-  .print-cash-report td:nth-child(2) {
-    width: 34%;
-  }
-
-  .print-cash-report th:nth-child(3),
-  .print-cash-report td:nth-child(3) {
-    overflow-wrap: anywhere;
-    width: 34%;
-  }
-
-  .print-cash-report th:last-child,
-  .print-cash-report td:last-child {
-    text-align: right;
-    white-space: nowrap;
-    width: 25%;
   }
 
   .print-letter th,
@@ -3233,76 +3383,280 @@ input[type='radio'] {
     text-align: left;
   }
 
-  .print-cash-report tfoot th {
-    border-top: 2px solid #111;
+  .payment-receipt {
+    color: #151515;
+    font: 9pt/1.35 Arial, sans-serif;
+    margin: 0 auto;
+    max-width: none;
+    page: payment-receipt;
+    width: 100%;
+  }
+
+  .payment-receipt-page-break {
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .receipt-header {
+    grid-template-columns: minmax(0, 1fr) 48mm;
+  }
+
+  .receipt-table {
+    margin: 12pt 0;
+  }
+
+  .receipt-table th,
+  .receipt-table td {
+    padding: 4pt 5pt;
+  }
+
+  .receipt-operator {
+    font-size: 7.5pt;
+  }
+
+  .receipt-signatures {
+    margin-top: 8pt;
+  }
+
+  .receipt-signatures span {
+    margin-top: 28pt;
+  }
+
+  .print-cash-report {
+    color: #17212f;
+    font: 6.2pt/1.2 Arial, sans-serif;
+    page: cash-ledger;
+    width: 100%;
+  }
+
+  .cash-report-sources {
+    font-size: 7pt;
+    margin: 0 0 2mm;
+  }
+
+  .cash-report-header {
+    align-items: start;
+    border-bottom: 2px solid #203b63;
+    display: grid;
+    gap: 6mm;
+    grid-template-columns: minmax(0, 1fr) 52mm;
+    margin-bottom: 4mm;
+    padding-bottom: 2mm;
+  }
+
+  .cash-report-header h1 {
+    color: #203b63;
+    font-size: 12pt;
+    margin: 0 0 2mm;
+  }
+
+  .cash-report-header p {
+    font-size: 8pt;
+    font-style: italic;
+    margin: 0;
+  }
+
+  .cash-report-header dl {
+    display: grid;
+    gap: 2pt 5pt;
+    grid-template-columns: max-content 1fr;
+    margin: 0;
+  }
+
+  .cash-report-header dt {
     font-weight: 700;
   }
 
-  .cash-receipt-header {
-    align-items: center;
-    border-bottom: 2px solid #1f3a5b;
-    display: grid;
-    gap: 10pt;
-    grid-template-columns: 20mm minmax(0, 1fr) 43mm;
-    padding-bottom: 8pt;
-  }
-
-  .cash-receipt-header > img {
-    height: 18mm;
-    object-fit: contain;
-    width: 18mm;
-  }
-
-  .cash-receipt-title {
-    text-align: center;
-  }
-
-  .cash-receipt-title > p {
-    font-size: 9pt;
+  .cash-report-header dd {
     margin: 0;
   }
 
-  .cash-receipt-title > h1 {
-    margin: 3pt 0;
-    text-transform: uppercase;
+  .print-account-summary {
+    break-before: page;
+    page-break-before: always;
   }
 
-  .cash-receipt-header dl {
-    border-left: 1px solid #777;
-    display: grid;
-    font-size: 9pt;
-    grid-template-columns: 13mm 1fr;
-    margin: 0;
-    padding-left: 8pt;
+  .print-account-summary h2 {
+    border-bottom: 1px solid #203b63;
+    color: #203b63;
+    font-size: 11pt;
+    margin: 0 0 4mm;
+    padding-bottom: 2mm;
   }
 
-  .cash-receipt-header dt {
-    font-weight: 700;
+  .print-account-summary table {
+    border-collapse: collapse;
+    table-layout: fixed;
+    width: 100%;
   }
 
-  .cash-receipt-header dd {
-    margin: 0;
+  .print-account-summary th,
+  .print-account-summary td {
+    border: 1px solid #8a96a5;
+    padding: 5pt;
+    text-align: left;
+  }
+
+  .print-account-summary th:nth-child(2),
+  .print-account-summary td:nth-child(2) {
+    text-align: right;
+    width: 42mm;
+  }
+
+  .print-account-summary tfoot th {
+    background: #e8eef5 !important;
+    color: #172a46 !important;
+  }
+
+  .print-cash-report table {
+    border-collapse: collapse;
+    min-width: 0;
+    table-layout: fixed;
+    width: 100%;
+  }
+
+  .print-cash-report thead {
+    display: table-header-group;
+  }
+
+  .print-cash-report tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .print-cash-report th,
+  .print-cash-report td {
+    border: 1px solid #8a96a5;
     overflow-wrap: anywhere;
+    padding: 3pt 2pt;
+    vertical-align: middle;
   }
 
-  .print-cash-words {
-    margin: 12pt 0 24pt;
-  }
-
-  .print-cash-note {
-    font-size: 10pt;
-  }
-
-  .print-cash-signatures {
-    display: flex;
-    justify-content: space-around;
-    margin-top: 35pt;
+  .print-cash-report thead th {
+    background: #203b63 !important;
+    color: #fff !important;
+    font-size: 6pt;
+    line-height: 1.1;
     text-align: center;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
 
-  .print-cash-signatures span {
-    display: block;
-    margin-top: 40pt;
+  .print-cash-report th:first-child,
+  .print-cash-report td:first-child {
+    text-align: center;
+    width: 2.5%;
+  }
+
+  .print-cash-report th:nth-child(2),
+  .print-cash-report td:nth-child(2) { width: 7%; }
+  .print-cash-report th:nth-child(3),
+  .print-cash-report td:nth-child(3) { width: 8%; }
+  .print-cash-report th:nth-child(4),
+  .print-cash-report td:nth-child(4) { width: 11%; }
+  .print-cash-report th:nth-child(5),
+  .print-cash-report td:nth-child(5) { width: 4%; }
+
+  .print-cash-report th:nth-child(n + 6):nth-child(-n + 13),
+  .print-cash-report td:nth-child(n + 6):nth-child(-n + 13) {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .print-cash-report th:nth-child(6),
+  .print-cash-report td:nth-child(6),
+  .print-cash-report th:nth-child(13),
+  .print-cash-report td:nth-child(13) { width: 8%; }
+
+  .print-cash-report th:nth-child(7),
+  .print-cash-report td:nth-child(7),
+  .print-cash-report th:nth-child(8),
+  .print-cash-report td:nth-child(8),
+  .print-cash-report th:nth-child(9),
+  .print-cash-report td:nth-child(9),
+  .print-cash-report th:nth-child(10),
+  .print-cash-report td:nth-child(10),
+  .print-cash-report th:nth-child(12),
+  .print-cash-report td:nth-child(12) { width: 6%; }
+
+  .print-cash-report th:nth-child(11),
+  .print-cash-report td:nth-child(11) { width: 7%; }
+
+  .print-cash-report th:last-child,
+  .print-cash-report td:last-child { width: 14.5%; }
+
+  .print-cash-report thead th {
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+
+  .print-cash-report tfoot th:not(:first-child) {
+    white-space: nowrap;
+  }
+
+  .print-cash-report tbody tr:nth-child(even) {
+    background: #f1f5fa !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .print-cash-report .cash-school-group {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .print-cash-report .cash-school-group th {
+    background: #dce7f3 !important;
+    color: #203b63;
+    font-size: 7pt;
+    text-align: left;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .print-cash-report .cash-bos-amount {
+    color: #a33845;
+  }
+
+  .print-cash-report .cash-total-amount {
+    font-weight: 700;
+  }
+
+  .print-cash-report tfoot th {
+    background: #e3ebf5 !important;
+    border-top: 2px solid #203b63;
+    color: #203b63;
+    font-weight: 700;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .print-account-summary table {
+    font-size: 9pt;
+  }
+
+  .print-account-summary thead th {
+    font-size: 8pt;
+    line-height: 1.2;
+    text-align: left;
+  }
+
+  .print-account-summary th:first-child,
+  .print-account-summary td:first-child {
+    text-align: left;
+    width: 65%;
+  }
+
+  .print-account-summary th:nth-child(2),
+  .print-account-summary td:nth-child(2) {
+    text-align: right;
+    width: 20%;
+  }
+
+  .print-account-summary th:last-child,
+  .print-account-summary td:last-child {
+    text-align: left;
+    width: 15%;
   }
 
   .print-date {

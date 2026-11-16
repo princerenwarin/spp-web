@@ -138,15 +138,22 @@
                 </table>
               </div>
               <div class="daily-payment-breakdown">
-                <h3>Rincian menurut jenis penerimaan</h3>
+                <h3>Rincian per kuitansi</h3>
+                <p class="muted-copy">Satu baris per kuitansi dan siswa. Geser tabel ke samping untuk melihat seluruh komponen.</p>
                 <div class="table-wrap">
                   <table class="daily-payment-detail-table">
                     <thead>
-                      <tr><th>No.</th><th>Jenis penerimaan / sumber</th><th>Bulan / keterangan</th><th>Jumlah (Rp)</th></tr>
+                      <tr>
+                        <th>No.</th><th>Tanggal</th><th>No. Kwitansi</th><th>Nama Siswa</th><th>Kelas</th>
+                        <th>SPP + Komp<br>(Rp)</th><th>DPP<br>(Rp)</th><th>DPS<br>(Rp)</th><th>Seragam<br>(Rp)</th>
+                        <th>Kegiatan<br>(Rp)</th><th>Potongan BOS<br>(Rp)</th><th>Lainnya<br>(Rp)</th>
+                        <th>Total Diterima<br>(Rp)</th><th>Keterangan</th>
+                      </tr>
                     </thead>
                     <tbody id="dailyPaymentBreakdown">
-                      <tr><td colspan="4" class="empty-state">Rincian muncul setelah rekap dimuat.</td></tr>
+                      <tr><td colspan="14" class="empty-state">Rincian muncul setelah rekap dimuat.</td></tr>
                     </tbody>
+                    <tfoot id="dailyPaymentBreakdownTotal"></tfoot>
                   </table>
                 </div>
               </div>
@@ -740,6 +747,7 @@
     <div id="arrearsPrintSheet" hidden></div>
     <div id="paymentPrintSheet" hidden></div>
     <div id="dailyCashPrintSheet" hidden></div>
+    <div id="studentCardPrintSheet" hidden></div>
     <script src="./config.js"></script>
     <script src="./vendor/xlsx.mini.min.js"></script>
     <script src="./app.js"></script>

@@ -92,6 +92,7 @@ const PAYMENT_COMPONENTS = [
   ['komp_tl', 'Komputer tahun lalu'],
   ['lainnya', 'Lainnya']
 ];
+const STUDENT_CARD_ROW_COUNT = 16;
 const REVENUE_COLORS = ['#176b55', '#4968d4', '#b26b1c', '#7652a8', '#c34c5b', '#267d91', '#7b7f25', '#a05083'];
 
 const pageMap = {
@@ -116,9 +117,11 @@ const ui = {
   dailyPaymentSummary: document.getElementById('dailyPaymentSummary'),
   dailyPaymentSummaryTotal: document.getElementById('dailyPaymentSummaryTotal'),
   dailyPaymentBreakdown: document.getElementById('dailyPaymentBreakdown'),
+  dailyPaymentBreakdownTotal: document.getElementById('dailyPaymentBreakdownTotal'),
   dailyPaymentSummaryStatus: document.getElementById('dailyPaymentSummaryStatus'),
   dailyCashPrint: document.getElementById('printDailyCashBtn'),
   dailyCashPrintSheet: document.getElementById('dailyCashPrintSheet'),
+  studentCardPrintSheet: document.getElementById('studentCardPrintSheet'),
   studentTableBody: document.getElementById('studentTableBody'),
   studentForm: document.getElementById('studentForm'),
   studentNama: document.getElementById('studentNama'),
@@ -1134,12 +1137,12 @@ function drawStudentTable() {
         <td data-label="Rincian tagihan">${row.isStaffChild && row.showInBilling === false ? 'Tidak ditagih' : billBreakdownMarkup(row, arrearsTotal)}</td>
         <td data-label="Riwayat pembayaran"><span class="payment-history-note">${totalBayar > 0 ? `Transaksi tercatat ${formatRupiah(totalBayar)}` : 'Belum ada transaksi'}</span></td>
         <td data-label="Aksi" class="row-actions">
+          <button class="action-btn edit" data-action="print-spp-card" data-id="${escapeHtml(row.id)}" data-nospp="${escapeHtml(row.nospp)}" data-kdsek="${escapeHtml(row.kdsek)}" data-nama="${escapeHtml(row.nama)}" data-kdkls="${escapeHtml(row.kdkls)}">Cetak Kartu</button>
           ${admin && row.tahunAjaran ? `
             <button class="action-btn edit" data-action="edit-student" data-nospp="${escapeHtml(row.nospp)}">Ubah Tagihan</button>
           ` : ''}
           ${admin && selectable ? `<button class="action-btn edit" data-action="arrear-student" data-id="${escapeHtml(row.id)}">Tunggakan</button>` : ''}
           ${admin && selectable ? `<button class="action-btn edit" data-action="rename-student" data-id="${escapeHtml(row.id)}" data-name="${escapeHtml(row.nama)}">Ubah Nama</button>` : ''}
-          ${admin ? '' : '-'}
         </td>
       </tr>
     `;
@@ -1314,6 +1317,9 @@ function drawPaymentList() {
           ? `<small>Termasuk BOS ${formatRupiah(row.bos_nominal)}</small>` : ''}
       </td>
       <td>
+        ${row.source !== 'bos' && row.nospp
+          ? `<button class="secondary-button small-button" data-action="print-spp-card" data-id="${escapeHtml(row.id_siswa || '')}" data-nospp="${escapeHtml(row.nospp)}" data-kdsek="${escapeHtml(row.kdsek || '')}" data-nama="${escapeHtml(row.nama || '')}">Cetak Kartu</button>`
+          : ''}
         <button class="secondary-button small-button" data-action="print-payment" data-id="${escapeHtml(row.id)}">Cetak slip</button>
         ${row.voided_at
           ? `<button class="secondary-button small-button" data-action="print-correction" data-id="${escapeHtml(row.id)}">Cetak koreksi</button>`
@@ -1321,6 +1327,253 @@ function drawPaymentList() {
       </td>
     </tr>
   `).join('');
+}
+
+function getStudentCardAcademicYearRange() {
+  const year = currentYearScope() || currentAcademicYear();
+  const match = /^(\d{4})-(\d{4})$/.exec(year);
+  if (!match || Number(match[2]) !== Number(match[1]) + 1) {
+    throw new Error('Tahun ajaran aktif tidak valid untuk cetak kartu.');
+  }
+  return {
+    year,
+    start: `${match[1]}-07-01`,
+    end: `${match[2]}-07-01`
+  };
+}
+
+async function loadStudentCardTransactions(student, range) {
+  if (!app.server) {
+    return getAccessibleTransactionRows(false).filter((row) => (
+      String(row.nospp || '') === student.nospp
+      && String(row.kdsek || '') === student.kdsek
+      && (!row.id_siswa || !student.id || String(row.id_siswa) === student.id)
+      && String(row.tglbyr || '').slice(0, 10) >= range.start
+      && String(row.tglbyr || '').slice(0, 10) < range.end
+    ));
+  }
+
+  const rows = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    let query = app.supabase.from('spp_app_payment_batch_items')
+      .select('batch_id,payment_id,tglbyr,id_siswa,nospp,nama,kdsek,kdkls,component,periode,nominal,voided_at')
+      .eq('nospp', student.nospp)
+      .eq('kdsek', student.kdsek)
+      .gte('tglbyr', range.start)
+      .lt('tglbyr', range.end)
+      .is('voided_at', null)
+      .order('tglbyr', { ascending: true })
+      .order('payment_id', { ascending: true });
+    if (/^\d+$/.test(student.id)) query = query.eq('id_siswa', student.id);
+    const { data, error } = await query.range(from, from + pageSize - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
+  return rows;
+}
+
+function formatStudentCardDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ''));
+  return match ? `${match[3]}/${match[2]}` : '';
+}
+
+function formatStudentCardPeriod(value) {
+  const period = String(value || '').trim();
+  if (/^(0[1-9]|1[0-2])\d{4}$/.test(period)) return period;
+  const month = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(period);
+  return month ? `${month[2]}${month[1]}` : '';
+}
+
+function buildStudentCardRows(items) {
+  const oneTimeRows = new Map();
+  const monthlyRows = new Map();
+  let unallocatedCount = 0;
+
+  items.forEach((item, index) => {
+    const amount = Number(item.nominal || 0);
+    if (!Number.isFinite(amount) || amount < 0) {
+      throw new Error('Nominal transaksi tidak valid; kartu SPP tidak dicetak.');
+    }
+    if (!amount) return;
+
+    const sortDate = String(item.tglbyr || '').slice(0, 10);
+    const date = formatStudentCardDate(sortDate);
+    const period = formatStudentCardPeriod(item.periode);
+    const component = String(item.component || 'legacy');
+    const batchId = String(item.batch_id || item.payment_id || item.id || `row-${index}`);
+    const itemKey = `${batchId}|${period || 'once'}`;
+
+    let monthlyColumn = '';
+    if (['spp', 'spp_bos', 'spp_tl'].includes(component)) monthlyColumn = 'spp';
+    if (['komp', 'komp_tl'].includes(component)) monthlyColumn = 'komp';
+    if (component === 'giat' && period) monthlyColumn = 'giat';
+
+    if (monthlyColumn) {
+      if (!period) {
+        unallocatedCount += 1;
+        return;
+      }
+      if (!monthlyRows.has(itemKey)) {
+        monthlyRows.set(itemKey, {
+          date,
+          sortDate,
+          period,
+          periodOrder: Number(period.slice(2)) * 100 + Number(period.slice(0, 2)),
+          spp: 0,
+          komp: 0,
+          giat: 0,
+          orderId: batchId
+        });
+      }
+      const row = monthlyRows.get(itemKey);
+      row[monthlyColumn] += amount;
+      if (sortDate && (!row.sortDate || sortDate < row.sortDate)) {
+        row.sortDate = sortDate;
+        row.date = date;
+      }
+      continue;
+    }
+
+    let oneTimeColumn = '';
+    if (component === 'dpp' || component === 'dpp_tl') oneTimeColumn = 'dpp';
+    if (component === 'dsp') oneTimeColumn = 'dps';
+    if (component === 'giat' || component === 'seragam' || component === 'lainnya') {
+      oneTimeColumn = component === 'giat' ? 'giat' : 'admin';
+    }
+    if (!oneTimeColumn) {
+      unallocatedCount += 1;
+      return;
+    }
+
+    if (!oneTimeRows.has(itemKey)) {
+      oneTimeRows.set(itemKey, {
+        date,
+        sortDate,
+        dpp: 0,
+        dps: 0,
+        giat: 0,
+        admin: 0,
+        orderId: batchId
+      });
+    }
+    const row = oneTimeRows.get(itemKey);
+    row[oneTimeColumn] += amount;
+    if (sortDate && (!row.sortDate || sortDate < row.sortDate)) {
+      row.sortDate = sortDate;
+      row.date = date;
+    }
+  });
+
+  const compareDateThenId = (a, b) => (
+    a.sortDate.localeCompare(b.sortDate) || a.orderId.localeCompare(b.orderId)
+  );
+  return {
+    oneTimeRows: [...oneTimeRows.values()].sort(compareDateThenId),
+    monthlyRows: [...monthlyRows.values()].sort((a, b) => (
+      a.periodOrder - b.periodOrder || compareDateThenId(a, b)
+    )),
+    unallocatedCount
+  };
+}
+
+function formatStudentCardAmount(value) {
+  return value ? Number(value).toLocaleString('id-ID') : '';
+}
+
+function renderStudentCardGrid(rows, fields) {
+  const gridRows = [...rows, ...Array.from(
+    { length: Math.max(0, STUDENT_CARD_ROW_COUNT - rows.length) },
+    () => null
+  )];
+  return gridRows.map((row) => `
+    <div class="spp-card-row">
+      ${fields.map(({ key, align = 'amount' }) => {
+        const value = row
+          ? (key === 'date' ? row.date : key === 'period' ? row.period : formatStudentCardAmount(row[key]))
+          : '';
+        return `<span class="spp-card-cell spp-card-cell-${align}">${escapeHtml(value || '')}</span>`;
+      }).join('')}
+    </div>
+  `).join('');
+}
+
+function renderStudentSppCard(student, rows, year) {
+  ui.studentCardPrintSheet.innerHTML = `
+    <article class="spp-card">
+      <header class="spp-card-identification">
+        <div><span>Nama</span><strong>${escapeHtml(student.nama)}</strong></div>
+        <div><span>Kelas</span><strong>${escapeHtml(student.kdkls || '-')}</strong></div>
+        <div><span>No. SPP</span><strong>${escapeHtml(student.nospp)}</strong></div>
+        <div><span>Tahun Ajaran</span><strong>${escapeHtml(year)}</strong></div>
+      </header>
+      <section class="spp-card-grid spp-card-grid-one-time" aria-label="Pembayaran nonbulanan">
+        ${renderStudentCardGrid(rows.oneTimeRows, [
+          { key: 'date', align: 'date' },
+          { key: 'dpp' },
+          { key: 'dps' },
+          { key: 'giat' },
+          { key: 'admin' },
+          { key: 'ortu', align: 'blank' },
+          { key: 'kkms', align: 'blank' }
+        ])}
+      </section>
+      <section class="spp-card-grid spp-card-grid-monthly" aria-label="Pembayaran per periode">
+        ${renderStudentCardGrid(rows.monthlyRows, [
+          { key: 'date', align: 'date' },
+          { key: 'period', align: 'period' },
+          { key: 'spp' },
+          { key: 'komp' },
+          { key: 'giat' },
+          { key: 'ortu', align: 'blank' },
+          { key: 'kkms', align: 'blank' }
+        ])}
+      </section>
+    </article>`;
+  ui.studentCardPrintSheet.hidden = false;
+  document.body.classList.add('printing-spp-card');
+  window.print();
+}
+
+async function printStudentSppCard(candidate) {
+  if (!app.user) throw new Error('Silakan masuk terlebih dahulu untuk mencetak kartu SPP.');
+  const currentStudent = app.state.siswa.find((row) => (
+    String(row.nospp || '') === String(candidate.nospp || '')
+    && String(row.kdsek || '') === String(candidate.kdsek || '')
+  ));
+  const student = {
+    id: String(candidate.id || candidate.id_siswa || (currentStudent && currentStudent.id) || ''),
+    nospp: String(candidate.nospp || (currentStudent && currentStudent.nospp) || '').trim(),
+    kdsek: String(candidate.kdsek || (currentStudent && currentStudent.kdsek) || '').trim(),
+    nama: String(candidate.nama || (currentStudent && currentStudent.nama) || '').trim(),
+    kdkls: String(candidate.kdkls || (currentStudent && currentStudent.kdkls) || '').trim()
+  };
+  if (!student.nospp || !student.kdsek) {
+    throw new Error('Identitas siswa belum lengkap untuk mencetak kartu SPP.');
+  }
+  if (app.user.role === 'unit' && student.kdsek !== app.user.unit) {
+    throw new Error('Anda tidak memiliki akses ke kartu siswa dari unit lain.');
+  }
+
+  const range = getStudentCardAcademicYearRange();
+  const items = await loadStudentCardTransactions(student, range);
+  const firstItem = items[0] || {};
+  student.nama = student.nama || firstItem.nama || '';
+  student.kdkls = student.kdkls || firstItem.kdkls || '';
+  if (!student.nama) throw new Error('Nama siswa tidak ditemukan untuk kartu SPP.');
+
+  const rows = buildStudentCardRows(items);
+  if (
+    rows.oneTimeRows.length > STUDENT_CARD_ROW_COUNT
+    || rows.monthlyRows.length > STUDENT_CARD_ROW_COUNT
+  ) {
+    throw new Error('Jumlah transaksi melebihi kapasitas baris kartu. Hubungi Admin sebelum mencetak.');
+  }
+  if (rows.unallocatedCount) {
+    alert(`${rows.unallocatedCount} transaksi lama belum memiliki rincian komponen dan tidak dimasukkan ke kartu.`);
+  }
+  renderStudentSppCard(student, rows, range.year);
 }
 
 function normalizeSupabasePaymentBatch(row) {
@@ -1423,87 +1676,200 @@ function renderDailyPaymentSummary(summary) {
   ui.dailyPaymentSummaryStatus.textContent = '';
 }
 
-function getDailyPaymentBreakdownRows(items) {
-  const componentLabels = {
-    dpp: ['DPP', 2],
-    dsp: ['DPS', 3],
-    seragam: ['Seragam', 4],
-    giat: ['Kegiatan', 5],
-    lainnya: ['Lainnya', 7],
-    dpp_tl: ['DPP tahun lalu', 8],
-    spp_tl: ['SPP tahun lalu', 9],
-    komp_tl: ['Komputer tahun lalu', 10],
-    legacy: ['Pembayaran lama belum dialokasikan', 11]
-  };
-  const sourceOrder = { manual: 0, upload: 1, bos: 2, legacy: 3 };
-  const sourceLabels = { manual: 'Manual', upload: 'Impor', bos: 'BOS', legacy: 'Riwayat lama' };
-  const groups = new Map();
+const PAYMENT_RECEIPT_CATEGORIES = [
+  { key: 'sppKomp', label: 'SPP + Komputer' },
+  { key: 'dpp', label: 'DPP' },
+  { key: 'dps', label: 'DPS' },
+  { key: 'seragam', label: 'Seragam' },
+  { key: 'giat', label: 'Kegiatan' },
+  { key: 'bos', label: 'Potongan BOS' },
+  { key: 'lainnya', label: 'Lainnya' }
+];
+const DAILY_PAYMENT_LEDGER_COLUMN_COUNT = 14;
 
-  const addItem = (item, type, typeOrder, sourceLabel, amount) => {
-    const period = String(item.periode || '');
-    const notes = String(item.notes || '').trim();
-    const detail = [period ? formatPeriodLabel(period) : '', notes].filter(Boolean).join(' · ') || '-';
-    const key = `${type}|${sourceLabel}|${period}|${notes}`;
-    const group = groups.get(key);
-    if (group) {
-      group.amount += amount;
-      group.count += 1;
-    } else {
+function getPaymentReceiptAllocations(item, source) {
+  const component = String(item.component || 'legacy');
+  const amount = Math.abs(Number(item.nominal || 0));
+  if (!amount) return [];
+  if (source === 'bos') return [{ category: 'bos', amount }];
+  if (component === 'spp_bos') {
+    return [{ category: 'sppKomp', amount }, { category: 'bos', amount }];
+  }
+  if (['spp', 'komp', 'spp_tl', 'komp_tl'].includes(component)) {
+    return [{ category: 'sppKomp', amount }];
+  }
+  if (['dpp', 'dpp_tl'].includes(component)) return [{ category: 'dpp', amount }];
+  if (component === 'dsp') return [{ category: 'dps', amount }];
+  if (component === 'seragam') return [{ category: 'seragam', amount }];
+  if (component === 'giat') return [{ category: 'giat', amount }];
+  return [{ category: 'lainnya', amount }];
+}
+
+function formatPaymentPeriodSpan(periods) {
+  const sorted = [...new Set(periods.filter((period) => /^(0[1-9]|1[0-2])\d{4}$/.test(period)))]
+    .sort((a, b) => paymentPeriodSequence(a) - paymentPeriodSequence(b));
+  if (!sorted.length) return '';
+  if (sorted.length === 1) return formatPeriodLabel(sorted[0]);
+  const firstSequence = paymentPeriodSequence(sorted[0]);
+  const lastSequence = paymentPeriodSequence(sorted[sorted.length - 1]);
+  if (lastSequence - firstSequence + 1 !== sorted.length) {
+    return sorted.map(formatPeriodLabel).join(', ');
+  }
+  const firstYear = sorted[0].slice(2);
+  const lastYear = sorted[sorted.length - 1].slice(2);
+  if (firstYear === lastYear) {
+    const firstMonth = formatPeriodLabel(sorted[0]).replace(/\s+\d{4}$/, '');
+    const lastMonth = formatPeriodLabel(sorted[sorted.length - 1]).replace(/\s+\d{4}$/, '');
+    return `${firstMonth} s.d. ${lastMonth} ${lastYear} (${sorted.length} bulan)`;
+  }
+  return `${formatPeriodLabel(sorted[0])} s.d. ${formatPeriodLabel(sorted[sorted.length - 1])} (${sorted.length} bulan)`;
+}
+
+function getPaymentReceiptRows(items, batchSource = '') {
+  const rows = PAYMENT_RECEIPT_CATEGORIES.map((category) => ({
+    ...category,
+    amount: 0,
+    periods: []
+  }));
+  const byCategory = new Map(rows.map((row) => [row.key, row]));
+  items.forEach((item) => {
+    const source = item.source || batchSource || 'legacy';
+    getPaymentReceiptAllocations(item, source).forEach(({ category, amount }) => {
+      const row = byCategory.get(category);
+      if (!row) return;
+      row.amount += amount;
+      if (item.periode) row.periods.push(String(item.periode));
+    });
+  });
+  return rows.map((row) => ({
+    ...row,
+    detail: formatPaymentPeriodSpan(row.periods) || '-'
+  }));
+}
+
+function getDailyPaymentLedgerRows(items) {
+  const groups = new Map();
+  items.forEach((item) => {
+    const batchId = String(item.batch_id || item.receipt_no || item.id || '');
+    const studentId = String(item.id_siswa || item.nospp || item.nama || 'tanpa-siswa');
+    const key = `${batchId}|${studentId}`;
+    if (!groups.has(key)) {
       groups.set(key, {
-        type,
-        typeOrder,
-        source: sourceLabel,
-        sourceOrder: sourceOrder[item.source] ?? sourceOrder.legacy,
-        period: period ? paymentPeriodSequence(period) : Number.MAX_SAFE_INTEGER,
-        detail,
-        amount,
-        count: 1
+        batchId,
+        receiptNo: item.receipt_no || `LEGACY-${batchId}`,
+        date: item.tglbyr || '',
+        studentId,
+        studentName: item.nama || 'Siswa',
+        schoolCode: item.kdsek || '',
+        className: item.kdkls || '',
+        sources: new Set(),
+        notes: new Set(),
+        amounts: Object.fromEntries(PAYMENT_RECEIPT_CATEGORIES.map(({ key: category }) => [category, 0])),
+        periods: Object.fromEntries(PAYMENT_RECEIPT_CATEGORIES.map(({ key: category }) => [category, []]))
       });
     }
-  };
+    const row = groups.get(key);
+    const source = item.source || 'legacy';
+    row.sources.add(source);
+    if (item.notes || item.ket) row.notes.add(String(item.notes || item.ket).trim());
+    const student = app.state.siswa.find((candidate) => (
+      String(candidate.id_siswa || '') === studentId
+      || String(candidate.nospp || '') === String(item.nospp || '')
+    ));
+    if (!row.className && student?.kdkls) row.className = student.kdkls;
+    if (row.studentName === 'Siswa' && student?.nama) row.studentName = student.nama;
+    if (!row.schoolCode) row.schoolCode = item.kdsek || student?.kdsek || '';
 
-  items.forEach((item) => {
-    const component = String(item.component || 'legacy');
-    const source = Object.prototype.hasOwnProperty.call(sourceLabels, item.source)
-      ? item.source
-      : 'legacy';
-    const amount = Number(item.nominal || 0);
-    const sourceLabel = sourceLabels[source];
-    if (source === 'bos') {
-      addItem(item, 'Potongan BOS', 6, 'BOS', -Math.abs(amount));
-      return;
-    }
-    if (component === 'spp_bos') {
-      addItem(item, 'SPP + Komputer', 1, sourceLabel, amount);
-      addItem(item, 'Potongan BOS', 6, `${sourceLabel} / BOS`, -Math.abs(amount));
-      return;
-    }
-    const label = component === 'spp' || component === 'komp'
-      ? ['SPP + Komputer', 1]
-      : (componentLabels[component] || [getPaymentComponentLabel(component), 11]);
-    addItem(item, label[0], label[1], sourceLabel, amount);
+    getPaymentReceiptAllocations(item, source).forEach(({ category, amount }) => {
+      row.amounts[category] += amount;
+      if (item.periode) row.periods[category].push(String(item.periode));
+    });
   });
 
-  return [...groups.values()].sort((a, b) => (
-    a.typeOrder - b.typeOrder
-      || a.sourceOrder - b.sourceOrder
-      || a.period - b.period
-      || a.detail.localeCompare(b.detail, 'id')
-  ));
+  return [...groups.values()].map((row) => {
+      const amounts = {
+        sppKomp: row.amounts.sppKomp,
+        dpp: row.amounts.dpp,
+        dps: row.amounts.dps,
+        seragam: row.amounts.seragam,
+        giat: row.amounts.giat,
+        bos: -row.amounts.bos,
+        lainnya: row.amounts.lainnya
+      };
+      const totalReceived = Object.entries(amounts)
+        .reduce((total, [category, amount]) => total + (category === 'bos' ? amount : Math.abs(amount)), 0);
+      const periodDetails = PAYMENT_RECEIPT_CATEGORIES
+        .map(({ key, label }) => {
+          const span = formatPaymentPeriodSpan(row.periods[key]);
+          return span ? `${label}: ${span}` : '';
+        })
+        .filter(Boolean);
+      const sourceDetails = [...row.sources].map(getPaymentSourceLabel);
+      return {
+        ...row,
+        schoolName: getSchoolName(row.schoolCode),
+        ...amounts,
+        totalReceived,
+        notes: [...new Set([...sourceDetails, ...periodDetails, ...row.notes])].join(' · ') || '-'
+      };
+    });
+}
+
+function getDailyPaymentLedgerTotals(rows) {
+  return rows.reduce((totals, row) => {
+    PAYMENT_RECEIPT_CATEGORIES.forEach(({ key }) => {
+      totals[key] += row[key];
+    });
+    totals.totalReceived += row.totalReceived;
+    return totals;
+  }, {
+    ...Object.fromEntries(PAYMENT_RECEIPT_CATEGORIES.map(({ key }) => [key, 0])),
+    totalReceived: 0
+  });
 }
 
 function renderDailyPaymentBreakdown(items) {
-  const rows = getDailyPaymentBreakdownRows(items);
+  const rows = getDailyPaymentLedgerRows(items);
+  const cellAmount = (value) => `<td>${formatReportAmount(value)}</td>`;
   ui.dailyPaymentBreakdown.innerHTML = rows.length
     ? rows.map((row, index) => `
       <tr>
-        <td data-label="No.">${index + 1}</td>
-        <td data-label="Jenis penerimaan / sumber">${escapeHtml(row.type)} <span class="cash-source-label">${escapeHtml(row.source)}</span></td>
-        <td data-label="Bulan / keterangan">${escapeHtml(row.detail)}</td>
-        <td data-label="Jumlah (Rp)">${formatRupiah(row.amount)}</td>
+        <td>${index + 1}</td>
+        <td>${escapeHtml(formatLongDate(row.date))}</td>
+        <td>${escapeHtml(row.receiptNo)}</td>
+        <td>${escapeHtml(row.studentName)}</td>
+        <td>${escapeHtml(row.className || '-')}</td>
+        ${cellAmount(row.sppKomp)}
+        ${cellAmount(row.dpp)}
+        ${cellAmount(row.dps)}
+        ${cellAmount(row.seragam)}
+        ${cellAmount(row.giat)}
+        <td class="cash-bos-amount">${formatReportAmount(row.bos)}</td>
+        ${cellAmount(row.lainnya)}
+        <td class="cash-total-amount">${formatRupiah(row.totalReceived)}</td>
+        <td>${escapeHtml(row.notes)}</td>
       </tr>
     `).join('')
-    : '<tr><td colspan="4" class="empty-state">Tidak ada transaksi pada tanggal ini.</td></tr>';
+    : `<tr><td colspan="${DAILY_PAYMENT_LEDGER_COLUMN_COUNT}" class="empty-state">Tidak ada transaksi pada tanggal ini.</td></tr>`;
+
+  const totals = getDailyPaymentLedgerTotals(rows);
+  ui.dailyPaymentBreakdownTotal.innerHTML = rows.length ? `
+    <tr>
+      <th colspan="5">TOTAL PENERIMAAN</th>
+      <th>${formatReportAmount(totals.sppKomp)}</th>
+      <th>${formatReportAmount(totals.dpp)}</th>
+      <th>${formatReportAmount(totals.dps)}</th>
+      <th>${formatReportAmount(totals.seragam)}</th>
+      <th>${formatReportAmount(totals.giat)}</th>
+      <th class="cash-bos-amount">${formatReportAmount(totals.bos)}</th>
+      <th>${formatReportAmount(totals.lainnya)}</th>
+      <th class="cash-total-amount">${formatReportAmount(totals.totalReceived)}</th>
+      <th></th>
+    </tr>` : '';
+}
+
+function formatReportAmount(value) {
+  return Number(value || 0) === 0 ? '-' : formatRupiah(value);
 }
 
 let dailyPaymentSummaryData = null;
@@ -1539,51 +1905,98 @@ function printDailyCashReport() {
     return;
   }
   const date = ui.dailyPaymentDate.value;
-  const rows = getDailyPaymentBreakdownRows(dailyPaymentBreakdownData);
-  const itemRows = rows.map((row, index) => `
-    <tr>
-      <td>${index + 1}</td>
-      <td>${escapeHtml(row.type)}<br><small>${escapeHtml(row.source)}</small></td>
-      <td>${escapeHtml(row.detail)}</td>
-      <td>${formatRupiah(row.amount)}</td>
-    </tr>
-  `).join('');
+  const schoolLabel = (row) => row.schoolName && row.schoolName !== '-'
+    ? row.schoolName
+    : (row.schoolCode ? `Sekolah ${row.schoolCode}` : 'Sekolah belum terdaftar');
+  const rows = getDailyPaymentLedgerRows(dailyPaymentBreakdownData).sort((a, b) => (
+    schoolLabel(a).localeCompare(schoolLabel(b), 'id', { numeric: true, sensitivity: 'base' })
+    || String(a.schoolCode || '').localeCompare(String(b.schoolCode || ''), 'id', { numeric: true, sensitivity: 'base' })
+    || String(a.className || '').localeCompare(String(b.className || ''), 'id', { numeric: true, sensitivity: 'base' })
+    || String(a.studentName || '').localeCompare(String(b.studentName || ''), 'id', { sensitivity: 'base' })
+    || String(a.receiptNo || '').localeCompare(String(b.receiptNo || ''), 'id', { numeric: true, sensitivity: 'base' })
+  ));
+  const totals = getDailyPaymentLedgerTotals(rows);
+  let previousSchool = null;
+  const itemRows = rows.map((row, index) => {
+    const schoolName = schoolLabel(row);
+    const schoolKey = `${row.schoolCode || ''}|${schoolName}`;
+    const schoolHeading = schoolKey !== previousSchool
+      ? `<tr class="cash-school-group"><th colspan="${DAILY_PAYMENT_LEDGER_COLUMN_COUNT}">Sekolah: ${escapeHtml(schoolName)}</th></tr>`
+      : '';
+    previousSchool = schoolKey;
+    return `${schoolHeading}
+      <tr>
+        <td>${index + 1}</td>
+        <td>${escapeHtml(formatLongDate(row.date))}</td>
+        <td>${escapeHtml(row.receiptNo)}</td>
+        <td>${escapeHtml(row.studentName)}</td>
+        <td>${escapeHtml(row.className || '-')}</td>
+        <td>${formatReportAmount(row.sppKomp)}</td>
+        <td>${formatReportAmount(row.dpp)}</td>
+        <td>${formatReportAmount(row.dps)}</td>
+        <td>${formatReportAmount(row.seragam)}</td>
+        <td>${formatReportAmount(row.giat)}</td>
+        <td class="cash-bos-amount">${formatReportAmount(row.bos)}</td>
+        <td>${formatReportAmount(row.lainnya)}</td>
+        <td class="cash-total-amount">${formatReportAmount(row.totalReceived)}</td>
+        <td>${escapeHtml(row.notes)}</td>
+      </tr>`;
+  }).join('');
   const printedAt = new Date().toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' });
   const cashTotal = Number(dailyPaymentSummaryData.net_orang_tua || 0);
+  const sourceSummary = getDailyPaymentSummaryRows(dailyPaymentSummaryData)
+    .map(([label, count, amount]) => `${label}: ${Number(count || 0).toLocaleString('id-ID')} transaksi, ${formatRupiah(amount)}`)
+    .join(' · ');
+  const accountSummaryRows = [
+    ['SPP + Komputer', totals.sppKomp, 'Penerimaan rutin bulanan'],
+    ['DPP (Dana Pengembangan Pendidikan)', totals.dpp, 'Dana pengembangan siswa'],
+    ['DPS (Dana Pembangunan Sekolah)', totals.dps, 'Dana pembangunan sekolah'],
+    ['Seragam', totals.seragam, 'Pembayaran seragam sekolah'],
+    ['Kegiatan', totals.giat, 'Dana kegiatan siswa dan ujian'],
+    ['Lainnya', totals.lainnya, 'Pembayaran lain-lain'],
+    ['Potongan BOS (Pengurang)', Math.abs(totals.bos), 'Subsidi dana BOS']
+  ].map(([label, amount, description]) => `
+    <tr><td>${escapeHtml(label)}</td><td>${formatReportAmount(amount)}</td><td>${escapeHtml(description)}</td></tr>
+  `).join('');
 
   ui.dailyCashPrintSheet.innerHTML = `
-    <article class="print-letter print-cash-report">
-      <header class="cash-receipt-header">
-        <img src="./assets/yayasan.png" alt="Logo Yayasan Santo Dominikus" />
-        <div class="cash-receipt-title">
-          <p>Yayasan Santo Dominikus Cimahi</p>
-          <h1>Laporan Penerimaan Harian</h1>
-          <p>Rekap kas · Semua sekolah</p>
+    <article class="print-cash-report">
+      <header class="cash-report-header">
+        <div>
+          <h1>LAPORAN PENERIMAAN PEMBAYARAN SPP &amp; BIAYA SEKOLAH</h1>
+          <p>Yayasan Santo Dominikus Cimahi · Semua sekolah · Tanggal: ${escapeHtml(formatLongDate(date))}</p>
         </div>
         <dl>
           <dt>No.</dt><dd>LKH-${escapeHtml(date.replace(/-/g, ''))}</dd>
-          <dt>Tanggal</dt><dd>${escapeHtml(formatLongDate(date))}</dd>
+          <dt>Dicetak</dt><dd>${escapeHtml(printedAt)}</dd>
         </dl>
       </header>
-      <div class="print-cash-meta">
-        <p>Dicetak ${escapeHtml(printedAt)}</p>
-      </div>
+      <p class="cash-report-sources"><strong>Sumber:</strong> ${escapeHtml(sourceSummary)}</p>
       <table>
-        <thead><tr><th>No.</th><th>Jenis pembayaran / sumber</th><th>Bulan / keterangan</th><th>Jumlah (Rp)</th></tr></thead>
-        <tbody>${itemRows || '<tr><td colspan="4">Tidak ada transaksi pada tanggal ini.</td></tr>'}</tbody>
+        <thead><tr>
+          <th>No.</th><th>Tanggal</th><th>No. Kwitansi</th><th>Nama Siswa</th><th>Kelas</th>
+          <th>SPP + Komp<br>(Rp)</th><th>DPP<br>(Rp)</th><th>DPS<br>(Rp)</th><th>Seragam<br>(Rp)</th>
+          <th>Kegiatan<br>(Rp)</th><th>Potongan BOS<br>(Rp)</th><th>Lainnya<br>(Rp)</th>
+          <th>Total Diterima<br>(Rp)</th><th>Keterangan</th>
+        </tr></thead>
+        <tbody>${itemRows || `<tr><td colspan="${DAILY_PAYMENT_LEDGER_COLUMN_COUNT}">Tidak ada transaksi pada tanggal ini.</td></tr>`}</tbody>
         <tfoot>
-          <tr>
-            <th colspan="3">Total penerimaan orang tua setelah potongan BOS</th>
-            <th>${formatRupiah(cashTotal)}</th>
+          <tr><th colspan="5">TOTAL PENERIMAAN</th>
+            <th>${formatReportAmount(totals.sppKomp)}</th><th>${formatReportAmount(totals.dpp)}</th>
+            <th>${formatReportAmount(totals.dps)}</th><th>${formatReportAmount(totals.seragam)}</th>
+            <th>${formatReportAmount(totals.giat)}</th><th class="cash-bos-amount">${formatReportAmount(totals.bos)}</th>
+            <th>${formatReportAmount(totals.lainnya)}</th><th class="cash-total-amount">${formatReportAmount(cashTotal)}</th><th></th>
           </tr>
         </tfoot>
       </table>
-      <p class="print-cash-words"><strong>Terbilang:</strong> ${escapeHtml(indonesianNumberWords(cashTotal))}</p>
-      <p class="print-cash-note">Rincian dikelompokkan menurut jenis penerimaan dan sumber transaksi. Potongan BOS mengurangi total penerimaan orang tua.</p>
-      <div class="print-cash-signatures">
-        <div>Penyetor<span>(________________________)</span></div>
-        <div>Kasir<span>(________________________)</span></div>
-      </div>
+      <section class="print-account-summary">
+        <h2>REKAPITULASI PENERIMAAN PER POS AKUN</h2>
+        <table>
+          <thead><tr><th>Pos Penerimaan / Pengurang</th><th>Total Nominal (Rp)</th><th>Keterangan</th></tr></thead>
+          <tbody>${accountSummaryRows}</tbody>
+          <tfoot><tr><th>TOTAL KAS BERSIH DITERIMA</th><th>${formatReportAmount(cashTotal)}</th><th>Cocok dengan total diterima</th></tr></tfoot>
+        </table>
+      </section>
     </article>`;
   ui.dailyCashPrintSheet.hidden = false;
   document.body.classList.add('printing-daily-cash');
@@ -1600,7 +2013,8 @@ async function fetchDailyPaymentSummary() {
   ui.dailyPaymentSummaryStatus.textContent = 'Memuat rekap...';
   ui.dailyPaymentSummary.innerHTML = '<tr><td colspan="3" class="empty-state">Memuat rekap...</td></tr>';
   ui.dailyPaymentSummaryTotal.replaceChildren();
-  ui.dailyPaymentBreakdown.innerHTML = '<tr><td colspan="4" class="empty-state">Memuat rincian...</td></tr>';
+  ui.dailyPaymentBreakdownTotal.replaceChildren();
+  ui.dailyPaymentBreakdown.innerHTML = `<tr><td colspan="${DAILY_PAYMENT_LEDGER_COLUMN_COUNT}" class="empty-state">Memuat rincian...</td></tr>`;
   try {
     let summary;
     let detailItems;
@@ -1618,7 +2032,7 @@ async function fetchDailyPaymentSummary() {
       for (let from = 0; ; from += pageSize) {
         const { data: page, error: detailError } = await app.supabase
           .from('spp_app_payment_batch_items')
-          .select('source,component,periode,nominal,notes')
+          .select('batch_id,receipt_no,tglbyr,id_siswa,nospp,nama,kdsek,kdkls,source,component,periode,nominal,notes,voided_at')
           .eq('tglbyr', ui.dailyPaymentDate.value)
           .is('voided_at', null)
           .order('payment_id')
@@ -1645,8 +2059,14 @@ async function fetchDailyPaymentSummary() {
       summary.net_orang_tua = summary.manual + summary.upload + summary.legacy - summary.bos;
       detailItems = daily.flatMap((batch) => (batch.items || []).map((item) => ({
         ...item,
+        batch_id: batch.id,
+        receipt_no: batch.receipt_no,
+        tglbyr: batch.tglbyr,
+        id_siswa: item.id_siswa || batch.id_siswa,
+        nama: item.nama || batch.nama,
+        kdkls: item.kdkls || batch.kdkls,
         source: batch.source,
-        notes: item.notes || batch.notes || ''
+        notes: item.notes || item.ket || batch.notes || ''
       })));
     }
     if (seq !== dailyPaymentSummaryFetchSeq) return;
@@ -1658,7 +2078,8 @@ async function fetchDailyPaymentSummary() {
   } catch (error) {
     if (seq !== dailyPaymentSummaryFetchSeq) return;
     ui.dailyPaymentSummary.innerHTML = `<tr><td colspan="3" class="empty-state">Rekap gagal dimuat: ${escapeHtml(error.message || 'Kesalahan tidak diketahui.')}</td></tr>`;
-    ui.dailyPaymentBreakdown.innerHTML = `<tr><td colspan="4" class="empty-state">Rincian gagal dimuat: ${escapeHtml(error.message || 'Kesalahan tidak diketahui.')}</td></tr>`;
+    ui.dailyPaymentBreakdown.innerHTML = `<tr><td colspan="${DAILY_PAYMENT_LEDGER_COLUMN_COUNT}" class="empty-state">Rincian gagal dimuat: ${escapeHtml(error.message || 'Kesalahan tidak diketahui.')}</td></tr>`;
+    ui.dailyPaymentBreakdownTotal.replaceChildren();
     ui.dailyPaymentSummaryStatus.textContent = 'Pastikan migration 018 sudah dijalankan dan akun memiliki akses Admin/Yayasan.';
   }
 }
@@ -1753,21 +2174,99 @@ async function printPaymentBatch(batchId, correction) {
   }
   if (!batch || !items.length) throw new Error('Rincian slip tidak tersedia.');
   if (correction && !batch.correction_no) throw new Error('Nomor slip koreksi belum tersedia.');
-  renderPaymentReceipt(batch, items, correction);
+  ui.paymentPrintSheet.innerHTML = renderPaymentReceipt(batch, items, correction);
   document.body.classList.add('printing-payment');
   window.print();
 }
 
-function renderPaymentReceipt(batch, items, correction) {
+async function printPaymentBatches(batchIds) {
+  const ids = [...new Set((batchIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
+  if (!ids.length) throw new Error('Tidak ada transaksi untuk dicetak.');
+
+  const receipts = [];
+  if (app.server) {
+    const itemsByBatch = new Map(ids.map((id) => [id, []]));
+    for (let offset = 0; offset < ids.length; offset += 100) {
+      const chunk = ids.slice(offset, offset + 100);
+      const { data: batches, error: batchError } = await app.supabase
+        .from('spp_app_payment_batch_list')
+        .select('*')
+        .in('id', chunk);
+      if (batchError) throw batchError;
+
+      const chunkItems = [];
+      for (let from = 0; ; from += 1000) {
+        const { data: page, error: itemsError } = await app.supabase
+          .from('spp_app_payment_batch_items')
+          .select('*')
+          .in('batch_id', chunk)
+          .order('payment_id')
+          .range(from, from + 999);
+        if (itemsError) throw itemsError;
+        chunkItems.push(...(page || []));
+        if (!page || page.length < 1000) break;
+      }
+
+      chunkItems.forEach((item) => {
+        const key = String(item.batch_id);
+        if (itemsByBatch.has(key)) itemsByBatch.get(key).push(item);
+      });
+      const batchesById = new Map((batches || []).map((batch) => [String(batch.id), batch]));
+      chunk.forEach((id) => {
+        const batch = batchesById.get(id);
+        const items = itemsByBatch.get(id) || [];
+        if (!batch) throw new Error(`Data transaksi ${id} tidak ditemukan.`);
+        if (!items.length) throw new Error(`Rincian slip transaksi ${id} tidak tersedia.`);
+        receipts.push({ batch, items });
+      });
+    }
+  } else {
+    const batches = getLocalPaymentBatches();
+    ids.forEach((id) => {
+      const batch = batches.find((item) => item.id === id);
+      if (!batch) throw new Error(`Data transaksi ${id} tidak ditemukan.`);
+      if (!batch.items?.length) throw new Error(`Rincian slip transaksi ${id} tidak tersedia.`);
+      receipts.push({ batch, items: batch.items });
+    });
+  }
+
+  ui.paymentPrintSheet.innerHTML = receipts.map(({ batch, items }, index) => (
+    renderPaymentReceipt(batch, items, false, index < receipts.length - 1)
+  )).join('');
+  document.body.classList.add('printing-payment');
+  window.print();
+}
+
+function renderPaymentReceipt(batch, items, correction, pageBreak = false) {
   const isCorrection = correction === true;
-  const itemRows = items.map((item) => `
-    <tr>
-      <td>${escapeHtml(item.nama || batch.nama || 'Siswa')}${item.kdkls ? `<br>Kelas ${escapeHtml(item.kdkls)}` : ''}</td>
-      <td>${escapeHtml(getPaymentComponentLabel(item.component))}</td>
-      <td>${escapeHtml(item.periode ? formatPeriodLabel(item.periode) : '-')}</td>
-      <td>${formatRupiah(isCorrection ? -Math.abs(Number(item.nominal || 0)) : Number(item.nominal || 0))}</td>
-    </tr>
-  `).join('');
+  const students = [...new Map(items.map((item) => {
+    const student = app.state.siswa.find((candidate) => (
+      String(candidate.id_siswa || '') === String(item.id_siswa || '')
+      || String(candidate.nospp || '') === String(item.nospp || '')
+    ));
+    const name = item.nama || student?.nama || batch.nama || 'Siswa';
+    const className = item.kdkls || student?.kdkls || '';
+    return [`${name}|${className}`, { name, className }];
+  })).values()];
+  const studentName = students.length === 1 ? students[0].name : `Alokasi untuk ${students.length} siswa`;
+  const className = students.length === 1 ? students[0].className : (students.length ? 'Beberapa kelas' : '-');
+  const receiptRows = getPaymentReceiptRows(items, batch.source);
+  const itemRows = receiptRows.map((row, index) => {
+    const bosCategory = row.key === 'bos';
+    const amount = bosCategory
+      ? (batch.source === 'bos' ? row.amount : -row.amount)
+      : row.amount;
+    const signedAmount = isCorrection ? -amount : amount;
+    const label = bosCategory && batch.source === 'bos' ? 'Alokasi BOS' : row.label;
+    return `
+      <tr>
+        <td>${index + 1}.</td>
+        <td>${escapeHtml(label)}</td>
+        <td>${escapeHtml(row.detail)}</td>
+        <td>${formatReportAmount(signedAmount)}</td>
+      </tr>
+    `;
+  }).join('');
   const issuedAt = isCorrection ? batch.correction_created_at : batch.created_at;
   const operatorCode = isCorrection ? batch.correction_operator_code : batch.operator_code;
   const total = items.reduce((sum, item) => sum + Number(item.nominal || 0), 0);
@@ -1775,35 +2274,52 @@ function renderPaymentReceipt(batch, items, correction) {
     sum + (batch.source === 'bos' || item.component === 'spp_bos' ? Number(item.nominal || 0) : 0)
   ), 0);
   const parentTotal = total - bosTotal;
-  const organization = getSchoolName(batch.kdsek) || 'Yayasan Santo Dominikus Cimahi';
-  const amountText = (amount) => formatRupiah(isCorrection ? -Math.abs(amount) : amount);
+  const schoolName = getSchoolName(batch.kdsek);
+  const schoolLabel = schoolName && schoolName !== '-' ? schoolName : (batch.source === 'bos' ? 'Semua sekolah' : '');
+  const receiptTotal = batch.source === 'bos' ? bosTotal : parentTotal;
+  const receiptNote = batch.notes || [...new Set(
+    items.map((item) => String(item.notes || '').trim()).filter(Boolean)
+  )].join(' · ');
+  const totalLabel = isCorrection
+    ? (batch.source === 'bos' ? 'Total alokasi BOS dikoreksi' : 'Total pembayaran dikoreksi')
+    : (batch.source === 'bos' ? 'Total alokasi BOS' : 'Total pembayaran');
   const correctionDetails = isCorrection ? `
     <p><strong>Mengoreksi bukti:</strong> ${escapeHtml(batch.receipt_no)}</p>
     <p><strong>Alasan:</strong> ${escapeHtml(batch.void_reason || '')}</p>
   ` : '';
-  ui.paymentPrintSheet.innerHTML = `
-    <article class="payment-print">
-      <h1>${isCorrection ? 'Slip Koreksi Pembayaran' : (batch.source === 'bos' ? 'Bukti Alokasi BOS' : 'Bukti Pembayaran SPP')}</h1>
-      <p class="payment-print-org">Yayasan Santo Dominikus Cimahi · ${escapeHtml(organization)}</p>
-      <dl class="payment-print-meta">
-        <dt>No. bukti</dt><dd>${escapeHtml(isCorrection ? batch.correction_no : batch.receipt_no)}</dd>
-        <dt>Sumber</dt><dd>${escapeHtml(bosTotal > 0 && batch.source !== 'bos' ? `${getPaymentSourceLabel(batch.source)} + BOS` : getPaymentSourceLabel(batch.source))}</dd>
-        <dt>Tanggal uang masuk</dt><dd>${escapeHtml(formatLongDate(batch.tglbyr))}</dd>
-        <dt>Dicatat / diunggah</dt><dd>${escapeHtml(formatDateTime(issuedAt))}</dd>
-        <dt>Kode operator</dt><dd>${escapeHtml(operatorCode || '-')}</dd>
-      </dl>
+  return `
+    <article class="payment-receipt${pageBreak ? ' payment-receipt-page-break' : ''}">
+      <header class="receipt-header">
+        <div class="receipt-heading">
+          <h1>${isCorrection ? 'SLIP KOREKSI PENERIMAAN' : 'KWITANSI / SLIP PENERIMAAN'}</h1>
+          <p>YAYASAN SANTO DOMINIKUS CIMAHI</p>
+          ${schoolLabel ? `<strong>${escapeHtml(schoolLabel)}</strong>` : ''}
+        </div>
+        <dl class="receipt-number">
+          <dt>No.</dt><dd>${escapeHtml(isCorrection ? batch.correction_no : batch.receipt_no)}</dd>
+          <dt>Tanggal</dt><dd>${escapeHtml(formatLongDate(batch.tglbyr))}</dd>
+        </dl>
+      </header>
+      <section class="receipt-student">
+        <p><strong>Nama Siswa</strong><span>: ${escapeHtml(studentName)}</span></p>
+        <p><strong>Kelas</strong><span>: ${escapeHtml(className || '-')}</span></p>
+      </section>
       ${correctionDetails}
-      ${batch.notes ? `<p><strong>Keterangan:</strong> ${escapeHtml(batch.notes)}</p>` : ''}
-      <table>
-        <thead><tr><th>Siswa</th><th>Komponen</th><th>Periode</th><th>Nominal</th></tr></thead>
+      ${receiptNote ? `<p class="receipt-note"><strong>Keterangan:</strong> ${escapeHtml(receiptNote)}</p>` : ''}
+      <table class="receipt-table">
+        <thead><tr><th>No.</th><th>Jenis Pembayaran</th><th>Bulan / Keterangan</th><th>Jumlah (Rp)</th></tr></thead>
         <tbody>${itemRows}</tbody>
+        <tfoot><tr>
+          <th colspan="3">${escapeHtml(totalLabel)}</th>
+          <th>${formatRupiah(isCorrection ? -receiptTotal : receiptTotal)}</th>
+        </tr></tfoot>
       </table>
-      <p><strong>${isCorrection ? 'Penerimaan orang tua dikoreksi' : 'Penerimaan orang tua'}:</strong> ${amountText(parentTotal)}</p>
-      <p><strong>${isCorrection ? 'Alokasi BOS dikoreksi' : 'Alokasi BOS'}:</strong> ${amountText(bosTotal)}</p>
-      <p class="payment-print-total">${isCorrection ? 'Total tagihan yang dikoreksi' : 'Total tagihan tertutup'}: ${amountText(total)}</p>
-      <div class="payment-print-signatures">
-        <div>${batch.source === 'bos' ? 'Petugas' : 'Kasir'}<span>(____________________)</span></div>
-        <div>${batch.source === 'bos' ? 'Penerima alokasi' : 'Penyetor'}<span>(____________________)</span></div>
+      <p class="receipt-words"><strong>Terbilang:</strong> ${escapeHtml(indonesianNumberWords(isCorrection ? -receiptTotal : receiptTotal))}</p>
+      <p class="receipt-operator">Sumber: ${escapeHtml(bosTotal > 0 && batch.source !== 'bos' ? `${getPaymentSourceLabel(batch.source)} + BOS` : getPaymentSourceLabel(batch.source))}
+        · Kode operator: ${escapeHtml(operatorCode || '-')} · Dicatat: ${escapeHtml(formatDateTime(issuedAt))}</p>
+      <div class="receipt-signatures">
+        <div>${batch.source === 'bos' ? 'Petugas' : 'Penyetor'}<span>(____________________)</span></div>
+        <div>${batch.source === 'bos' ? 'Penerima alokasi' : 'Kasir'}<span>(____________________)</span></div>
       </div>
     </article>`;
 }
@@ -1822,6 +2338,12 @@ window.addEventListener('afterprint', () => {
 window.addEventListener('afterprint', () => {
   document.body.classList.remove('printing-daily-cash');
   ui.dailyCashPrintSheet.hidden = true;
+});
+
+window.addEventListener('afterprint', () => {
+  document.body.classList.remove('printing-spp-card');
+  ui.studentCardPrintSheet.hidden = true;
+  ui.studentCardPrintSheet.replaceChildren();
 });
 
 function getAccessibleStudentRows() {
@@ -3205,6 +3727,7 @@ async function submitPaymentImport() {
   if (!window.confirm(`Impor ${confirmed.length} transaksi yang sudah dikonfirmasi?`)) return;
   ui.importPaymentsBtn.disabled = true;
   ui.paymentImportStatus.textContent = 'Menyimpan transaksi...';
+  let importedIds = [];
   try {
     const credentials = requireStudentRules();
     const payload = confirmed.map((row) => {
@@ -3222,15 +3745,35 @@ async function submitPaymentImport() {
       p_rows: payload
     });
     if (error) throw error;
-    const importedCount = Array.isArray(data) ? data.length : 0;
+    importedIds = Array.isArray(data) ? data.map(String) : [];
     app.paymentImportRows = [];
     ui.paymentImportReview.hidden = true;
-    await reloadStudentData();
-    alert(`${importedCount} transaksi berhasil diimpor. Slip tersedia di Riwayat Pembayaran.`);
   } catch (error) {
     ui.paymentImportStatus.textContent = `Impor gagal: ${error.message || 'Kesalahan tidak diketahui.'}`;
     ui.importPaymentsBtn.disabled = false;
+    return;
   }
+
+  const followUpErrors = [];
+  try {
+    await reloadStudentData();
+  } catch (error) {
+    followUpErrors.push(`Daftar pembayaran gagal diperbarui: ${error.message || 'Kesalahan tidak diketahui.'}`);
+  }
+  if (importedIds.length) {
+    try {
+      await printPaymentBatches(importedIds);
+    } catch (error) {
+      followUpErrors.push(`Slip gagal dicetak otomatis: ${error.message || 'Kesalahan tidak diketahui.'}`);
+    }
+  } else {
+    followUpErrors.push('Sistem tidak menerima nomor transaksi untuk cetak otomatis.');
+  }
+  const importedCount = importedIds.length || confirmed.length;
+  const summary = `${importedCount} transaksi berhasil diimpor.`;
+  alert(followUpErrors.length
+    ? `${summary} ${followUpErrors.join(' ')} Slip tetap dapat dicetak dari Riwayat Pembayaran.`
+    : `${summary} Dialog cetak berisi satu slip per transaksi sudah dibuka.`);
 }
 
 async function handlePaymentImportChange(event) {
@@ -4640,6 +5183,15 @@ function setupEvents() {
     const target = event.target.closest('button');
     if (!target) return;
     const { action, nospp, id } = target.dataset;
+    if (action === 'print-spp-card') {
+      printStudentSppCard({
+        id,
+        nospp,
+        kdsek: target.dataset.kdsek,
+        nama: target.dataset.nama,
+        kdkls: target.dataset.kdkls
+      }).catch((error) => alert(error.message || 'Kartu SPP gagal dimuat.'));
+    }
     if (action === 'edit-student') {
       changeStudentSpp(nospp);
     }
@@ -4658,6 +5210,14 @@ function setupEvents() {
     const target = event.target.closest('button');
     if (!target) return;
     if (target.dataset.action === 'correct-payment') openPaymentCorrection(target.dataset.id);
+    if (target.dataset.action === 'print-spp-card') {
+      printStudentSppCard({
+        id: target.dataset.id,
+        nospp: target.dataset.nospp,
+        kdsek: target.dataset.kdsek,
+        nama: target.dataset.nama
+      }).catch((error) => alert(error.message || 'Kartu SPP gagal dimuat.'));
+    }
     if (target.dataset.action === 'print-payment' || target.dataset.action === 'print-correction') {
       printPaymentBatch(target.dataset.id, target.dataset.action === 'print-correction')
         .catch((error) => alert(error.message || 'Slip gagal dimuat.'));
