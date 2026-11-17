@@ -543,11 +543,23 @@ label {
 }
 
 .user-account-cell {
-  min-width: 190px;
+  min-width: 220px;
+  vertical-align: middle;
+}
+
+.user-account-fields {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
 }
 
 .user-account-cell strong {
   color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.user-accounts-table td {
+  vertical-align: middle;
 }
 
 .user-row-actions {
@@ -1499,13 +1511,16 @@ label {
 .modal-head .eyebrow{margin:0}
 .modal-close{width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:transparent;font-size:1.3rem;line-height:1;cursor:pointer;color:var(--muted)}
 .modal-close:hover{background:rgba(100,116,139,.12)}
-.modal .student-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.modal .student-form-grid{align-items:start;column-gap:18px;grid-template-columns:repeat(2,minmax(0,1fr));row-gap:14px}
+.modal .student-form-grid>label,.modal .student-form-grid>.field{align-content:start;min-width:0}
+.modal .student-form-grid>label>span:first-child,.modal .student-form-grid>.field>span:first-child{line-height:1.35;min-height:2.7em}
+.modal .student-form-grid input:not([type='checkbox']):not([type='radio']),.modal .student-form-grid select{min-width:0;width:100%}
 .modal .form-actions{position:sticky;bottom:0;background:var(--panel);padding-top:14px;margin-top:14px;border-top:1px solid var(--border)}
 .edit-summary{display:flex;flex-direction:column;gap:2px;padding:14px 16px;margin-bottom:16px;border:1px solid var(--border);border-radius:14px;background:rgba(100,116,139,.08)}
 .edit-summary span{color:var(--muted);font-size:.9rem}
 .field-hint{display:block;margin-top:4px;color:var(--muted);font-size:.8rem}
 .modal [hidden]{display:none!important}
-@media (max-width:600px){.modal{width:100vw;max-height:100vh;border-radius:16px 16px 0 0;margin:auto 0 0}.modal .student-form-grid{grid-template-columns:1fr}.modal-head,.modal .student-form{padding-left:16px;padding-right:16px}}
+@media (max-width:600px){.modal{width:100vw;max-height:100vh;border-radius:16px 16px 0 0;margin:auto 0 0}.modal .student-form-grid{grid-template-columns:1fr}.modal .student-form-grid>label>span:first-child,.modal .student-form-grid>.field>span:first-child{min-height:0}.modal-head,.modal .student-form{padding-left:16px;padding-right:16px}}
 
 /* Rincian tagihan */
 .bill-total{font-weight:700;font-size:1rem}
@@ -1602,8 +1617,11 @@ label {
 .payment-history-one-time-table{min-width:720px}
 .payment-history-table th,.payment-history-table td{padding:9px 12px;vertical-align:middle}
 .payment-history-table td small{color:var(--muted);display:block;font-variant-numeric:tabular-nums;margin-top:3px}
+.payment-period-history-wrap{max-height:min(38vh,300px);overflow:auto;overscroll-behavior:contain}
+.payment-period-history-wrap thead th{position:sticky;top:0;z-index:1}
 .payment-history-allocation{display:grid;gap:4px;min-width:200px}
 .payment-history-allocation-item{align-items:baseline;display:flex;gap:14px;justify-content:space-between}
+.payment-history-allocation-item.is-monthly>span{min-width:0}
 .payment-history-allocation-item strong{font-variant-numeric:tabular-nums;white-space:nowrap}
 .payment-state{border-radius:999px;display:inline-flex;font-size:.74rem;font-weight:700;line-height:1.35;padding:3px 8px;white-space:nowrap}
 .payment-state.is-paid{background:#e8f4ed;color:#246246}
@@ -2710,7 +2728,27 @@ input[type='radio'] {
 }
 
 .prior-year-panel table {
-  min-width: 700px;
+  min-width: 1180px;
+}
+
+.prior-year-chart {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0 18px;
+}
+
+.prior-year-chart-row {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(110px, 0.8fr) minmax(140px, 2fr) minmax(180px, 1fr);
+}
+
+@media (max-width: 600px) {
+  .prior-year-chart-row {
+    gap: 5px;
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .revenue-panel .panel-header {

@@ -206,19 +206,27 @@
             <div class="panel prior-year-panel">
               <div class="panel-header">
                 <div>
-                  <h2>Rekap DPP dan SPP Tahun Lalu</h2>
-                  <p class="muted-copy">Tagihan lama dibandingkan dengan pembayaran yang dialokasikan pada tahun ajaran ini.</p>
+                  <h2>Rekap Komponen Tahun Lalu</h2>
+                  <p class="muted-copy">Perbandingan tagihan lama dan pembayaran pada tahun ajaran ini.</p>
                 </div>
+              </div>
+              <div class="activity-year-chart-key" aria-hidden="true">
+                <span><i class="activity-year-target-swatch"></i>Tagihan</span>
+                <span><i class="activity-year-paid-swatch"></i>Dibayar</span>
+              </div>
+              <div class="prior-year-chart" id="priorYearChart" role="img" aria-label="Grafik tagihan dan pembayaran DPP, DPS, Seragam, Kegiatan, dan SPP tahun lalu">
+                <p class="empty-state">Rekap muncul setelah data dimuat.</p>
               </div>
               <div class="table-wrap">
                 <table>
                   <thead>
                     <tr>
                       <th>Unit</th>
-                      <th>DPP lama</th>
-                      <th>DPP dibayar</th>
-                      <th>SPP lama</th>
-                      <th>SPP dibayar</th>
+                      <th>DPP lama</th><th>DPP dibayar</th>
+                      <th>DPS lama</th><th>DPS dibayar</th>
+                      <th>Seragam lama</th><th>Seragam dibayar</th>
+                      <th>Kegiatan lama</th><th>Kegiatan dibayar</th>
+                      <th>SPP lama</th><th>SPP dibayar</th>
                       <th>Total sisa</th>
                     </tr>
                   </thead>
@@ -457,7 +465,7 @@
                 </div>
                 <label>
                   <span>Tahun Ajaran</span>
-                  <input id="arrearTahun" type="text" pattern="[0-9]{4}-[0-9]{4}" placeholder="2025-2026" />
+                  <select id="arrearTahun"></select>
                 </label>
                 <label>
                   <span>Jenis</span>
@@ -916,7 +924,7 @@
             <span id="paymentHistoryYear" class="report-pill"></span>
           </div>
           <p class="muted-copy">Status SPP dan komputer berdasarkan alokasi pembayaran untuk setiap periode tahun ajaran terpilih.</p>
-          <div class="table-wrap">
+          <div class="table-wrap payment-period-history-wrap">
             <table class="payment-history-table">
               <thead><tr><th>Periode</th><th>SPP</th><th>Komputer</th></tr></thead>
               <tbody id="paymentPeriodHistory">

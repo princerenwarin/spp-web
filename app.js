@@ -230,6 +230,7 @@ const ui = {
   activityYearChart: document.getElementById('activityYearChart'),
   activityYearBody: document.getElementById('activityYearBody'),
   activityYearStatus: document.getElementById('activityYearStatus'),
+  priorYearChart: document.getElementById('priorYearChart'),
   priorYearRevenueBody: document.getElementById('priorYearRevenueBody'),
   paymentBankName: document.getElementById('paymentBankName'),
   searchStudent: document.getElementById('searchStudent'),
@@ -1233,7 +1234,10 @@ function downloadXlsxSheet(sheetName, headers, rows, widths, fileName) {
   sheet['!cols'] = widths.map((wch) => ({ wch }));
   if (sheet['!ref']) sheet['!autofilter'] = { ref: sheet['!ref'] };
   window.XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
+  const scrollX = window.scrollX;
+  const scrollY = window.scrollY;
   window.XLSX.writeFile(workbook, fileName);
+  requestAnimationFrame(() => window.scrollTo(scrollX, scrollY));
 }
 
 async function downloadStudents() {
@@ -2840,9 +2844,11 @@ function renderUserAccounts() {
     return `
       <tr data-user-id="${escapeHtml(idpemakai)}" data-active="${isActive}">
         <td class="user-account-cell">
-          <strong>${escapeHtml(idpemakai)}</strong>
-          <input type="text" maxlength="100" value="${escapeHtml(account.nama_lengkap || account.jabatan || '')}"
-            data-user-name aria-label="Nama pengguna ${escapeHtml(idpemakai)}" />
+          <div class="user-account-fields">
+            <strong>${escapeHtml(idpemakai)}</strong>
+            <input type="text" maxlength="100" value="${escapeHtml(account.nama_lengkap || account.jabatan || '')}"
+              data-user-name aria-label="Nama pengguna ${escapeHtml(idpemakai)}" />
+          </div>
         </td>
         <td><select data-user-role aria-label="Role ${escapeHtml(idpemakai)}" ${isCurrentUser ? 'disabled' : ''}>${roleOptions(role)}</select></td>
         <td><select data-user-school aria-label="Sekolah ${escapeHtml(idpemakai)}" ${isCurrentUser || !isUnit ? 'disabled' : ''}>${schoolOptions(unit, !isUnit)}</select></td>
@@ -3537,21 +3543,48 @@ function renderActivityList(rows) {
 }
 
 function renderPriorYearRevenue(rows) {
-  ui.priorYearRevenueBody.innerHTML = (rows || []).map((row) => {
-    const dppDue = Number(row.dpp_tagihan || 0);
-    const dppPaid = Number(row.dpp_terbayar || 0);
-    const sppDue = Number(row.spp_tl_tagihan || 0);
-    const sppPaid = Number(row.spp_tl_terbayar || 0);
-    const remaining = Math.max(dppDue - dppPaid, 0) + Math.max(sppDue - sppPaid, 0);
+  const components = [
+    { label: 'DPP', due: 'dpp_tagihan', paid: 'dpp_terbayar' },
+    { label: 'DPS', due: 'dsp_tagihan', paid: 'dsp_terbayar' },
+    { label: 'Seragam', due: 'seragam_tagihan', paid: 'seragam_terbayar' },
+    { label: 'Kegiatan', due: 'giat_tagihan', paid: 'giat_terbayar' },
+    { label: 'SPP lama', due: 'spp_tl_tagihan', paid: 'spp_tl_terbayar' }
+  ];
+  const items = rows || [];
+  const totals = components.map((component) => ({
+    ...component,
+    dueTotal: items.reduce((sum, row) => sum + Number(row[component.due] || 0), 0),
+    paidTotal: items.reduce((sum, row) => sum + Number(row[component.paid] || 0), 0)
+  }));
+  const maximum = Math.max(0, ...totals.flatMap((item) => [item.dueTotal, item.paidTotal]));
+  ui.priorYearChart.innerHTML = items.length
+    ? totals.map((item) => {
+        const dueWidth = maximum > 0 ? Math.min(100, item.dueTotal / maximum * 100) : 0;
+        const paidWidth = maximum > 0 ? Math.min(100, item.paidTotal / maximum * 100) : 0;
+        return `<div class="prior-year-chart-row">
+          <span class="activity-year-chart-label">${escapeHtml(item.label)}</span>
+          <span class="activity-year-track" role="img" aria-label="${escapeHtml(item.label)}: tagihan ${escapeHtml(formatRupiah(item.dueTotal))}, dibayar ${escapeHtml(formatRupiah(item.paidTotal))}">
+            <span class="activity-year-target-bar" style="width:${dueWidth}%"></span>
+            <span class="activity-year-paid-bar" style="width:${paidWidth}%"></span>
+          </span>
+          <span class="activity-year-chart-values">Tagihan ${formatRupiah(item.dueTotal)} · Dibayar ${formatRupiah(item.paidTotal)}</span>
+        </div>`;
+      }).join('')
+    : '<p class="empty-state">Belum ada tagihan lama pada tahun ajaran ini.</p>';
+
+  ui.priorYearRevenueBody.innerHTML = items.map((row) => {
+    const remaining = components.reduce((sum, component) => (
+      sum + Math.max(Number(row[component.due] || 0) - Number(row[component.paid] || 0), 0)
+    ), 0);
     return `<tr>
       <th scope="row">${escapeHtml(getSchoolName(row.kdsek))}</th>
-      <td>${formatRupiah(dppDue)}</td>
-      <td>${formatRupiah(dppPaid)}</td>
-      <td>${formatRupiah(sppDue)}</td>
-      <td>${formatRupiah(sppPaid)}</td>
+      ${components.map((component) => `
+        <td>${formatRupiah(Number(row[component.due] || 0))}</td>
+        <td>${formatRupiah(Number(row[component.paid] || 0))}</td>
+      `).join('')}
       <td><strong>${formatRupiah(remaining)}</strong></td>
     </tr>`;
-  }).join('') || '<tr><td colspan="6" class="empty-state">Tidak ada tagihan DPP/SPP tahun lalu pada unit ini.</td></tr>';
+  }).join('') || '<tr><td colspan="12" class="empty-state">Tidak ada tagihan lama pada unit ini.</td></tr>';
 }
 
 function renderActivityYearDashboard(rows) {
@@ -3598,11 +3631,12 @@ function renderActivityYearDashboard(rows) {
 let dashboardFetchSeq = 0;
 
 function showRevenueLoadError(message) {
-  ui.revenueChart.innerHTML = `<p class="empty-state">Dashboard gagal dimuat: ${escapeHtml(message)}. Pastikan migration 024 sudah dijalankan dan schema Supabase sudah diperbarui.</p>`;
+  ui.revenueChart.innerHTML = `<p class="empty-state">Dashboard gagal dimuat: ${escapeHtml(message)}. Pastikan migration 024 dan 028 sudah dijalankan serta schema Supabase sudah diperbarui.</p>`;
   ui.revenueLegend.innerHTML = '';
   ui.revenueTableHead.innerHTML = '';
   ui.revenueTableBody.innerHTML = '';
-  ui.priorYearRevenueBody.innerHTML = `<tr><td colspan="6" class="empty-state">${escapeHtml(message)}</td></tr>`;
+  ui.priorYearChart.innerHTML = `<p class="empty-state">${escapeHtml(message)}</p>`;
+  ui.priorYearRevenueBody.innerHTML = `<tr><td colspan="12" class="empty-state">${escapeHtml(message)}</td></tr>`;
   ui.totalSiswa.textContent = '-';
   ui.totalTagihan.textContent = '-';
   ui.paymentThisMonth.textContent = '-';
@@ -3640,7 +3674,8 @@ async function fetchDashboard() {
   ui.paymentThisMonth.textContent = '—';
   ui.totalTransaksi.textContent = '—';
   ui.revenueChart.innerHTML = '<p class="empty-state">Memuat pemasukan...</p>';
-  ui.priorYearRevenueBody.innerHTML = '<tr><td colspan="6" class="empty-state">Memuat rekap...</td></tr>';
+  ui.priorYearChart.innerHTML = '<p class="empty-state">Memuat rekap...</p>';
+  ui.priorYearRevenueBody.innerHTML = '<tr><td colspan="12" class="empty-state">Memuat rekap...</td></tr>';
   if (!app.dashboardCredentials) {
     showRevenueLoadError('Silakan keluar lalu masuk kembali untuk memuat dashboard Admin/Yayasan.');
     return;
@@ -3659,7 +3694,7 @@ async function fetchDashboard() {
         p_password: app.dashboardCredentials.password,
         p_tahun: year
       }),
-      app.supabase.rpc('spp_app_prior_year_revenue_v1', {
+      app.supabase.rpc('spp_app_prior_year_component_revenue_v1', {
         p_username: app.dashboardCredentials.username,
         p_password: app.dashboardCredentials.password,
         p_tahun: year
@@ -3699,7 +3734,7 @@ async function fetchDashboard() {
     }
   } catch (error) {
     if (seq !== dashboardFetchSeq) return;
-    showRevenueLoadError(error.message || 'Periksa migration 024 dan koneksi Supabase.');
+    showRevenueLoadError(error.message || 'Periksa migration 024, 028, dan koneksi Supabase.');
   }
 }
 
@@ -4488,10 +4523,16 @@ function closeStudentDialog() {
 }
 
 function populateExistingStudents() {
-  if (!ui.arrearTahun.value) {
-    const [start] = currentAcademicYear().split('-').map(Number);
-    ui.arrearTahun.value = `${start - 1}-${start}`;
-  }
+  const currentStart = Number(currentAcademicYear().slice(0, 4));
+  const previous = ui.arrearTahun.value;
+  const years = Array.from({ length: 5 }, (_, index) => {
+    const start = currentStart - index - 1;
+    return `${start}-${start + 1}`;
+  });
+  ui.arrearTahun.innerHTML = years.map((year) => (
+    `<option value="${year}">${year}</option>`
+  )).join('');
+  ui.arrearTahun.value = years.includes(previous) ? previous : years[0];
 }
 
 function studentPickerLabel(item, wrap) {
@@ -5801,7 +5842,30 @@ function renderStudentPaymentDetails(billing, transactions) {
   const paymentGroups = groupPaymentHistoryTransactions(transactions);
   ui.paymentTransactionHistory.innerHTML = paymentGroups.length
     ? paymentGroups.map((group) => {
-      const allocations = group.allocations.map((item) => {
+      const monthlyAllocations = new Map();
+      const otherAllocations = [];
+      group.allocations.forEach((item) => {
+        if (item.periode && ['spp', 'spp_bos', 'komp'].includes(item.component)) {
+          const monthly = monthlyAllocations.get(item.periode) || { spp: 0, komp: 0 };
+          monthly[item.component === 'komp' ? 'komp' : 'spp'] += Number(item.nominal || 0);
+          monthlyAllocations.set(item.periode, monthly);
+        } else {
+          otherAllocations.push(item);
+        }
+      });
+      const monthlyMarkup = [...monthlyAllocations.entries()]
+        .sort(([periodA], [periodB]) => paymentPeriodSequence(periodA) - paymentPeriodSequence(periodB))
+        .map(([period, amounts]) => {
+          const breakdown = [
+            amounts.spp ? `SPP ${formatRupiah(amounts.spp)}` : '',
+            amounts.komp ? `Komputer ${formatRupiah(amounts.komp)}` : ''
+          ].filter(Boolean).join(' · ');
+          return `<div class="payment-history-allocation-item is-monthly">
+            <span>${escapeHtml(formatPeriodLabel(period))}<small>${escapeHtml(breakdown)}</small></span>
+            <strong>${formatRupiah(amounts.spp + amounts.komp)}</strong>
+          </div>`;
+        }).join('');
+      const otherMarkup = otherAllocations.map((item) => {
         const activityYears = Array.isArray(item.activity_allocations)
           ? item.activity_allocations
             .map((allocation) => String(allocation.tahun_ajaran || ''))
@@ -5816,6 +5880,7 @@ function renderStudentPaymentDetails(billing, transactions) {
           <span>${escapeHtml(detail)}</span><strong>${formatRupiah(Number(item.nominal || 0))}</strong>
         </div>`;
       }).join('');
+      const allocations = monthlyMarkup + otherMarkup;
       return `
         <tr class="${group.voided ? 'is-voided' : ''}">
           <td>${escapeHtml(formatDateTime(group.date))}</td>
@@ -5835,8 +5900,9 @@ function renderStudentPaymentDetails(billing, transactions) {
 async function loadStudentPaymentDetails(student) {
   const year = student.tahunAjaran || currentYearScope() || currentAcademicYear();
   const cutoff = paymentBillingCutoff(year);
-  if (!cutoff) throw new Error(`Tahun ajaran ${year} belum memiliki periode tagihan aktif.`);
+  if (!cutoff) throw new Error(`Tahun ajaran ${year} belum memiliki periode tagihan.`);
   const period = toPeriode(cutoff);
+  const academicEnd = academicMonths(year).slice(-1)[0]?.key;
   if (app.server) {
     if (!app.cardPrintCredentials) throw new Error('Sesi login tidak tersedia. Keluar lalu masuk kembali untuk memuat riwayat.');
     const { data, error } = await app.supabase.rpc('spp_app_student_payment_history_v1', {
@@ -5854,7 +5920,7 @@ async function loadStudentPaymentDetails(student) {
   }
 
   return {
-    billing: buildLocalPaymentBilling(student, year, cutoff),
+    billing: buildLocalPaymentBilling(student, year, academicEnd),
     transactions: app.state.transaksi
       .filter((item) => item.nospp === student.nospp && item.kdsek === student.kdsek)
       .sort((a, b) => new Date(b.tglbyr) - new Date(a.tglbyr))
