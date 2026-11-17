@@ -3305,6 +3305,13 @@ function formatAcademicMonth(monthKey) {
     .format(new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, 1)));
 }
 
+function formatAcademicMonthShort(monthKey) {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(monthKey || ''));
+  if (!match) return String(monthKey || '');
+  return new Intl.DateTimeFormat('id-ID', { month: 'short', year: 'numeric', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, 1)));
+}
+
 function populateStudentYearOptions(selectedYear = '') {
   const currentStart = Number(currentAcademicYear().slice(0, 4));
   const nextYear = `${currentStart + 1}-${currentStart + 2}`;
@@ -3411,7 +3418,7 @@ function renderRevenueDashboard(rows, year, receiptRows = []) {
     return `<div class="revenue-month">
       <strong title="Total target">T ${formatRupiahCompact(totalTarget)}</strong>
       <div class="revenue-bars" aria-hidden="true">${bars}</div>
-      <span>${escapeHtml(month.label)}</span>
+      <span>${escapeHtml(formatAcademicMonthShort(month.key))}</span>
       <small title="Total realisasi">R ${formatRupiahCompact(totalRealized)}</small>
     </div>`;
   }).join('');

@@ -2662,6 +2662,7 @@ input[type='radio'] {
 .revenue-month > span {
   padding-top: 8px;
   text-transform: capitalize;
+  white-space: nowrap;
 }
 
 .revenue-month > small {
