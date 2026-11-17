@@ -19,6 +19,7 @@ const DEFAULT_DB = {
     { idpemakai: 'K01', password: 'k123', jabatan: 'Administrator', role: 'unit', unit: 'K' },
     { idpemakai: 'Y01', password: 'y123', jabatan: 'Administrator', role: 'unit', unit: 'Y' }
   ],
+  operatorCodes: {},
   schools: [
     { kdsek: 'T', nmsek: 'TK ST. Theresia', vaCode: '01', active: true, isCustom: false },
     { kdsek: 'M', nmsek: 'SD ST. Maria', vaCode: '02', active: true, isCustom: false },
@@ -80,7 +81,8 @@ const app = {
   arrearsTotal: 0,
   arrearsRows: [],
   arrearsExporting: false,
-  operatorCodes: []
+  userAccounts: [],
+  passwordResetTarget: null
 };
 
 const PAGE_SIZE = 25;
@@ -231,6 +233,24 @@ const ui = {
   paymentCorrectionSubmit: document.getElementById('paymentCorrectionSubmit'),
   operatorCodesTableBody: document.getElementById('operatorCodesTableBody'),
   operatorCodesStatus: document.getElementById('operatorCodesStatus'),
+  userCreateForm: document.getElementById('userCreateForm'),
+  newUserName: document.getElementById('newUserName'),
+  newUserUsername: document.getElementById('newUserUsername'),
+  newUserPassword: document.getElementById('newUserPassword'),
+  newUserRole: document.getElementById('newUserRole'),
+  newUserSchoolField: document.getElementById('newUserSchoolField'),
+  newUserSchool: document.getElementById('newUserSchool'),
+  createUserSubmit: document.getElementById('createUserSubmit'),
+  userCreateStatus: document.getElementById('userCreateStatus'),
+  userPasswordDialog: document.getElementById('userPasswordDialog'),
+  userPasswordForm: document.getElementById('userPasswordForm'),
+  userPasswordTarget: document.getElementById('userPasswordTarget'),
+  userPasswordNew: document.getElementById('userPasswordNew'),
+  userPasswordConfirm: document.getElementById('userPasswordConfirm'),
+  userPasswordStatus: document.getElementById('userPasswordStatus'),
+  userPasswordSubmit: document.getElementById('userPasswordSubmit'),
+  userPasswordClose: document.getElementById('userPasswordClose'),
+  userPasswordCancel: document.getElementById('userPasswordCancel'),
   paymentComponentRows: document.getElementById('paymentComponentRows'),
   paymentBosTotal: document.getElementById('paymentBosTotal'),
   paymentAllocationTotal: document.getElementById('paymentAllocationTotal'),
@@ -359,6 +379,7 @@ function loadLocalData() {
       schools: (parsed.schools || clone(DEFAULT_DB.schools)).map(normalizeLocalSchool),
       bankName: parsed.bankName || DEFAULT_DB.bankName,
       vaSettings: Array.isArray(parsed.vaSettings) ? parsed.vaSettings : [],
+      operatorCodes: parsed.operatorCodes && typeof parsed.operatorCodes === 'object' ? parsed.operatorCodes : {},
       siswa: parsed.siswa || clone(DEFAULT_DB.siswa),
       classes: mergeSchoolClasses(parsed.classes, parsed.siswa || clone(DEFAULT_DB.siswa)),
       transaksi: parsed.transaksi || clone(DEFAULT_DB.transaksi)
@@ -827,10 +848,13 @@ function setPage(pageName) {
     laporan: 'Laporan',
     sekolah: 'Sekolah',
     bank: 'Bank',
-    operator: 'Operator'
+    operator: 'Pengguna'
   }[pageName];
 
-  if (pageName === 'operator') loadOperatorCodes();
+  if (pageName === 'operator') {
+    populateNewUserSchoolOptions();
+    loadUserAccounts();
+  }
 }
 
 function initSupabase() {
@@ -2713,74 +2737,330 @@ async function fetchDailyPaymentSummary() {
   }
 }
 
-async function loadOperatorCodes() {
-  if (!ui.operatorCodesTableBody) return;
-  ui.operatorCodesStatus.textContent = 'Memuat akun operator...';
-  ui.operatorCodesTableBody.innerHTML = '<tr><td colspan="4" class="empty-state">Memuat akun operator...</td></tr>';
+const USER_ROLE_OPTIONS = [
+  ['superadmin', 'Admin'],
+  ['yayasan', 'Yayasan'],
+  ['unit', 'Unit']
+];
+
+function populateNewUserSchoolOptions() {
+  const activeSchools = app.state.schools.filter((school) => school.active !== false);
+  ui.newUserSchool.innerHTML = activeSchools.map((school) => (
+    `<option value="${escapeHtml(school.kdsek)}">${escapeHtml(school.nmsek)}</option>`
+  )).join('') || '<option value="">Belum ada sekolah aktif</option>';
+  ui.newUserSchool.disabled = activeSchools.length === 0;
+  updateNewUserSchoolVisibility();
+}
+
+function updateNewUserSchoolVisibility() {
+  const isUnit = ui.newUserRole.value === 'unit';
+  ui.newUserSchoolField.hidden = !isUnit;
+  ui.newUserSchool.required = isUnit;
+}
+
+function renderUserAccounts() {
+  const schools = app.state.schools;
+  const currentUserId = normalizeLoginValue(app.user?.idpemakai || '');
+  const roleOptions = (selected) => USER_ROLE_OPTIONS.map(([value, label]) => (
+    `<option value="${value}" ${selected === value ? 'selected' : ''}>${label}</option>`
+  )).join('');
+  const schoolOptions = (selected, allowAll) => [
+    ...(allowAll ? [`<option value="ALL" ${selected === 'ALL' ? 'selected' : ''}>Semua sekolah</option>`] : []),
+    ...schools
+      .filter((school) => school.active !== false || school.kdsek === selected)
+      .map((school) => (
+      `<option value="${escapeHtml(school.kdsek)}" ${selected === school.kdsek ? 'selected' : ''}>${escapeHtml(school.nmsek)}${school.active === false ? ' (nonaktif)' : ''}</option>`
+      ))
+  ].join('');
+
+  ui.operatorCodesTableBody.innerHTML = app.userAccounts.map((account) => {
+    const idpemakai = String(account.idpemakai || '');
+    const role = String(account.role || 'unit').toLowerCase();
+    const isActive = account.is_active !== false;
+    const isCurrentUser = normalizeLoginValue(idpemakai) === currentUserId;
+    const unit = account.id_sekolah || account.unit || 'ALL';
+    const isUnit = role === 'unit';
+    return `
+      <tr data-user-id="${escapeHtml(idpemakai)}" data-active="${isActive}">
+        <td class="user-account-cell">
+          <strong>${escapeHtml(idpemakai)}</strong>
+          <input type="text" maxlength="100" value="${escapeHtml(account.nama_lengkap || account.jabatan || '')}"
+            data-user-name aria-label="Nama pengguna ${escapeHtml(idpemakai)}" />
+        </td>
+        <td><select data-user-role aria-label="Role ${escapeHtml(idpemakai)}" ${isCurrentUser ? 'disabled' : ''}>${roleOptions(role)}</select></td>
+        <td><select data-user-school aria-label="Sekolah ${escapeHtml(idpemakai)}" ${isCurrentUser || !isUnit ? 'disabled' : ''}>${schoolOptions(unit, !isUnit)}</select></td>
+        <td><input class="operator-code-input" type="text" maxlength="20" value="${escapeHtml(account.kode_operator || '')}"
+          data-user-operator-code aria-label="Kode operator ${escapeHtml(idpemakai)}" /></td>
+        <td><span class="user-status-pill ${isActive ? 'is-active' : 'is-blocked'}">${isActive ? 'Aktif' : 'Diblokir'}</span></td>
+        <td class="user-row-actions">
+          <button type="button" class="secondary-button small-button" data-save-user>Simpan</button>
+          <button type="button" class="secondary-button small-button" data-reset-user-password>Reset password</button>
+          <button type="button" class="${isActive ? 'danger-button' : 'secondary-button'} small-button"
+            data-toggle-user-active ${isCurrentUser ? 'disabled' : ''}>${isActive ? 'Blokir' : 'Buka akses'}</button>
+        </td>
+      </tr>
+    `;
+  }).join('') || '<tr><td colspan="6" class="empty-state">Belum ada pengguna. Tambahkan akun melalui formulir di atas.</td></tr>';
+}
+
+async function loadUserAccounts() {
+  ui.operatorCodesStatus.textContent = 'Memuat pengguna...';
+  ui.operatorCodesTableBody.innerHTML = '<tr><td colspan="6" class="empty-state">Memuat pengguna...</td></tr>';
   try {
     if (app.server) {
-      const credentials = requireStudentRules();
-      const { data, error } = await app.supabase.rpc('get_payment_operator_codes_v1', credentials);
+      const { data, error } = await app.supabase.rpc('spp_app_user_accounts_v1', requireStudentRules());
       if (error) throw error;
-      app.operatorCodes = data || [];
+      app.userAccounts = data || [];
     } else {
       const codes = app.state.operatorCodes || {};
-      app.operatorCodes = (app.state.users || []).map((user) => ({
+      app.userAccounts = (app.state.users || []).map((user) => ({
         idpemakai: user.idpemakai,
+        nama_lengkap: user.nama_lengkap || user.jabatan,
         jabatan: user.jabatan,
         role: user.role,
-        kode_operator: codes[user.idpemakai] || user.idpemakai
+        id_sekolah: user.id_sekolah || user.unit || 'ALL',
+        is_active: user.is_active !== false,
+        kode_operator: codes[user.idpemakai] || user.operatorCode || user.idpemakai
       }));
     }
-    ui.operatorCodesTableBody.innerHTML = app.operatorCodes.map((operator) => `
-      <tr>
-        <td>${escapeHtml(operator.idpemakai)}<small>${escapeHtml(operator.jabatan || '-')}</small></td>
-        <td>${escapeHtml(operator.role || '-')}</td>
-        <td><input class="operator-code-input" type="text" maxlength="20" value="${escapeHtml(operator.kode_operator || '')}" data-operator-code aria-label="Kode operator untuk ${escapeHtml(operator.idpemakai)}" /></td>
-        <td><button type="button" class="secondary-button small-button" data-save-operator-code="${escapeHtml(operator.idpemakai)}">Simpan</button></td>
-      </tr>
-    `).join('') || '<tr><td colspan="4" class="empty-state">Belum ada akun operator.</td></tr>';
+    renderUserAccounts();
     ui.operatorCodesStatus.textContent = '';
+    return true;
   } catch (error) {
-    ui.operatorCodesTableBody.innerHTML = `<tr><td colspan="4" class="empty-state">Akun operator gagal dimuat: ${escapeHtml(error.message || 'Kesalahan tidak diketahui.')}</td></tr>`;
-    ui.operatorCodesStatus.textContent = 'Pastikan migration 018 sudah dijalankan.';
+    app.userAccounts = [];
+    ui.operatorCodesTableBody.innerHTML = `<tr><td colspan="6" class="empty-state">Pengguna gagal dimuat: ${escapeHtml(error.message || 'Kesalahan tidak diketahui.')}</td></tr>`;
+    ui.operatorCodesStatus.textContent = `Pastikan migration 025 pengelolaan pengguna sudah dijalankan. ${error.message || ''}`.trim();
+    return false;
   }
 }
 
-async function savePaymentOperatorCode(button) {
-  const idpemakai = button.dataset.saveOperatorCode;
-  const input = button.closest('tr')?.querySelector('[data-operator-code]');
-  const kode = String(input?.value || '').trim().toUpperCase();
-  if (!/^[A-Z0-9-]{2,20}$/.test(kode)) {
-    ui.operatorCodesStatus.textContent = 'Kode harus 2 sampai 20 karakter: huruf, angka, atau tanda hubung.';
+function localOperatorCode() {
+  const codes = Object.values(app.state.operatorCodes || {}).map((code) => String(code).toUpperCase());
+  for (let sequence = 1; sequence < 1000000; sequence += 1) {
+    const candidate = `USR-${String(sequence).padStart(6, '0')}`;
+    if (!codes.includes(candidate)) return candidate;
+  }
+  throw new Error('Kode operator otomatis tidak tersedia.');
+}
+
+async function createUserAccount(event) {
+  event.preventDefault();
+  const idpemakai = ui.newUserUsername.value.trim();
+  const nama = ui.newUserName.value.trim();
+  const password = ui.newUserPassword.value;
+  const role = ui.newUserRole.value;
+  const school = role === 'unit' ? ui.newUserSchool.value : 'ALL';
+  if (!/^[A-Za-z0-9._-]{3,50}$/.test(idpemakai)) {
+    ui.userCreateStatus.textContent = 'Username harus 3–50 karakter: huruf, angka, titik, garis bawah, atau tanda hubung.';
     return;
   }
+  if (!nama || nama.length > 100 || password.length < 8 || password.length > 128
+      || password !== password.trim()) {
+    ui.userCreateStatus.textContent = 'Isi nama pengguna dan password awal 8–128 karakter tanpa spasi di awal atau akhir.';
+    return;
+  }
+  if (!USER_ROLE_OPTIONS.some(([value]) => value === role) || (role === 'unit' && !school)) {
+    ui.userCreateStatus.textContent = 'Pilih role dan sekolah yang valid untuk akun Unit.';
+    return;
+  }
+
+  ui.createUserSubmit.disabled = true;
+  ui.userCreateStatus.textContent = 'Membuat akun pengguna...';
+  try {
+    let operatorCode;
+    if (app.server) {
+      const { data, error } = await app.supabase.rpc('spp_app_create_user_v1', {
+        ...requireStudentRules(),
+        p_idpemakai: idpemakai,
+        p_nama_lengkap: nama,
+        p_password_baru: password,
+        p_role: role,
+        p_id_sekolah: school
+      });
+      if (error) throw error;
+      operatorCode = data;
+    } else {
+      if (app.state.users.some((user) => normalizeLoginValue(user.idpemakai) === normalizeLoginValue(idpemakai))) {
+        throw new Error('Username sudah digunakan.');
+      }
+      operatorCode = localOperatorCode();
+      app.state.users.push({
+        idpemakai,
+        password,
+        jabatan: nama,
+        nama_lengkap: nama,
+        role,
+        unit: school,
+        id_sekolah: school,
+        is_active: true,
+        operatorCode
+      });
+      app.state.operatorCodes[idpemakai] = operatorCode;
+      saveLocalData();
+    }
+    ui.userCreateForm.reset();
+    updateNewUserSchoolVisibility();
+    const loaded = await loadUserAccounts();
+    ui.userCreateStatus.textContent = loaded
+      ? `Akun ${idpemakai} dibuat dengan kode operator ${operatorCode || 'tersimpan'}.`
+      : `Akun ${idpemakai} dibuat, tetapi daftar pengguna gagal dimuat. Muat ulang halaman untuk memastikan hasilnya.`;
+  } catch (error) {
+    ui.userCreateStatus.textContent = error.message || 'Akun gagal dibuat.';
+  } finally {
+    ui.createUserSubmit.disabled = false;
+  }
+}
+
+async function saveUserAccount(button) {
+  const row = button.closest('tr');
+  const idpemakai = row?.dataset.userId;
+  const nama = row?.querySelector('[data-user-name]')?.value.trim();
+  const role = row?.querySelector('[data-user-role]')?.value;
+  const schoolSelect = row?.querySelector('[data-user-school]');
+  const school = role === 'unit' ? schoolSelect?.value : 'ALL';
+  const operatorCode = String(row?.querySelector('[data-user-operator-code]')?.value || '').trim().toUpperCase();
+  const isActive = row?.dataset.active === 'true';
+  if (!idpemakai || !nama || nama.length > 100 || !/^[A-Z0-9-]{2,20}$/.test(operatorCode)) {
+    ui.operatorCodesStatus.textContent = 'Nama wajib diisi; kode operator harus 2–20 karakter berupa huruf, angka, atau tanda hubung.';
+    return;
+  }
+  if (!USER_ROLE_OPTIONS.some(([value]) => value === role) || (role === 'unit' && !school)) {
+    ui.operatorCodesStatus.textContent = 'Pilih role dan sekolah yang valid untuk akun Unit.';
+    return;
+  }
+
   button.disabled = true;
   try {
     if (app.server) {
-      const credentials = requireStudentRules();
-      const { error } = await app.supabase.rpc('save_payment_operator_code_v1', {
-        ...credentials,
+      const { error } = await app.supabase.rpc('spp_app_update_user_v1', {
+        ...requireStudentRules(),
         p_idpemakai: idpemakai,
-        p_kode_operator: kode
+        p_nama_lengkap: nama,
+        p_role: role,
+        p_id_sekolah: school,
+        p_kode_operator: operatorCode,
+        p_is_active: isActive
       });
       if (error) throw error;
-      await loadOperatorCodes();
     } else {
-      const duplicate = app.operatorCodes.some((item) => (
-        item.idpemakai !== idpemakai && String(item.kode_operator || '').toUpperCase() === kode
+      const user = app.state.users.find((item) => normalizeLoginValue(item.idpemakai) === normalizeLoginValue(idpemakai));
+      if (!user) throw new Error('Pengguna tidak ditemukan.');
+      if (normalizeLoginValue(idpemakai) === normalizeLoginValue(app.user.idpemakai)
+          && (role !== 'superadmin' || !isActive)) {
+        throw new Error('Role atau status akun Admin yang sedang digunakan tidak dapat diubah.');
+      }
+      const duplicate = Object.entries(app.state.operatorCodes || {}).some(([key, code]) => (
+        normalizeLoginValue(key) !== normalizeLoginValue(idpemakai)
+          && String(code || '').toUpperCase() === operatorCode
       ));
       if (duplicate) throw new Error('Kode operator sudah dipakai akun lain.');
-      app.state.operatorCodes = app.state.operatorCodes || {};
-      app.state.operatorCodes[idpemakai] = kode;
+      user.jabatan = nama;
+      user.nama_lengkap = nama;
+      user.role = role;
+      user.unit = school;
+      user.id_sekolah = school;
+      app.state.operatorCodes[idpemakai] = operatorCode;
+      user.operatorCode = operatorCode;
       saveLocalData();
-      await loadOperatorCodes();
     }
-    ui.operatorCodesStatus.textContent = `Kode operator ${kode} tersimpan.`;
+    const loaded = await loadUserAccounts();
+    ui.operatorCodesStatus.textContent = loaded
+      ? `Pengaturan akun ${idpemakai} berhasil disimpan.`
+      : `Pengaturan akun ${idpemakai} tersimpan, tetapi daftar gagal dimuat. Muat ulang halaman.`;
   } catch (error) {
-    ui.operatorCodesStatus.textContent = error.message || 'Kode operator gagal disimpan.';
+    ui.operatorCodesStatus.textContent = error.message || 'Pengaturan akun gagal disimpan.';
   } finally {
     button.disabled = false;
+  }
+}
+
+async function toggleUserActive(button) {
+  const row = button.closest('tr');
+  const idpemakai = row?.dataset.userId;
+  const isActive = row?.dataset.active === 'true';
+  if (!idpemakai) return;
+  if (normalizeLoginValue(idpemakai) === normalizeLoginValue(app.user?.idpemakai || '')) {
+    ui.operatorCodesStatus.textContent = 'Akun Admin yang sedang digunakan tidak dapat diblokir.';
+    return;
+  }
+  const nextActive = !isActive;
+  if (!nextActive && !window.confirm(`Blokir akun ${idpemakai}? Login dan permintaan berikutnya akan ditolak.`)) return;
+  button.disabled = true;
+  try {
+    if (app.server) {
+      const { error } = await app.supabase.rpc('spp_app_set_user_active_v1', {
+        ...requireStudentRules(),
+        p_idpemakai: idpemakai,
+        p_is_active: nextActive
+      });
+      if (error) throw error;
+    } else {
+      const user = app.state.users.find((item) => normalizeLoginValue(item.idpemakai) === normalizeLoginValue(idpemakai));
+      if (!user) throw new Error('Pengguna tidak ditemukan.');
+      user.is_active = nextActive;
+      saveLocalData();
+    }
+    const loaded = await loadUserAccounts();
+    ui.operatorCodesStatus.textContent = loaded
+      ? (nextActive ? `Akun ${idpemakai} dibuka kembali.` : `Akun ${idpemakai} diblokir.`)
+      : `Status akun ${idpemakai} tersimpan, tetapi daftar gagal dimuat. Muat ulang halaman.`;
+  } catch (error) {
+    ui.operatorCodesStatus.textContent = error.message || 'Status akun gagal diubah.';
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function openUserPasswordDialog(button) {
+  const idpemakai = button.closest('tr')?.dataset.userId;
+  if (!idpemakai) return;
+  app.passwordResetTarget = idpemakai;
+  ui.userPasswordTarget.textContent = `Pengguna: ${idpemakai}`;
+  ui.userPasswordNew.value = '';
+  ui.userPasswordConfirm.value = '';
+  ui.userPasswordStatus.textContent = '';
+  ui.userPasswordDialog.showModal();
+  ui.userPasswordNew.focus();
+}
+
+async function resetUserPassword(event) {
+  event.preventDefault();
+  const password = ui.userPasswordNew.value;
+  if (!app.passwordResetTarget || password.length < 8 || password.length > 128
+      || password !== password.trim()) {
+    ui.userPasswordStatus.textContent = 'Password harus 8–128 karakter tanpa spasi di awal atau akhir.';
+    return;
+  }
+  if (password !== ui.userPasswordConfirm.value) {
+    ui.userPasswordStatus.textContent = 'Konfirmasi password tidak sama.';
+    return;
+  }
+  ui.userPasswordSubmit.disabled = true;
+  ui.userPasswordStatus.textContent = 'Menyimpan password baru...';
+  try {
+    if (app.server) {
+      const { error } = await app.supabase.rpc('spp_app_reset_user_password_v1', {
+        ...requireStudentRules(),
+        p_idpemakai: app.passwordResetTarget,
+        p_password_baru: password
+      });
+      if (error) throw error;
+    } else {
+      const user = app.state.users.find((item) => normalizeLoginValue(item.idpemakai) === normalizeLoginValue(app.passwordResetTarget));
+      if (!user) throw new Error('Pengguna tidak ditemukan.');
+      user.password = password;
+      saveLocalData();
+    }
+    const target = app.passwordResetTarget;
+    const isCurrentUser = normalizeLoginValue(target) === normalizeLoginValue(app.user?.idpemakai || '');
+    ui.userPasswordDialog.close();
+    ui.operatorCodesStatus.textContent = isCurrentUser
+      ? 'Password akun Admin berhasil direset. Keluar lalu masuk kembali dengan password baru.'
+      : `Password akun ${target} berhasil direset.`;
+  } catch (error) {
+    ui.userPasswordStatus.textContent = error.message || 'Password gagal disimpan.';
+  } finally {
+    ui.userPasswordSubmit.disabled = false;
   }
 }
 
@@ -5914,7 +6194,7 @@ async function login(username, password) {
     });
     if (error) {
       console.error('Supabase login RPC failed:', error);
-      throw new Error('Layanan login Supabase belum siap. Jalankan SQL login_mastusr di Supabase.');
+      throw new Error('Layanan login Supabase belum siap. Jalankan migration login dan pengelolaan pengguna di Supabase.');
     }
 
     const matchedUser = data && data[0];
@@ -5944,7 +6224,11 @@ async function login(username, password) {
     return true;
   }
 
-  const localUser = app.state.users.find((item) => matchLoginUser(item, username, true) && item.password === password);
+  const localUser = app.state.users.find((item) => (
+    item.is_active !== false
+      && matchLoginUser(item, username, true)
+      && item.password === password
+  ));
   if (localUser) {
     app.user = localUser;
     app.adminCredentials = null;
@@ -6390,10 +6674,50 @@ function setupEvents() {
     ui.paymentCorrectionDialog.close();
     app.pendingPaymentCorrection = null;
   });
-  ui.operatorCodesTableBody.addEventListener('click', (event) => {
-    const button = event.target.closest('[data-save-operator-code]');
-    if (button) savePaymentOperatorCode(button);
+  ui.userCreateForm.addEventListener('submit', createUserAccount);
+  ui.newUserRole.addEventListener('change', updateNewUserSchoolVisibility);
+  ui.operatorCodesTableBody.addEventListener('change', (event) => {
+    if (!event.target.matches('[data-user-role]')) return;
+    const school = event.target.closest('tr')?.querySelector('[data-user-school]');
+    if (!school) return;
+    const isUnit = event.target.value === 'unit';
+    school.disabled = !isUnit;
+    const allSchoolsOption = school.querySelector('option[value="ALL"]');
+    if (isUnit) {
+      const hadAllSchoolsSelected = school.value === 'ALL';
+      allSchoolsOption?.remove();
+      if (hadAllSchoolsSelected) school.value = school.options[0]?.value || '';
+    } else {
+      if (!allSchoolsOption) {
+        const option = document.createElement('option');
+        option.value = 'ALL';
+        option.textContent = 'Semua sekolah';
+        school.prepend(option);
+      }
+      school.value = 'ALL';
+    }
   });
+  ui.operatorCodesTableBody.addEventListener('click', (event) => {
+    const saveButton = event.target.closest('[data-save-user]');
+    if (saveButton) {
+      saveUserAccount(saveButton);
+      return;
+    }
+    const resetButton = event.target.closest('[data-reset-user-password]');
+    if (resetButton) {
+      openUserPasswordDialog(resetButton);
+      return;
+    }
+    const activeButton = event.target.closest('[data-toggle-user-active]');
+    if (activeButton) toggleUserActive(activeButton);
+  });
+  ui.userPasswordForm.addEventListener('submit', resetUserPassword);
+  ui.userPasswordClose.addEventListener('click', () => ui.userPasswordDialog.close());
+  ui.userPasswordCancel.addEventListener('click', () => ui.userPasswordDialog.close());
+  ui.userPasswordDialog.addEventListener('click', (event) => {
+    if (event.target === ui.userPasswordDialog) ui.userPasswordDialog.close();
+  });
+  ui.userPasswordDialog.addEventListener('close', () => { app.passwordResetTarget = null; });
   ui.schoolSettingsForm.addEventListener('submit', handleSchoolSettingsSubmit);
   ui.bankSettingsForm.addEventListener('submit', handleBankSettingsSubmit);
   ui.addSchoolBtn.addEventListener('click', () => {

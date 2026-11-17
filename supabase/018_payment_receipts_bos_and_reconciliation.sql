@@ -560,7 +560,8 @@ AS $function$
 BEGIN
   PERFORM public.spp_app_assert_admin(p_username, p_password);
   RETURN QUERY
-  SELECT m.idpemakai, m.jabatan, m.role, c.kode_operator, c.updated_at
+  SELECT m.idpemakai::text, m.jabatan::text, m.role::text,
+    c.kode_operator::text, c.updated_at::timestamptz
   FROM public.mastusr m
   LEFT JOIN public.spp_app_operator_codes c ON lower(c.idpemakai) = lower(m.idpemakai)
   ORDER BY lower(m.idpemakai);

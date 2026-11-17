@@ -32,7 +32,7 @@
           <div class="admin-nav">
             <button class="nav admin-only" data-page="sekolah" hidden>Sekolah</button>
             <button class="nav admin-only" data-page="bank" hidden>Bank</button>
-            <button class="nav admin-only" data-page="operator" hidden>Operator</button>
+            <button class="nav admin-only" data-page="operator" hidden>Pengguna</button>
           </div>
         </nav>
 
@@ -720,15 +720,57 @@
           <div class="panel">
             <div class="panel-header">
               <div>
-                <h2>Kode Operator</h2>
-                <p class="muted-copy">Kode yang disimpan di sini dicetak pada slip baru dan slip koreksi. Slip lama mempertahankan kode saat transaksi dibuat.</p>
+                <h2>Pengguna dan akses</h2>
+                <p class="muted-copy">Kelola akun, cakupan sekolah, status akses, dan kode operator. Slip lama tetap menyimpan kode saat transaksi dibuat.</p>
+              </div>
+            </div>
+            <form id="userCreateForm" class="user-create-form">
+              <div class="form-grid">
+                <label>
+                  <span>Nama lengkap</span>
+                  <input id="newUserName" type="text" maxlength="100" autocomplete="name" required />
+                </label>
+                <label>
+                  <span>Username</span>
+                  <input id="newUserUsername" type="text" maxlength="50" autocomplete="off" required />
+                </label>
+                <label>
+                  <span>Password awal</span>
+                  <input id="newUserPassword" type="password" minlength="8" maxlength="128" autocomplete="new-password" required />
+                </label>
+                <label>
+                  <span>Role</span>
+                  <select id="newUserRole" required>
+                    <option value="unit">Unit</option>
+                    <option value="yayasan">Yayasan</option>
+                    <option value="superadmin">Admin</option>
+                  </select>
+                </label>
+                <label id="newUserSchoolField" hidden>
+                  <span>Sekolah</span>
+                  <select id="newUserSchool"></select>
+                </label>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="primary-button" id="createUserSubmit">Tambah pengguna</button>
+              </div>
+              <p class="settings-status" id="userCreateStatus" role="status" aria-live="polite"></p>
+            </form>
+          </div>
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <h3>Daftar pengguna</h3>
+                <p class="muted-copy">Setiap akun memiliki kode operator unik. Perubahan akses berlaku pada permintaan berikutnya.</p>
               </div>
             </div>
             <div class="table-wrap">
-              <table class="settings-table">
-                <thead><tr><th>Akun</th><th>Peran</th><th>Kode operator unik</th><th>Aksi</th></tr></thead>
+              <table class="settings-table user-accounts-table">
+                <thead>
+                  <tr><th>Akun</th><th>Role</th><th>Sekolah</th><th>Kode operator</th><th>Status</th><th>Aksi</th></tr>
+                </thead>
                 <tbody id="operatorCodesTableBody">
-                  <tr><td colspan="4" class="empty-state">Memuat akun operator...</td></tr>
+                  <tr><td colspan="6" class="empty-state">Memuat pengguna...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -873,6 +915,30 @@
         </section>
         <div class="form-actions">
           <button type="button" class="secondary-button" id="paymentHistoryCancel">Tutup</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="userPasswordDialog" class="student-modal user-password-dialog">
+      <form id="userPasswordForm" method="dialog" class="student-dialog">
+        <div class="dialog-heading">
+          <div>
+            <h2>Reset password</h2>
+            <p id="userPasswordTarget" class="muted-copy"></p>
+          </div>
+          <button type="button" class="modal-close" id="userPasswordClose" aria-label="Tutup">&times;</button>
+        </div>
+        <label class="field">
+          <span>Password baru</span>
+          <input id="userPasswordNew" type="password" minlength="8" maxlength="128" autocomplete="new-password" required />
+        </label>
+        <label class="field">
+          <span>Ulangi password</span>
+          <input id="userPasswordConfirm" type="password" minlength="8" maxlength="128" autocomplete="new-password" required />
+        </label>
+        <p id="userPasswordStatus" class="settings-status" role="status" aria-live="polite"></p>
+        <div class="form-actions">
+          <button type="button" class="secondary-button" id="userPasswordCancel">Batal</button>
+          <button type="submit" class="primary-button" id="userPasswordSubmit">Simpan password</button>
         </div>
       </form>
     </dialog>

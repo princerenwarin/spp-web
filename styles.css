@@ -507,6 +507,75 @@ label {
   width: auto;
 }
 
+.user-create-form {
+  border-top: 1px solid var(--border);
+  margin-top: 18px;
+  padding-top: 18px;
+}
+
+.user-create-form .form-grid {
+  max-width: 980px;
+}
+
+.user-accounts-table {
+  min-width: 1120px;
+}
+
+.user-accounts-table input,
+.user-accounts-table select,
+.user-create-form select {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  font: inherit;
+  min-height: 40px;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.user-accounts-table input {
+  min-width: 130px;
+}
+
+.user-accounts-table select {
+  min-width: 138px;
+}
+
+.user-account-cell {
+  min-width: 190px;
+}
+
+.user-account-cell strong {
+  color: var(--text);
+}
+
+.user-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 248px;
+}
+
+.user-status-pill {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 5px 9px;
+  white-space: nowrap;
+}
+
+.user-status-pill.is-active {
+  background: #e8f3ee;
+  color: #245c48;
+}
+
+.user-status-pill.is-blocked {
+  background: #f9e9eb;
+  color: #963d46;
+}
+
 .school-add-row {
   align-items: end;
   display: grid;
