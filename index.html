@@ -100,13 +100,13 @@
             <div class="panel revenue-panel">
               <div class="panel-header">
                 <div>
-                  <h2>Pemasukan per Bulan dan Unit</h2>
-                  <p class="muted-copy">Berdasarkan tanggal transaksi pada tahun ajaran yang dipilih.</p>
+                  <h2>Target dan Realisasi per Bulan</h2>
+                  <p class="muted-copy">SPP+Komputer mengikuti periode tagihan; Kegiatan dikumpulkan pada Juni pembuka tahun ajaran.</p>
                 </div>
                 <button type="button" class="secondary-button small-button" id="refreshRevenue">Muat ulang</button>
               </div>
               <div class="revenue-legend" id="revenueLegend"></div>
-              <div class="revenue-chart" id="revenueChart" role="img" aria-label="Grafik pemasukan per bulan dan unit"></div>
+              <div class="revenue-chart" id="revenueChart" role="img" aria-label="Grafik target dan realisasi SPP, Komputer, dan Kegiatan per periode"></div>
               <div class="table-wrap revenue-table-wrap">
                 <table>
                   <thead id="revenueTableHead"></thead>
@@ -206,6 +206,20 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
                 <input id="searchStudent" type="search" aria-label="Cari siswa berdasarkan nama, nomor SPP, ID, atau kelas" placeholder="Cari nama, No. SPP, ID, atau kelas" autocomplete="off" />
               </div>
+              <label class="student-sort-select">
+                <span>Urutkan</span>
+                <select id="studentSortSelect" aria-label="Urutkan data siswa">
+                  <option value="nama-asc">Nama A-Z</option>
+                  <option value="school-asc">Sekolah A-Z</option>
+                  <option value="school-desc">Sekolah Z-A</option>
+                  <option value="class-asc">Kelas naik</option>
+                  <option value="class-desc">Kelas turun</option>
+                </select>
+              </label>
+              <div class="student-export-control">
+                <button type="button" class="secondary-button small-button" id="downloadStudentsBtn">Unduh data siswa</button>
+                <span id="studentExportStatus" role="status" aria-live="polite"></span>
+              </div>
               <div class="toolbar-actions admin-only" hidden>
                 <button type="button" class="primary-button small-button" id="openStudentFormBtn">+ Siswa / Naik Kelas</button>
                 <button type="button" class="secondary-button small-button" data-open="arrearsTools">Tagihan Tahun Lalu</button>
@@ -244,7 +258,18 @@
                   <tr>
                     <th class="admin-only col-check" hidden><input type="checkbox" id="selectAllStudents" title="Pilih semua yang tampil" /></th>
                     <th>Siswa</th>
-                    <th>Sekolah / Kelas</th>
+                    <th scope="col">
+                      <div class="student-sort-group">
+                        <button type="button" class="student-sort-button" data-student-sort="school" data-sort-label="sekolah" aria-pressed="false">
+                          <span>Sekolah</span>
+                          <svg viewBox="0 0 16 16" aria-hidden="true"><path class="sort-up" d="M8 2v5M5.5 4.5 8 2l2.5 2.5"></path><path class="sort-down" d="M8 9v5m-2.5-2.5L8 14l2.5-2.5"></path></svg>
+                        </button>
+                        <button type="button" class="student-sort-button" data-student-sort="class" data-sort-label="kelas" aria-pressed="false">
+                          <span>Kelas</span>
+                          <svg viewBox="0 0 16 16" aria-hidden="true"><path class="sort-up" d="M8 2v5M5.5 4.5 8 2l2.5 2.5"></path><path class="sort-down" d="M8 9v5m-2.5-2.5L8 14l2.5-2.5"></path></svg>
+                        </button>
+                      </div>
+                    </th>
                     <th>Virtual Account</th>
                     <th>Rincian tagihan</th>
                     <th>Riwayat pembayaran</th>
@@ -590,6 +615,11 @@
                   <option value="">Semua kelas</option>
                 </select>
               </label>
+            </div>
+            <div class="report-download-actions">
+              <button type="button" class="secondary-button small-button" id="downloadArrearsSchoolBtn" disabled>Unduh per sekolah</button>
+              <button type="button" class="secondary-button small-button" id="downloadArrearsClassBtn" disabled>Unduh per kelas</button>
+              <span id="arrearsExportStatus" role="status" aria-live="polite"></span>
             </div>
             <p class="legacy-payment-note" id="legacyPaymentNote" hidden>
               Ada pembayaran lama yang belum dialokasikan ke komponen. Jumlah tersebut tidak dihitung sebagai pelunasan dan belum boleh dijadikan dasar penagihan sampai direkonsiliasi.

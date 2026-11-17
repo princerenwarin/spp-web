@@ -2520,13 +2520,19 @@ input[type='radio'] {
   width: 10px;
 }
 
+.revenue-scale-note {
+  align-self: center;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
 .revenue-chart {
   align-items: stretch;
   border-bottom: 1px solid var(--border);
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(12, minmax(54px, 1fr));
-  min-height: 224px;
+  grid-template-columns: repeat(13, minmax(70px, 1fr));
+  min-height: 248px;
   overflow-x: auto;
   padding: 18px 4px 0;
 }
@@ -2545,7 +2551,7 @@ input[type='radio'] {
   display: grid;
   font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
-  grid-template-rows: auto minmax(100px, 1fr) auto;
+  grid-template-rows: auto minmax(100px, 1fr) auto auto;
   justify-items: center;
   min-width: 48px;
 }
@@ -2589,18 +2595,32 @@ input[type='radio'] {
   text-transform: capitalize;
 }
 
+.revenue-month > small {
+  color: var(--secondary);
+  font-size: 0.65rem;
+  font-variant-numeric: tabular-nums;
+  padding-top: 3px;
+  white-space: nowrap;
+}
+
 .revenue-table-wrap {
   margin-top: 18px;
 }
 
 .revenue-table-wrap table {
-  min-width: 600px;
+  min-width: 1120px;
 }
 
 .revenue-table-wrap th,
 .revenue-table-wrap td {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.revenue-total-row th,
+.revenue-total-row td {
+  background: #f0f4f2;
+  font-weight: 700;
 }
 
 .dashboard-lower {
@@ -2644,6 +2664,21 @@ input[type='radio'] {
 .payment-component-row input {
   min-height: 42px;
   width: 100%;
+}
+
+.report-download-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -4px 0 16px;
+}
+
+.report-download-actions [role="status"] {
+  color: var(--muted);
+  font-size: 0.78rem;
+  flex-basis: 100%;
+  min-height: 1.2em;
 }
 
 .legacy-payment-note {
@@ -2809,6 +2844,13 @@ input[type='radio'] {
 .print-action {
   background: #edf1fc;
   color: #354d9a;
+  display: inline-block;
+  margin: 2px 0;
+}
+
+.download-action {
+  background: #f0f4f2;
+  color: #245c48;
   display: inline-block;
   margin: 2px 0;
 }
@@ -3865,7 +3907,7 @@ input[type='radio'] {
   }
 
   .revenue-chart {
-    grid-template-columns: repeat(12, minmax(58px, 1fr));
+    grid-template-columns: repeat(13, minmax(70px, 1fr));
   }
 
   .report-hero {
@@ -3973,6 +4015,36 @@ table {
   font-variant-numeric: tabular-nums;
 }
 
+.student-export-control {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+
+.student-sort-select {
+  align-items: center;
+  color: var(--muted);
+  display: none;
+  font-size: 0.8rem;
+  gap: 8px;
+}
+
+.student-sort-select select {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  font: inherit;
+  min-height: 40px;
+  padding: 7px 30px 7px 10px;
+}
+
+.student-export-control [role="status"] {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
 .search-field {
   flex-basis: 340px;
   max-width: 500px;
@@ -3990,6 +4062,55 @@ table {
 
 .toolbar-actions {
   gap: 8px;
+}
+
+.student-sort-group {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.student-sort-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  gap: 4px;
+  padding: 3px 4px;
+}
+
+.student-sort-button:hover,
+.student-sort-button[aria-pressed="true"] {
+  color: var(--primary-2);
+}
+
+.student-sort-button:focus-visible {
+  outline: 2px solid var(--secondary);
+  outline-offset: 2px;
+}
+
+.student-sort-button svg {
+  fill: none;
+  height: 14px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+  width: 14px;
+}
+
+.student-sort-button svg path {
+  opacity: 0.35;
+}
+
+.student-sort-button.is-sort-ascending .sort-up,
+.student-sort-button.is-sort-descending .sort-down {
+  opacity: 1;
 }
 
 .selection-bar {
@@ -4277,6 +4398,16 @@ table {
     min-width: 0;
   }
 
+  .student-export-control {
+    justify-content: flex-start;
+    order: 5;
+    width: 100%;
+  }
+
+  .students-panel .students-toolbar .search-field {
+    order: 3;
+  }
+
   .students-table {
     min-width: 0;
   }
@@ -4303,6 +4434,17 @@ table {
   .payment-list-panel .inline-search {
     max-width: none;
     width: 100%;
+  }
+}
+
+@media (max-width: 760px) {
+  .student-sort-select {
+    display: flex;
+    order: 4;
+  }
+
+  .student-export-control {
+    order: 5;
   }
 }
 
