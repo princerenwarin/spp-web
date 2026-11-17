@@ -2529,6 +2529,132 @@ input[type='radio'] {
   overflow: hidden;
 }
 
+.activity-year-panel {
+  margin-bottom: 20px;
+}
+
+.activity-year-panel .panel-header {
+  align-items: flex-start;
+}
+
+.activity-year-summary {
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 18px 0;
+  padding-bottom: 16px;
+}
+
+.activity-year-summary > div {
+  display: grid;
+  gap: 4px;
+}
+
+.activity-year-summary span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.activity-year-summary strong {
+  color: var(--text);
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-year-chart {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.activity-year-chart-key {
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  gap: 14px;
+  margin: 0 0 12px;
+}
+
+.activity-year-chart-key span {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.activity-year-chart-key i {
+  border-radius: 999px;
+  display: inline-block;
+  height: 8px;
+  width: 8px;
+}
+
+.activity-year-target-swatch {
+  background: var(--border);
+}
+
+.activity-year-paid-swatch {
+  background: var(--accent);
+}
+
+.activity-year-chart-row {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(140px, 0.8fr) minmax(140px, 2fr) minmax(150px, 1fr);
+}
+
+.activity-year-chart-label {
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.activity-year-track {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  height: 12px;
+  overflow: hidden;
+  position: relative;
+}
+
+.activity-year-target-bar {
+  background: var(--border);
+  display: block;
+  height: 100%;
+  left: 0;
+  position: absolute;
+  top: 0;
+}
+
+.activity-year-paid-bar {
+  background: var(--accent);
+  display: block;
+  height: 50%;
+  left: 0;
+  position: absolute;
+  bottom: 0;
+}
+
+.activity-year-chart-values {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.activity-year-table {
+  min-width: 580px;
+}
+
+.student-placement-hint {
+  grid-column: 1 / -1;
+  margin: -4px 0 0;
+}
+
 .dashboard-overview-grid {
   align-items: start;
   display: grid;
@@ -2548,6 +2674,30 @@ input[type='radio'] {
 @media (max-width: 900px) {
   .dashboard-overview-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .activity-year-summary {
+    gap: 10px;
+  }
+
+  .activity-year-summary strong {
+    font-size: 1rem;
+  }
+
+  .activity-year-chart-row {
+    gap: 5px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .activity-year-track {
+    grid-column: 1;
+  }
+
+  .activity-year-chart-values {
+    font-size: 0.7rem;
+    text-align: left;
   }
 }
 

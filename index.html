@@ -62,6 +62,12 @@
               <label for="yearFilter">Tahun ajaran</label>
               <select id="yearFilter"></select>
             </div>
+            <div class="filter-pill dashboard-class-filter" hidden>
+              <label for="dashboardClassFilter">Kelas</label>
+              <select id="dashboardClassFilter">
+                <option value="all">Semua kelas</option>
+              </select>
+            </div>
           </div>
         </header>
 
@@ -122,6 +128,34 @@
               <ul class="activity-list" id="activityList"></ul>
             </div>
           </div>
+
+          <section class="panel activity-year-panel" aria-labelledby="activityYearTitle">
+            <div class="panel-header">
+              <div>
+                <h2 id="activityYearTitle">Uang Kegiatan per Tahun Ajaran</h2>
+                <p class="muted-copy">Pembayaran mengurangi tunggakan tahun paling lama terlebih dahulu. Sekolah dan kelas mengikuti filter di atas.</p>
+              </div>
+            </div>
+            <div class="activity-year-summary" aria-live="polite">
+              <div><span>Tagihan</span><strong id="activityYearTarget">-</strong></div>
+              <div><span>Dibayar</span><strong id="activityYearPaid">-</strong></div>
+              <div><span>Sisa</span><strong id="activityYearBalance">-</strong></div>
+            </div>
+            <div class="activity-year-chart-key" aria-hidden="true">
+              <span><i class="activity-year-target-swatch"></i>Tagihan</span>
+              <span><i class="activity-year-paid-swatch"></i>Dibayar</span>
+            </div>
+            <div class="activity-year-chart" id="activityYearChart" aria-label="Perbandingan tagihan dan pembayaran Kegiatan per sekolah dan kelas"></div>
+            <div class="table-wrap">
+              <table class="activity-year-table">
+                <thead><tr><th>Sekolah</th><th>Kelas</th><th>Tagihan</th><th>Dibayar</th><th>Sisa</th></tr></thead>
+                <tbody id="activityYearBody">
+                  <tr><td colspan="5" class="empty-state">Pilih tahun ajaran untuk melihat Uang Kegiatan.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="dashboard-error" id="activityYearStatus" role="status" aria-live="polite"></p>
+          </section>
 
             <div class="panel daily-summary-panel">
               <div class="panel-header">
@@ -297,6 +331,7 @@
                   <select id="studentType">
                     <option value="baru">Siswa baru masuk</option>
                     <option value="naik">Naik / pindah kelas</option>
+                    <option value="penempatan" hidden>Menentukan kelas siswa baru</option>
                     <option value="ubah" hidden>Ubah tagihan</option>
                   </select>
                 </label>
@@ -304,32 +339,33 @@
                   <span>Tahun Ajaran</span>
                   <select id="studentTahun" required></select>
                 </label>
-                <div class="field" data-for="naik" hidden>
+                <div class="field" data-for="naik penempatan" hidden>
                   <span>Siswa</span>
                   <div class="picker" data-picker="studentExisting">
-                    <input type="search" class="picker-input" placeholder="Ketik nama, ID, atau kelas" autocomplete="off" />
+                    <input type="search" class="picker-input" placeholder="Ketik nama atau ID siswa" autocomplete="off" />
                     <input type="hidden" id="studentExisting" />
                     <div class="picker-results" hidden></div>
                   </div>
                 </div>
-                <label data-hide="ubah">
+                <label data-hide="ubah penempatan">
                   <span>Nama Siswa</span>
                   <input id="studentNama" class="name-input" type="text" placeholder="Nama lengkap" />
                 </label>
-                <label data-hide="ubah">
+                <label data-hide="ubah penempatan">
                   <span>WhatsApp</span>
                   <input id="studentWa" type="tel" placeholder="08xxxxxxxxxx" />
                 </label>
                 <label data-hide="ubah">
                   <span>Sekolah</span>
-                  <select id="studentSekolah"></select>
+                  <select id="studentSekolah" required></select>
                 </label>
                 <label data-hide="ubah">
-                  <span>Kelas</span>
-                  <select id="studentKelas" required disabled>
+                  <span>Kelas <small>(boleh ditentukan belakangan untuk siswa baru)</small></span>
+                  <select id="studentKelas" disabled>
                     <option value="">Pilih sekolah terlebih dahulu</option>
                   </select>
                 </label>
+                <p class="field-hint student-placement-hint" data-for="baru">Sekolah anak baru dicatat sekarang. Jika kelasnya belum pasti, No. SPP final dibuat setelah kelas ditentukan.</p>
                 <label data-for="baru">
                   <span>Periode masuk (awal tagihan SPP)</span>
                   <select id="studentPeriode" required></select>
@@ -347,15 +383,15 @@
                   <span>Nominal Seragam</span>
                   <input id="studentSeragam" class="money-input" type="text" inputmode="numeric" value="0" />
                 </label>
-                <label>
+                <label data-for="baru naik">
                   <span>Nominal Kegiatan</span>
                   <input id="studentGiat" class="money-input" type="text" inputmode="numeric" value="0" required />
                 </label>
-                <label>
+                <label data-for="baru naik">
                   <span>Nominal SPP</span>
                   <input id="studentSpp" class="money-input" type="text" inputmode="numeric" value="0" required />
                 </label>
-                <label>
+                <label data-for="baru naik">
                   <span>Nominal Komputer</span>
                   <input id="studentKomp" class="money-input" type="text" inputmode="numeric" value="0" required />
                 </label>
@@ -468,12 +504,12 @@
               <div class="form-grid payment-student-grid">
                 <div class="field">
                   <span>Nama Siswa</span>
-                  <div class="picker" data-picker="paymentStudent" data-value-field="nospp">
+                  <div class="picker" data-picker="paymentStudent" data-value-field="id">
                     <input type="search" class="picker-input" placeholder="Ketik nama siswa" autocomplete="off" />
-                    <input type="hidden" id="paymentNospp" name="nospp" required />
+                    <input type="hidden" id="paymentNospp" name="id_siswa" required />
                     <div class="picker-results" hidden></div>
                   </div>
-                  <small class="field-hint">Pilih hasil yang sesuai dengan sekolah dan kelas.</small>
+                  <small class="field-hint">Pilih siswa dan tahun ajaran yang akan menerima pembayaran.</small>
                 </div>
                 <label class="field">
                   <span>Tanggal uang masuk / transfer</span>

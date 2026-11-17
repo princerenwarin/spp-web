@@ -55,6 +55,7 @@ const app = {
   currentPage: 'dashboard',
   useSupabase: false,
   settingsReady: false,
+  provisionalEnrollmentReady: false,
   adminCredentials: null,
   dashboardCredentials: null,
   cardPrintCredentials: null,
@@ -118,6 +119,7 @@ const ui = {
   userName: document.getElementById('userName'),
   schoolFilter: document.getElementById('schoolFilter'),
   yearFilter: document.getElementById('yearFilter'),
+  dashboardClassFilter: document.getElementById('dashboardClassFilter'),
   paymentSearch: document.getElementById('paymentSearch'),
   dailyPaymentDate: document.getElementById('dailyPaymentDate'),
   dailyPaymentSummary: document.getElementById('dailyPaymentSummary'),
@@ -222,6 +224,12 @@ const ui = {
   revenueChart: document.getElementById('revenueChart'),
   revenueTableHead: document.getElementById('revenueTableHead'),
   revenueTableBody: document.getElementById('revenueTableBody'),
+  activityYearTarget: document.getElementById('activityYearTarget'),
+  activityYearPaid: document.getElementById('activityYearPaid'),
+  activityYearBalance: document.getElementById('activityYearBalance'),
+  activityYearChart: document.getElementById('activityYearChart'),
+  activityYearBody: document.getElementById('activityYearBody'),
+  activityYearStatus: document.getElementById('activityYearStatus'),
   priorYearRevenueBody: document.getElementById('priorYearRevenueBody'),
   paymentBankName: document.getElementById('paymentBankName'),
   searchStudent: document.getElementById('searchStudent'),
@@ -514,6 +522,12 @@ async function loadSupabaseData() {
     app.usedSchools = new Set(usedCatalog.schools || []);
     const studentRulesRes = { students: appStudentsRes.data, enrollments: appEnrollmentsRes.data };
     app.studentRulesReady = !appStudentsRes.error && !appEnrollmentsRes.error;
+    if (app.server) {
+      const featureProbe = await app.supabase.rpc('spp_app_search_students_v2', { p_q: '', p_limit: 1 });
+      app.provisionalEnrollmentReady = !featureProbe.error;
+    } else {
+      app.provisionalEnrollmentReady = false;
+    }
     if (!app.studentRulesReady) {
       console.warn('Migration 010_student_rules.sql belum dijalankan; data siswa hanya dibaca dari tabel lama.');
     }
@@ -938,6 +952,7 @@ function applyUserAccess() {
   } else if (ui.schoolFilter.value === '') {
     ui.schoolFilter.value = 'all';
   }
+  populateDashboardClassFilter();
 }
 
 function populateStudentClassSelect(selectedValue = '') {
@@ -992,6 +1007,30 @@ function currentSchoolScope() {
 
 function currentYearScope() {
   return ui.yearFilter.value || null;
+}
+
+function currentDashboardClassScope() {
+  const value = ui.dashboardClassFilter?.value || 'all';
+  return value === 'all' ? null : value;
+}
+
+function populateDashboardClassFilter() {
+  if (!ui.dashboardClassFilter) return;
+  const wrap = ui.dashboardClassFilter.closest('.filter-pill');
+  const available = app.server && app.user && app.user.role !== 'unit';
+  wrap.hidden = !available;
+  if (!available) return;
+
+  const previous = ui.dashboardClassFilter.value;
+  const school = currentSchoolScope();
+  const classes = app.state.classes
+    .filter((item) => item.active && (!school || item.kdsek === school))
+    .map((item) => item.kdkls);
+  const unique = [...new Set(classes)].sort((a, b) => a.localeCompare(b, 'id'));
+  ui.dashboardClassFilter.innerHTML = ['<option value="all">Semua kelas</option>']
+    .concat(unique.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`))
+    .join('');
+  ui.dashboardClassFilter.value = unique.includes(previous) ? previous : 'all';
 }
 
 function cleanKeyword(value) {
@@ -1319,8 +1358,8 @@ function drawStudentTable() {
     return `
       <tr class="${selected ? 'is-selected' : ''}">
         <td class="admin-only col-check" ${admin ? '' : 'hidden'}>${selectable ? `<input type="checkbox" data-select-id="${escapeHtml(row.id)}" ${selected ? 'checked' : ''} aria-label="Pilih ${escapeHtml(row.nama)}" />` : ''}</td>
-        <td data-label="Siswa"><div class="student-name">${escapeHtml(row.nama)}</div><div class="student-sub">${escapeHtml(row.nospp)}${row.tahunAjaran ? ` &middot; ${escapeHtml(row.tahunAjaran)}` : ''}${row.isStaffChild ? ' &middot; <span class="badge-staff">Anak guru</span>' : ''}</div></td>
-        <td data-label="Sekolah / Kelas"><div>${escapeHtml(getSchoolName(row.kdsek))}</div><div class="student-sub">Kelas ${escapeHtml(row.kdkls)}</div></td>
+        <td data-label="Siswa"><div class="student-name">${escapeHtml(row.nama)}</div><div class="student-sub">${row.nospp ? escapeHtml(row.nospp) : 'Menunggu kelas untuk No. SPP'}${row.tahunAjaran ? ` &middot; ${escapeHtml(row.tahunAjaran)}` : ''}${row.isStaffChild ? ' &middot; <span class="badge-staff">Anak guru</span>' : ''}</div></td>
+        <td data-label="Sekolah / Kelas"><div>${escapeHtml(getSchoolName(row.kdsek))}</div><div class="student-sub">${row.kdkls ? `Kelas ${escapeHtml(row.kdkls)}` : 'Kelas belum ditentukan'}</div></td>
         <td data-label="Virtual Account">${virtualAccountMarkup}</td>
         <td data-label="Rincian tagihan">${row.isStaffChild && row.showInBilling === false ? 'Tidak ditagih' : billBreakdownMarkup(row, arrearsTotal)}</td>
         <td data-label="Riwayat pembayaran">
@@ -1332,7 +1371,8 @@ function drawStudentTable() {
           </button>
         </td>
         <td data-label="Aksi" class="row-actions">
-          <button class="action-btn edit" data-action="print-spp-card" data-id="${escapeHtml(row.id)}" data-nospp="${escapeHtml(row.nospp)}" data-kdsek="${escapeHtml(row.kdsek)}" data-nama="${escapeHtml(row.nama)}" data-kdkls="${escapeHtml(row.kdkls)}">Cetak Kartu</button>
+          ${row.nospp ? `<button class="action-btn edit" data-action="print-spp-card" data-id="${escapeHtml(row.id)}" data-nospp="${escapeHtml(row.nospp)}" data-kdsek="${escapeHtml(row.kdsek)}" data-nama="${escapeHtml(row.nama)}" data-kdkls="${escapeHtml(row.kdkls)}">Cetak Kartu</button>` : ''}
+          ${admin && !row.nospp && row.tahunAjaran ? `<button class="action-btn edit" data-action="place-student" data-id="${escapeHtml(row.id)}">Tentukan kelas</button>` : ''}
           ${admin && row.tahunAjaran ? `
             <button class="action-btn edit" data-action="edit-student" data-nospp="${escapeHtml(row.nospp)}">Ubah Tagihan</button>
           ` : ''}
@@ -2382,7 +2422,8 @@ function getPaymentReceiptRows(items, batchSource = '') {
   const rows = PAYMENT_RECEIPT_CATEGORIES.map((category) => ({
     ...category,
     amount: 0,
-    periods: []
+    periods: [],
+    activityAllocations: new Map()
   }));
   const byCategory = new Map(rows.map((row) => [row.key, row]));
   items.forEach((item) => {
@@ -2392,12 +2433,28 @@ function getPaymentReceiptRows(items, batchSource = '') {
       if (!row) return;
       row.amount += amount;
       if (item.periode) row.periods.push(String(item.periode));
+      if (category === 'giat' && Array.isArray(item.activity_allocations)) {
+        item.activity_allocations.forEach((allocation) => {
+          const year = String(allocation.tahun_ajaran || '');
+          const nominal = Number(allocation.nominal || 0);
+          if (year && nominal > 0) {
+            row.activityAllocations.set(year, (row.activityAllocations.get(year) || 0) + nominal);
+          }
+        });
+      }
     });
   });
-  return rows.map((row) => ({
-    ...row,
-    detail: formatPaymentPeriodSpan(row.periods) || '-'
-  }));
+  return rows.map((row) => {
+    const activityDetails = [...row.activityAllocations.entries()]
+      .sort(([yearA], [yearB]) => yearA.localeCompare(yearB))
+      .map(([year, nominal]) => `TA ${year}: ${formatRupiah(nominal)}`);
+    return {
+      ...row,
+      detail: activityDetails.length
+        ? activityDetails.join(' · ')
+        : formatPaymentPeriodSpan(row.periods) || '-'
+    };
+  });
 }
 
 function getDailyPaymentLedgerRows(items) {
@@ -3359,8 +3416,11 @@ function dashboardRevenuePeriods(year) {
 }
 
 function renderRevenueDashboard(rows, year, receiptRows = []) {
-  const monthlyRows = Array.isArray(rows) ? rows : [];
-  const receipts = Array.isArray(receiptRows) ? receiptRows : [];
+  const schoolScope = currentSchoolScope();
+  const monthlyRows = (Array.isArray(rows) ? rows : [])
+    .filter((row) => !schoolScope || row.kdsek === schoolScope);
+  const receipts = (Array.isArray(receiptRows) ? receiptRows : [])
+    .filter((row) => !schoolScope || row.kdsek === schoolScope);
   const monthList = dashboardRevenuePeriods(year);
   const schoolCodes = [...new Set(monthlyRows.map((row) => String(row.kdsek || '')).filter(Boolean))]
     .sort((a, b) => getSchoolName(a).localeCompare(getSchoolName(b), 'id'));
@@ -3494,6 +3554,47 @@ function renderPriorYearRevenue(rows) {
   }).join('') || '<tr><td colspan="6" class="empty-state">Tidak ada tagihan DPP/SPP tahun lalu pada unit ini.</td></tr>';
 }
 
+function renderActivityYearDashboard(rows) {
+  const items = Array.isArray(rows) ? rows : [];
+  const totals = items.reduce((sum, item) => ({
+    target: sum.target + Number(item.target || 0),
+    dibayar: sum.dibayar + Number(item.dibayar || 0),
+    sisa: sum.sisa + Number(item.sisa || 0)
+  }), { target: 0, dibayar: 0, sisa: 0 });
+  ui.activityYearTarget.textContent = formatRupiah(totals.target);
+  ui.activityYearPaid.textContent = formatRupiah(totals.dibayar);
+  ui.activityYearBalance.textContent = formatRupiah(totals.sisa);
+  const maximum = Math.max(0, ...items.flatMap((item) => [
+    Number(item.target || 0),
+    Number(item.dibayar || 0)
+  ]));
+  ui.activityYearChart.innerHTML = items.length
+    ? items.map((item) => {
+        const target = Number(item.target || 0);
+        const paid = Number(item.dibayar || 0);
+        const targetWidth = maximum > 0 ? Math.min(100, target / maximum * 100) : 0;
+        const paidWidth = maximum > 0 ? Math.min(100, paid / maximum * 100) : 0;
+        return `<div class="activity-year-chart-row">
+          <span class="activity-year-chart-label">${escapeHtml(getSchoolName(item.kdsek))} · ${escapeHtml(item.kdkls || 'Belum ada kelas')}</span>
+          <span class="activity-year-track" role="img" aria-label="Tagihan ${escapeHtml(formatRupiah(target))}, dibayar ${escapeHtml(formatRupiah(paid))}">
+            <span class="activity-year-target-bar" style="width:${targetWidth}%"></span>
+            <span class="activity-year-paid-bar" style="width:${paidWidth}%"></span>
+          </span>
+          <span class="activity-year-chart-values">Dibayar ${escapeHtml(formatRupiah(paid))} · Tagihan ${escapeHtml(formatRupiah(target))}</span>
+        </div>`;
+      }).join('')
+    : '<p class="empty-state">Belum ada tagihan Kegiatan pada cakupan ini.</p>';
+  ui.activityYearBody.innerHTML = items.length
+    ? items.map((item) => `<tr>
+        <td>${escapeHtml(getSchoolName(item.kdsek))}</td>
+        <td>${escapeHtml(item.kdkls || 'Kelas belum ditentukan')}</td>
+        <td>${formatRupiah(Number(item.target || 0))}</td>
+        <td>${formatRupiah(Number(item.dibayar || 0))}</td>
+        <td><strong>${formatRupiah(Number(item.sisa || 0))}</strong></td>
+      </tr>`).join('')
+    : '<tr><td colspan="5" class="empty-state">Belum ada tagihan Kegiatan pada cakupan ini.</td></tr>';
+}
+
 let dashboardFetchSeq = 0;
 
 function showRevenueLoadError(message) {
@@ -3507,6 +3608,8 @@ function showRevenueLoadError(message) {
   ui.paymentThisMonth.textContent = '-';
   ui.totalTransaksi.textContent = '-';
   ui.activityList.innerHTML = '<li class="empty-state">Aktivitas tidak dapat dimuat.</li>';
+  ui.activityYearStatus.textContent = `Ringkasan Kegiatan tidak dapat dimuat: ${message}`;
+  renderActivityYearDashboard([]);
 }
 
 async function fetchDashboard() {
@@ -3545,7 +3648,7 @@ async function fetchDashboard() {
 
   try {
     const [countResult, revenueResult, targetResult, priorYearResult, activityResult] = await Promise.all([
-      app.supabase.rpc('spp_app_student_count_v1', { p_tahun: year, p_kdsek: null }),
+      app.supabase.rpc('spp_app_student_count_v1', { p_tahun: year, p_kdsek: currentSchoolScope() }),
       app.supabase.rpc('spp_app_revenue_by_unit_v1', {
         p_username: app.dashboardCredentials.username,
         p_password: app.dashboardCredentials.password,
@@ -3561,7 +3664,7 @@ async function fetchDashboard() {
         p_password: app.dashboardCredentials.password,
         p_tahun: year
       }),
-      app.supabase.from('spp_app_payment_batch_list').select('nospp,nama,tglbyr,parent_nominal,nominal')
+      app.supabase.from('spp_app_payment_batch_list').select('nospp,nama,kdsek,tglbyr,parent_nominal,nominal')
         .is('voided_at', null).neq('source', 'bos')
         .order('tglbyr', { ascending: false }).order('id', { ascending: false }).limit(5)
     ]);
@@ -3579,6 +3682,21 @@ async function fetchDashboard() {
     ui.paymentThisMonth.textContent = formatRupiah(totals.currentMonthRevenue);
     ui.totalTransaksi.textContent = totals.totalTransactions.toLocaleString('id-ID');
     renderActivityList(activityResult.data || []);
+    const activityYearResult = await app.supabase.rpc('spp_app_activity_dashboard_v1', {
+      p_username: app.dashboardCredentials.username,
+      p_password: app.dashboardCredentials.password,
+      p_tahun: year,
+      p_kdsek: currentSchoolScope(),
+      p_kdkls: currentDashboardClassScope()
+    });
+    if (seq !== dashboardFetchSeq) return;
+    if (activityYearResult.error) {
+      ui.activityYearStatus.textContent = `Ringkasan Kegiatan gagal dimuat: ${activityYearResult.error.message}`;
+      renderActivityYearDashboard([]);
+    } else {
+      ui.activityYearStatus.textContent = '';
+      renderActivityYearDashboard(activityYearResult.data || []);
+    }
   } catch (error) {
     if (seq !== dashboardFetchSeq) return;
     showRevenueLoadError(error.message || 'Periksa migration 024 dan koneksi Supabase.');
@@ -4308,6 +4426,7 @@ function updateStudentFormMode() {
   const mode = ui.studentType.value;
   const isNew = mode === 'baru';
   const isEdit = mode === 'ubah';
+  const isPlacement = mode === 'penempatan';
   document.querySelectorAll('#studentForm [data-for]').forEach((item) => {
     item.hidden = !item.dataset.for.split(' ').includes(mode);
   });
@@ -4318,17 +4437,28 @@ function updateStudentFormMode() {
   ui.studentNama.required = isNew;
   ui.studentWa.required = isNew;
   ui.studentPeriode.required = isNew;
-  ui.studentExisting.required = mode === 'naik';
-  ui.studentKelas.required = !isEdit;
+  ui.studentGiat.required = mode === 'baru' || mode === 'naik';
+  ui.studentSpp.required = mode === 'baru' || mode === 'naik';
+  ui.studentKomp.required = mode === 'baru' || mode === 'naik';
+  ui.studentExisting.required = mode === 'naik' || isPlacement;
+  ui.studentSekolah.required = !isEdit;
+  ui.studentSekolah.disabled = isPlacement;
+  ui.studentKelas.required = mode === 'naik' || isPlacement
+    || isNew && !app.provisionalEnrollmentReady;
+  const placementOption = ui.studentType.querySelector('option[value="penempatan"]');
+  if (placementOption) placementOption.hidden = !app.provisionalEnrollmentReady;
   ui.studentNama.placeholder = isNew ? 'Nama lengkap' : 'Kosongkan jika tidak berubah';
   const titles = {
     baru: ['Siswa baru', 'Tambah Siswa Baru'],
     naik: ['Tahun ajaran baru', 'Naik / Pindah Kelas'],
+    penempatan: ['Lengkapi pendaftaran', 'Tentukan Kelas Siswa'],
     ubah: ['Tagihan siswa', 'Ubah Tagihan']
   };
   ui.studentModalEyebrow.textContent = titles[mode][0];
   ui.studentModalTitle.textContent = titles[mode][1];
-  ui.studentSubmitBtn.textContent = isEdit ? 'Simpan Perubahan' : 'Simpan Siswa';
+  ui.studentSubmitBtn.textContent = isPlacement
+    ? 'Simpan Kelas dan Buat No. SPP'
+    : isEdit ? 'Simpan Perubahan' : 'Simpan Siswa';
 }
 
 function openStudentDialog(mode = 'baru') {
@@ -4336,6 +4466,20 @@ function openStudentDialog(mode = 'baru') {
   ui.studentType.value = mode;
   updateStudentFormMode();
   if (!ui.studentDialog.open) ui.studentDialog.showModal();
+}
+
+function openPlacementDialog(row) {
+  if (!row || !app.provisionalEnrollmentReady) return;
+  openStudentDialog('penempatan');
+  setPickerValue('studentExisting', row.id);
+  populateStudentYearOptions(row.tahunAjaran);
+  populateSchoolSelect(row.kdsek, '');
+  ui.studentSekolah.disabled = true;
+  ui.studentEditSummary.hidden = false;
+  ui.studentEditSummary.innerHTML = `
+    <strong>${escapeHtml(row.nama)}</strong>
+    <span>${escapeHtml(getSchoolName(row.kdsek))} · ID ${escapeHtml(formatStudentId(row.id))}</span>
+    <span class="student-sub">No. SPP dibuat setelah kelas disimpan.</span>`;
 }
 
 function closeStudentDialog() {
@@ -4352,9 +4496,9 @@ function populateExistingStudents() {
 
 function studentPickerLabel(item, wrap) {
   if (wrap.dataset.picker === 'paymentStudent') {
-    return `${item.nama} · ${getSchoolName(item.kdsek)} · Kelas ${item.kdkls} · No. SPP ${item.nospp}`;
+    return `${item.nama} · ${getSchoolName(item.kdsek)} · ${item.kdkls ? `Kelas ${item.kdkls}` : 'Kelas belum ditentukan'} · TA ${item.tahunAjaran || '-'}${item.nospp ? ` · No. SPP ${item.nospp}` : ''}`;
   }
-  return `${item.nama} · ${getSchoolName(item.kdsek)} · Kelas ${item.kdkls} · ID ${formatStudentId(item.id)}`;
+  return `${item.nama} · ${getSchoolName(item.kdsek)} · ${item.kdkls ? `Kelas ${item.kdkls}` : 'Kelas belum ditentukan'} · ID ${formatStudentId(item.id)}`;
 }
 
 function setPickerValue(hiddenId, id) {
@@ -4391,7 +4535,10 @@ async function renderPickerResults(wrap) {
   let matches;
   if (app.server) {
     const seq = ++pickerSeq;
-    const { data, error } = await app.supabase.rpc('spp_app_search_students_v1', { p_q: cleanKeyword(keyword), p_limit: 8 });
+    const searchRpc = app.provisionalEnrollmentReady
+      ? 'spp_app_search_students_v2'
+      : 'spp_app_search_students_v1';
+    const { data, error } = await app.supabase.rpc(searchRpc, { p_q: cleanKeyword(keyword), p_limit: 8 });
     if (seq !== pickerSeq) return;
     if (error) {
       results.innerHTML = `<div class="picker-empty">Pencarian gagal: ${escapeHtml(error.message)}</div>`;
@@ -4399,20 +4546,22 @@ async function renderPickerResults(wrap) {
       return;
     }
     matches = (data || []).map((row) => ({
-      id: String(row.id_siswa), nama: row.nama, kdsek: row.kdsek, kdkls: row.kdkls, nospp: row.nospp
+      id: String(row.id_siswa), nama: row.nama, kdsek: row.kdsek, kdkls: row.kdkls,
+      nospp: row.nospp || '', tahunAjaran: row.tahun_ajaran || ''
     }));
     matches.forEach((item) => app.pickerCache.set(item.id, item));
   } else {
     matches = app.state.siswa
       .filter((item) => wrap.dataset.picker === 'paymentStudent' || /^\d+$/.test(item.id))
       .filter((item) => !keyword || `${item.nama} ${item.id} ${item.kdkls} ${item.nospp}`.toLowerCase().includes(keyword))
-      .slice(0, 8);
+      .slice(0, 8)
+      .map((item) => ({ ...item, tahunAjaran: item.tahunAjaran || '' }));
   }
   results.innerHTML = matches.length
     ? matches.map((item) => `
       <button type="button" class="picker-option" data-pick-id="${escapeHtml(item.id)}">
         <strong>${escapeHtml(item.nama)}</strong>
-        <span>${escapeHtml(getSchoolName(item.kdsek))} &middot; Kelas ${escapeHtml(item.kdkls)} &middot; ID ${escapeHtml(formatStudentId(item.id))}${item.nospp ? ` &middot; ${escapeHtml(item.nospp)}` : ''}</span>
+        <span>${escapeHtml(getSchoolName(item.kdsek))} &middot; ${item.kdkls ? `Kelas ${escapeHtml(item.kdkls)}` : 'Kelas belum ditentukan'} &middot; ID ${escapeHtml(formatStudentId(item.id))}${item.nospp ? ` &middot; ${escapeHtml(item.nospp)}` : ''}</span>
       </button>`).join('')
     : '<div class="picker-empty">Siswa tidak ditemukan</div>';
   results.hidden = false;
@@ -4548,7 +4697,9 @@ async function addOrUpdateStudent(event) {
     await reloadStudentData();
     closeStudentDialog();
     resetStudentForm();
-    alert(`Tersimpan. No. SPP: ${data.nospp} (ID siswa ${data.id_siswa}).`);
+    alert(data.nospp
+      ? `Tersimpan. No. SPP: ${data.nospp} (ID siswa ${data.id_siswa}).`
+      : `Siswa tersimpan. Sekolah sudah dicatat; tentukan kelas nanti untuk membuat No. SPP final. ID siswa ${data.id_siswa}.`);
   } catch (error) {
     alert(error.message || 'Data siswa tidak dapat disimpan.');
   }
@@ -4900,13 +5051,17 @@ async function parsePaymentImportFile(file) {
 
 async function searchPaymentStudents(query) {
   if (app.server) {
-    const { data, error } = await app.supabase.rpc('spp_app_search_students_v1', {
+    const searchRpc = app.provisionalEnrollmentReady
+      ? 'spp_app_search_students_v2'
+      : 'spp_app_search_students_v1';
+    const { data, error } = await app.supabase.rpc(searchRpc, {
       p_q: cleanKeyword(query),
       p_limit: 20
     });
     if (error) throw error;
     return (data || []).map((row) => ({
-      id: String(row.id_siswa), nama: row.nama, kdsek: row.kdsek, kdkls: row.kdkls, nospp: String(row.nospp || '')
+      id: String(row.id_siswa), nama: row.nama, kdsek: row.kdsek, kdkls: row.kdkls,
+      nospp: String(row.nospp || ''), tahunAjaran: row.tahun_ajaran || ''
     }));
   }
   return app.state.siswa
@@ -4949,7 +5104,7 @@ async function resolvePaymentImportRecord(record) {
     searchError = error.message || 'Pencarian siswa gagal.';
   }
   const exact = record.sourceNoSpp
-    ? candidates.find((item) => item.nospp.toLowerCase() === record.sourceNoSpp.toLowerCase())
+    ? candidates.find((item) => item.nospp && item.nospp.toLowerCase() === record.sourceNoSpp.toLowerCase())
     : null;
   const selectedStudent = exact || (!record.sourceNoSpp && candidates.length === 1 ? candidates[0] : null);
   const row = {
@@ -5324,7 +5479,7 @@ function paymentBillingCutoff(year, now = new Date()) {
   if (!match || Number(match[2]) !== Number(match[1]) + 1) return '';
   const start = Number(match[1]);
   const currentStart = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
-  if (start > currentStart) return '';
+  if (start > currentStart) return `${start + 1}-06`;
   if (start < currentStart) return `${start + 1}-06`;
   const horizon = new Date(now.getFullYear(), now.getMonth() + 2, 1);
   const academicEnd = new Date(start + 1, 5, 1);
@@ -5504,14 +5659,44 @@ async function getPaymentBilling(student, includeFuturePeriods = false) {
 
   let billing;
   if (app.server) {
-    const { data, error } = await app.supabase.rpc('spp_app_student_billing_v1', {
-      p_id_siswa: String(student.id),
-      p_tahun: year,
-      p_periode: period
-    });
+    const isFutureYear = Number(year.slice(0, 4)) > Number(currentAcademicYear().slice(0, 4));
+    const { data, error } = isFutureYear
+      ? await app.supabase.rpc('spp_app_student_prepaid_billing_v1', {
+        p_id_siswa: String(student.id),
+        p_tahun: year
+      })
+      : await app.supabase.rpc('spp_app_student_billing_annual_v1', {
+        p_id_siswa: String(student.id),
+        p_tahun: year,
+        p_periode: period
+      });
     if (error) throw error;
     if (!data) throw new Error(`Tagihan tahun ajaran ${year} tidak ditemukan untuk siswa ini.`);
     billing = data;
+    if (!isFutureYear) {
+      const { data: activity, error: activityError } = await app.supabase.rpc('spp_app_activity_ledger_v1', {
+        p_id_siswa: String(student.id),
+        p_tahun: year
+      });
+      if (activityError) throw activityError;
+      const previous = billing.komponen_satu_kali?.giat || {};
+      const next = {
+        ...previous,
+        tagihan: Number(activity?.tagihan || 0),
+        dibayar: Number(activity?.dibayar || 0),
+        sisa: Number(activity?.sisa || 0),
+        rincian: activity?.rincian || []
+      };
+      billing.komponen_satu_kali = { ...(billing.komponen_satu_kali || {}), giat: next };
+      billing.sisa_satu_kali = Math.max(
+        Number(billing.sisa_satu_kali || 0) - Number(previous.sisa || 0) + next.sisa,
+        0
+      );
+      billing.sisa_total = Math.max(
+        Number(billing.sisa_total || 0) - Number(previous.sisa || 0) + next.sisa,
+        0
+      );
+    }
   } else {
     billing = buildLocalPaymentBilling(student, year, cutoff);
   }
@@ -5617,10 +5802,18 @@ function renderStudentPaymentDetails(billing, transactions) {
   ui.paymentTransactionHistory.innerHTML = paymentGroups.length
     ? paymentGroups.map((group) => {
       const allocations = group.allocations.map((item) => {
+        const activityYears = Array.isArray(item.activity_allocations)
+          ? item.activity_allocations
+            .map((allocation) => String(allocation.tahun_ajaran || ''))
+            .filter(Boolean)
+          : [];
         const label = getPaymentComponentLabel(item.component)
           + (item.periode ? ` · ${formatPeriodLabel(item.periode)}` : '');
+        const detail = item.component === 'giat' && activityYears.length
+          ? `${label} · alokasi TA ${activityYears.join(', ')}`
+          : label;
         return `<div class="payment-history-allocation-item">
-          <span>${escapeHtml(label)}</span><strong>${formatRupiah(Number(item.nominal || 0))}</strong>
+          <span>${escapeHtml(detail)}</span><strong>${formatRupiah(Number(item.nominal || 0))}</strong>
         </div>`;
       }).join('');
       return `
@@ -5675,7 +5868,11 @@ async function openStudentPaymentHistory(student) {
     return;
   }
   const request = ++app.paymentHistoryRequest;
-  ui.paymentHistoryStudent.textContent = `${student.nama} · Kelas ${student.kdkls} · No. SPP ${student.nospp}`;
+  ui.paymentHistoryStudent.textContent = [
+    student.nama,
+    student.kdkls ? `Kelas ${student.kdkls}` : 'Kelas belum ditentukan',
+    student.nospp ? `No. SPP ${student.nospp}` : 'Menunggu No. SPP'
+  ].join(' · ');
   ui.paymentHistoryYear.textContent = `Tahun ajaran ${student.tahunAjaran || currentAcademicYear()}`;
   ui.paymentPeriodHistory.innerHTML = '<tr><td colspan="3" class="empty-state">Memuat status periode...</td></tr>';
   ui.paymentOneTimeHistory.innerHTML = '<tr><td colspan="5" class="empty-state">Memuat rincian pembayaran...</td></tr>';
@@ -6060,7 +6257,7 @@ async function handlePaymentSubmit(event) {
 
   const form = event.currentTarget;
   const formData = new FormData(form);
-  const nospp = String(formData.get('nospp') || '').trim();
+  const idSiswa = String(formData.get('id_siswa') || '').trim();
   const paymentDate = ui.paymentDate.value;
   const nama = app.selectedPaymentStudent?.nama || '';
   let items;
@@ -6071,8 +6268,8 @@ async function handlePaymentSubmit(event) {
     return;
   }
 
-  if (!nospp) {
-    alert('Nomor SPP harus diisi.');
+  if (!idSiswa || !app.selectedPaymentStudent) {
+    alert('Pilih siswa dari daftar terlebih dahulu.');
     return;
   }
   if (!paymentDate) {
@@ -6088,14 +6285,30 @@ async function handlePaymentSubmit(event) {
     let batchId;
     try {
       const credentials = requireStudentRules();
-      const { data, error } = await app.supabase.rpc('save_payment_batch_v1', {
-        ...credentials,
-        p_nospp: nospp,
-        p_tglbyr: paymentDate,
-        p_items: items
-      });
-      if (error) throw error;
-      batchId = String(data);
+      const selectedYear = app.paymentBilling?.tahun_ajaran || app.selectedPaymentStudent.tahunAjaran;
+      if (app.provisionalEnrollmentReady) {
+        if (!selectedYear) throw new Error('Tahun ajaran pendaftaran siswa tidak ditemukan.');
+        const { data, error } = await app.supabase.rpc('save_payment_batch_v2', {
+          ...credentials,
+          p_id_siswa: idSiswa,
+          p_tahun_ajaran: selectedYear,
+          p_tglbyr: paymentDate,
+          p_items: items
+        });
+        if (error) throw error;
+        batchId = String(data);
+      } else {
+        const nospp = app.selectedPaymentStudent.nospp;
+        if (!nospp) throw new Error('Migration pendaftaran sementara belum dipasang. Tentukan kelas dan No. SPP terlebih dahulu.');
+        const { data, error } = await app.supabase.rpc('save_payment_batch_v1', {
+          ...credentials,
+          p_nospp: nospp,
+          p_tglbyr: paymentDate,
+          p_items: items
+        });
+        if (error) throw error;
+        batchId = String(data);
+      }
       form.reset();
       ui.paymentDate.value = localDateInputValue();
       setPickerValue('paymentNospp', '');
@@ -6119,7 +6332,7 @@ async function handlePaymentSubmit(event) {
     return;
   }
 
-  const student = app.state.siswa.find((item) => item.nospp === nospp);
+  const student = app.state.siswa.find((item) => String(item.id) === idSiswa);
   const batchId = `local-${Date.now()}`;
   const receiptNo = `SPP-${new Date().getFullYear()}-${Date.now()}`;
   const createdAt = new Date().toISOString();
@@ -6131,7 +6344,7 @@ async function handlePaymentSubmit(event) {
       source: 'manual',
       created_at: createdAt,
       operator_code: getCurrentOperatorCode(),
-      nospp,
+      nospp: student?.nospp || '',
       nama: nama || (student ? student.nama : 'Siswa'),
       kdsek: student ? student.kdsek : '',
       periode: item.periode,
@@ -6461,6 +6674,7 @@ function setupEvents() {
   const handleScopeChange = () => {
     app.paging.students = 0;
     app.paging.payments = 0;
+    populateDashboardClassFilter();
     renderStudentTable();
     if (app.server) {
       renderDashboard();
@@ -6470,6 +6684,9 @@ function setupEvents() {
   };
   ui.schoolFilter.addEventListener('change', handleScopeChange);
   ui.yearFilter.addEventListener('change', handleScopeChange);
+  ui.dashboardClassFilter.addEventListener('change', () => {
+    if (app.server) fetchDashboard();
+  });
   ui.reportYearFilter.addEventListener('change', () => {
     populateReportPeriods();
     updateArrearsExportButtons();
@@ -6864,7 +7081,8 @@ function setupEvents() {
     const { action, nospp, id } = target.dataset;
     if (action === 'payment-history') {
       const student = app.state.siswa.find((row) => (
-        String(row.id) === String(id) && row.nospp === nospp && row.kdsek === target.dataset.kdsek
+        String(row.id) === String(id) && String(row.nospp || '') === String(nospp || '')
+          && row.kdsek === target.dataset.kdsek
       ));
       if (!student) {
         alert('Data siswa sudah berubah. Muat ulang daftar siswa lalu coba kembali.');
@@ -6883,6 +7101,14 @@ function setupEvents() {
     }
     if (action === 'edit-student') {
       changeStudentSpp(nospp);
+    }
+    if (action === 'place-student') {
+      const student = app.state.siswa.find((row) => String(row.id) === String(id));
+      if (!student) {
+        alert('Data siswa sudah berubah. Muat ulang daftar siswa lalu coba kembali.');
+        return;
+      }
+      openPlacementDialog(student);
     }
     if (action === 'rename-student') {
       renameStudent(id, target.dataset.name);
