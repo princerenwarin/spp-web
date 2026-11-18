@@ -205,6 +205,7 @@ const ui = {
   studentCloseBtn: document.getElementById('studentCloseBtn'),
   activityList: document.getElementById('activityList'),
   reportPeriod: document.getElementById('reportPeriod'),
+  arrearsReportHeading: document.getElementById('arrearsReportHeading'),
   reportSchoolFilter: document.getElementById('reportSchoolFilter'),
   reportYearFilter: document.getElementById('reportYearFilter'),
   reportPeriodFilter: document.getElementById('reportPeriodFilter'),
@@ -862,6 +863,7 @@ function setPage(pageName) {
   }
 
   app.currentPage = pageName;
+  document.querySelector('.topbar').dataset.page = pageName;
   Object.entries(pageMap).forEach(([key, element]) => {
     element.classList.toggle('active', key === pageName);
   });
@@ -4005,6 +4007,10 @@ function populateReportFilters() {
     )).join('');
   ui.reportSchoolFilter.disabled = Boolean(fixedSchool);
   ui.reportSchoolFilter.value = fixedSchool || (schools.some((item) => item.kdsek === previousSchool) ? previousSchool : '');
+  const schoolName = ui.reportSchoolFilter.value
+    ? getSchoolName(ui.reportSchoolFilter.value)
+    : 'Semua Sekolah';
+  ui.arrearsReportHeading.textContent = `Rincian Tunggakan — ${schoolName}`;
 
   const school = ui.reportSchoolFilter.value || null;
   const classes = app.state.classes

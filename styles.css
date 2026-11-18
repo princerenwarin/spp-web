@@ -254,6 +254,27 @@ select:focus-visible {
   gap: 12px;
 }
 
+.scope-filters,
+.report-topbar-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.report-topbar-filters {
+  display: none;
+}
+
+.topbar[data-page="laporan"] .scope-filters {
+  display: none;
+}
+
+.topbar[data-page="laporan"] .report-topbar-filters {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .filter-pill {
   display: flex;
   align-items: center;
@@ -2895,29 +2916,18 @@ input[type='radio'] {
   margin-top: 7px;
 }
 
-.report-filters {
-  align-items: end;
-  display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin: 18px 0;
-}
-
-.report-filters label,
 .payment-component-row label {
   display: grid;
   gap: 7px;
   min-width: 0;
 }
 
-.report-filters label > span,
 .payment-component-row label > span {
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 650;
 }
 
-.report-filters select,
 .payment-component-row select,
 .payment-component-row input {
   min-height: 42px;
@@ -4434,12 +4444,6 @@ input[type='radio'] {
   margin-top: 32pt;
 }
 
-@media (max-width: 1050px) {
-  .report-filters {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 .payment-billing-status {
   background: #edf5f1;
   border: 1px solid #d6e8df;
@@ -4644,10 +4648,6 @@ input[type='radio'] {
 }
 
 @media (max-width: 575px) {
-  .report-filters {
-    grid-template-columns: 1fr;
-  }
-
   .daily-summary-panel .panel-header {
     align-items: start;
   }

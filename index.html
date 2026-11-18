@@ -47,26 +47,48 @@
       </header>
 
       <main class="main-panel">
-        <header class="topbar">
+        <header class="topbar" data-page="dashboard">
           <div>
             <h2 id="pageTitle">Dashboard</h2>
           </div>
           <div class="topbar-actions">
-            <div class="filter-pill">
-              <label for="schoolFilter">Sekolah</label>
-              <select id="schoolFilter">
-                <option value="all">Semua</option>
-              </select>
+            <div class="scope-filters">
+              <div class="filter-pill">
+                <label for="schoolFilter">Sekolah</label>
+                <select id="schoolFilter">
+                  <option value="all">Semua</option>
+                </select>
+              </div>
+              <div class="filter-pill" hidden>
+                <label for="yearFilter">Tahun ajaran</label>
+                <select id="yearFilter"></select>
+              </div>
+              <div class="filter-pill dashboard-class-filter" hidden>
+                <label for="dashboardClassFilter">Kelas</label>
+                <select id="dashboardClassFilter">
+                  <option value="all">Semua kelas</option>
+                </select>
+              </div>
             </div>
-            <div class="filter-pill" hidden>
-              <label for="yearFilter">Tahun ajaran</label>
-              <select id="yearFilter"></select>
-            </div>
-            <div class="filter-pill dashboard-class-filter" hidden>
-              <label for="dashboardClassFilter">Kelas</label>
-              <select id="dashboardClassFilter">
-                <option value="all">Semua kelas</option>
-              </select>
+            <div class="report-topbar-filters">
+              <div class="filter-pill">
+                <label for="reportSchoolFilter">Sekolah</label>
+                <select id="reportSchoolFilter"></select>
+              </div>
+              <div class="filter-pill">
+                <label for="reportYearFilter">Tahun ajaran</label>
+                <select id="reportYearFilter"></select>
+              </div>
+              <div class="filter-pill">
+                <label for="reportPeriodFilter">Periode tagihan sampai</label>
+                <select id="reportPeriodFilter"></select>
+              </div>
+              <div class="filter-pill">
+                <label for="reportClassFilter">Kelas</label>
+                <select id="reportClassFilter">
+                  <option value="">Semua kelas</option>
+                </select>
+              </div>
             </div>
           </div>
         </header>
@@ -636,29 +658,9 @@
           <div class="panel arrears-report-panel">
             <div class="panel-header">
               <div>
-                <h2>Tunggakan per Kelas</h2>
+                <h2 id="arrearsReportHeading">Rincian Tunggakan</h2>
                 <p class="muted-copy" id="arrearsReportCount">Memuat daftar siswa...</p>
               </div>
-            </div>
-            <div class="report-filters">
-              <label>
-                <span>Sekolah</span>
-                <select id="reportSchoolFilter"></select>
-              </label>
-              <label>
-                <span>Tahun ajaran</span>
-                <select id="reportYearFilter"></select>
-              </label>
-              <label>
-                <span>Periode tagihan sampai</span>
-                <select id="reportPeriodFilter"></select>
-              </label>
-              <label>
-                <span>Kelas</span>
-                <select id="reportClassFilter">
-                  <option value="">Semua kelas</option>
-                </select>
-              </label>
             </div>
             <div class="arrears-summary-grid" aria-label="Ringkasan tunggakan sesuai filter">
               <article class="arrears-summary-card arrears-summary-students">
