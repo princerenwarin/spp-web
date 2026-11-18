@@ -81,6 +81,7 @@ const app = {
   arrearsOffset: 0,
   arrearsTotal: 0,
   arrearsRows: [],
+  arrearsSummary: { status: 'idle' },
   arrearsExporting: false,
   userAccounts: [],
   passwordResetTarget: null
@@ -210,6 +211,19 @@ const ui = {
   reportClassFilter: document.getElementById('reportClassFilter'),
   arrearsReportTable: document.getElementById('arrearsReportTable'),
   arrearsReportCount: document.getElementById('arrearsReportCount'),
+  arrearsSummaryStudentCount: document.getElementById('arrearsSummaryStudentCount'),
+  arrearsSummaryStudentCaption: document.getElementById('arrearsSummaryStudentCaption'),
+  arrearsSummaryGroupTitle: document.getElementById('arrearsSummaryGroupTitle'),
+  arrearsSummaryGroupList: document.getElementById('arrearsSummaryGroupList'),
+  arrearsSummaryTotalDue: document.getElementById('arrearsSummaryTotalDue'),
+  arrearsSummaryComponentList: document.getElementById('arrearsSummaryComponentList'),
+  arrearsSummaryUnpaidTitle: document.getElementById('arrearsSummaryUnpaidTitle'),
+  arrearsSummaryUnpaidCount: document.getElementById('arrearsSummaryUnpaidCount'),
+  arrearsSummaryUnpaidRate: document.getElementById('arrearsSummaryUnpaidRate'),
+  arrearsSummaryUnpaidCaption: document.getElementById('arrearsSummaryUnpaidCaption'),
+  arrearsSummaryUnpaidTotal: document.getElementById('arrearsSummaryUnpaidTotal'),
+  arrearsSummaryUnpaidNote: document.getElementById('arrearsSummaryUnpaidNote'),
+  arrearsSummaryStatus: document.getElementById('arrearsSummaryStatus'),
   arrearsPageInfo: document.getElementById('arrearsPageInfo'),
   loadMoreArrears: document.getElementById('loadMoreArrears'),
   downloadArrearsSchoolBtn: document.getElementById('downloadArrearsSchoolBtn'),
@@ -3887,6 +3901,7 @@ function renderDashboard() {
 }
 
 let arrearsFetchSeq = 0;
+let arrearsSummaryFetchSeq = 0;
 
 function formatPeriodLabel(value) {
   const match = /^(0[1-9]|1[0-2])(\d{4})$/.exec(String(value || ''));
@@ -4100,12 +4115,15 @@ function createArrearsExport(rows) {
   return { headers, values };
 }
 
-async function fetchAllArrearsRows(school, className) {
-  const rows = [];
-  for (let offset = 0; ; offset += ARREARS_PAGE_SIZE) {
+async function fetchAllArrearsRows(school, className, options = {}) {
+  const year = options.year || ui.reportYearFilter.value || currentAcademicYear();
+  const period = options.period || ui.reportPeriodFilter.value;
+  const rows = [...(options.initialRows || [])];
+  let totalCount = Number(rows[0]?.total_count || 0);
+  for (let offset = rows.length; !totalCount || offset < totalCount; offset += ARREARS_PAGE_SIZE) {
     const { data, error } = await app.supabase.rpc('spp_app_class_billing_v1', {
-      p_tahun: ui.reportYearFilter.value || currentAcademicYear(),
-      p_periode: ui.reportPeriodFilter.value,
+      p_tahun: year,
+      p_periode: period,
       p_kdsek: school || null,
       p_kdkls: className || null,
       p_limit: ARREARS_PAGE_SIZE,
@@ -4118,7 +4136,8 @@ async function fetchAllArrearsRows(school, className) {
       billing: row.billing || {}
     }));
     rows.push(...page);
-    if (page.length < ARREARS_PAGE_SIZE) break;
+    totalCount = Number(page[0]?.total_count || totalCount);
+    if (page.length < ARREARS_PAGE_SIZE || totalCount && rows.length >= totalCount) break;
   }
   return rows;
 }
@@ -4581,12 +4600,40 @@ function arrearsRowMarkup(row) {
         : '';
     })
     .filter(Boolean);
-  const oneTimeDetails = Object.entries(billing.komponen_satu_kali || {})
-    .filter(([, item]) => Number(item.sisa || 0) > 0)
+  const oneTimeEntries = Object.entries(billing.komponen_satu_kali || {});
+  const priorYearDetails = oneTimeEntries
+    .filter(([key, item]) => ['spp_tl', 'komp_tl'].includes(key) && Number(item.sisa || 0) > 0)
+    .flatMap(([key, item]) => {
+      const details = Array.isArray(item.rincian)
+        ? item.rincian.filter((detail) => Number(detail.sisa || 0) > 0)
+        : [];
+      if (!details.length) {
+        return [`${getPaymentComponentLabel(key)} ${formatRupiah(item.sisa)}`];
+      }
+      const componentLabel = key === 'spp_tl' ? 'SPP' : 'Komputer';
+      return details.map((detail) => {
+        const period = detail.periode
+          ? formatPeriodLabel(detail.periode)
+          : (String(detail.keterangan || '').trim()
+            ? `Keterangan: ${String(detail.keterangan).trim()}`
+            : 'Periode tidak dicatat');
+        const academicYear = detail.tahun_ajaran ? `${detail.tahun_ajaran} · ` : '';
+        return `${academicYear}${period}: ${componentLabel} ${formatRupiah(detail.sisa)}`;
+      });
+    });
+  const oneTimeDetails = oneTimeEntries
+    .filter(([key, item]) => !['spp_tl', 'komp_tl'].includes(key) && Number(item.sisa || 0) > 0)
     .map(([key, item]) => `${getPaymentComponentLabel(key)} ${formatRupiah(item.sisa)}`);
   const name = String(row.nama || 'Siswa');
-  const balanceDescription = [...monthlyDetails, ...oneTimeDetails].join('; ') || 'tagihan satu kali';
-  const whatsappMessage = `Yth. Orang tua/wali ${name}, berikut rincian sisa tagihan: ${balanceDescription}. Total sisa ${formatRupiah(remaining)}. Mohon konfirmasi pembayaran kepada tata usaha. Terima kasih.`;
+  const balanceDetails = [...monthlyDetails, ...priorYearDetails, ...oneTimeDetails];
+  const whatsappMessage = [
+    `Yth. Orang tua/wali ${name},`,
+    'Berikut rincian sisa tagihan:',
+    ...(balanceDetails.length ? balanceDetails.map((detail) => `- ${detail}`) : [`- ${formatRupiah(remaining)}`]),
+    `Total sisa: ${formatRupiah(remaining)}.`,
+    'Mohon konfirmasi pembayaran kepada tata usaha.',
+    'Terima kasih.'
+  ].join('\n');
   const whatsappUrl = phone && unallocated <= 0
     ? `https://wa.me/${phone}?text=${encodeURIComponent(whatsappMessage)}`
     : '';
@@ -4612,7 +4659,11 @@ function arrearsRowMarkup(row) {
     <td class="balance-cell">${balanceMarkup}</td>
     <td><span class="status-pill ${statusClass}">${status}</span></td>
     <td class="report-actions">
-      ${whatsappUrl ? `<a class="action-btn whatsapp-action" href="${escapeHtml(whatsappUrl)}" target="_blank" rel="noopener noreferrer">WhatsApp</a>` : ''}
+      ${whatsappUrl
+        ? `<a class="action-btn whatsapp-action" href="${escapeHtml(whatsappUrl)}" target="_blank" rel="noopener noreferrer">Kirim WhatsApp</a>`
+        : (canPrint
+          ? '<button type="button" class="action-btn whatsapp-action" disabled>Kirim WhatsApp</button><small class="whatsapp-unavailable">Lengkapi nomor WhatsApp di Data Siswa.</small>'
+          : '')}
       ${canPrint ? `<button type="button" class="action-btn print-action" data-print-arrears="${escapeHtml(row.id_siswa)}">Cetak surat</button>` : '<span class="student-sub">Tahan penagihan sampai rekonsiliasi</span>'}
       <button type="button" class="action-btn download-action" data-download-arrears="${escapeHtml(row.id_siswa)}" ${app.arrearsExporting ? 'disabled' : ''}>Unduh</button>
     </td>
@@ -4638,6 +4689,7 @@ function renderArrearsReport() {
   ui.arrearsReportTable.innerHTML = groups.join('')
     || '<tr><td colspan="6" class="empty-state">Tidak ada tunggakan pada filter ini.</td></tr>';
   ui.arrearsReportCount.textContent = `${app.arrearsTotal.toLocaleString('id-ID')} siswa memiliki sisa tagihan atau pembayaran lama yang perlu direkonsiliasi.`;
+  renderArrearsSummary();
   const shown = Math.min(app.arrearsRows.length, app.arrearsTotal);
   ui.arrearsPageInfo.textContent = `${shown.toLocaleString('id-ID')} dari ${app.arrearsTotal.toLocaleString('id-ID')} siswa`;
   ui.loadMoreArrears.hidden = shown >= app.arrearsTotal;
@@ -4647,13 +4699,156 @@ function renderArrearsReport() {
   updateArrearsExportButtons();
 }
 
+function renderArrearsSummary() {
+  const summary = app.arrearsSummary || { status: 'idle' };
+  const school = ui.reportSchoolFilter.value;
+  const className = ui.reportClassFilter.value;
+  ui.arrearsSummaryGroupTitle.textContent = school ? 'Rincian per kelas' : 'Rincian per unit';
+  ui.arrearsSummaryUnpaidTitle.textContent = className
+    ? `Siswa belum lunas · Kelas ${className}`
+    : 'Siswa belum lunas';
+
+  if (summary.status !== 'ready') {
+    const message = summary.status === 'error' || summary.status === 'empty'
+      ? summary.message
+      : 'Menghitung ringkasan sesuai filter...';
+    const value = '—';
+    ui.arrearsSummaryStudentCount.textContent = value;
+    ui.arrearsSummaryStudentCaption.textContent = message;
+    ui.arrearsSummaryGroupList.innerHTML = `<li>${escapeHtml(message)}</li>`;
+    ui.arrearsSummaryTotalDue.textContent = value;
+    ui.arrearsSummaryComponentList.innerHTML = `<li>${escapeHtml(message)}</li>`;
+    ui.arrearsSummaryUnpaidCount.textContent = value;
+    ui.arrearsSummaryUnpaidRate.textContent = value;
+    ui.arrearsSummaryUnpaidCaption.textContent = message;
+    ui.arrearsSummaryUnpaidTotal.textContent = value;
+    ui.arrearsSummaryUnpaidNote.textContent = '';
+    ui.arrearsSummaryStatus.textContent = summary.status === 'error'
+      ? `Ringkasan tunggakan gagal dimuat: ${summary.message}`
+      : '';
+    return;
+  }
+
+  const rows = summary.rows;
+  const formatCount = (value) => Number(value || 0).toLocaleString('id-ID');
+  const totalDue = rows.reduce((total, row) => (
+    total + Number(row.billing?.sisa_total || 0)
+  ), 0);
+  const unpaidRows = rows.filter((row) => Number(row.billing?.sisa_total || 0) > 0);
+  const unpaidTotal = unpaidRows.reduce((total, row) => (
+    total + Number(row.billing?.sisa_total || 0)
+  ), 0);
+  const legacyCount = rows.filter((row) => Number(row.billing?.belum_dialokasikan || 0) > 0).length;
+  const legacyOnlyCount = rows.filter((row) => (
+    Number(row.billing?.sisa_total || 0) <= 0
+      && Number(row.billing?.belum_dialokasikan || 0) > 0
+  )).length;
+  const groupCounts = new Map();
+  rows.forEach((row) => {
+    const key = school ? String(row.kdkls || 'Tanpa kelas') : String(row.kdsek || 'Tanpa unit');
+    const label = school ? key : getSchoolName(row.kdsek);
+    const group = groupCounts.get(key) || { label, count: 0 };
+    group.count += 1;
+    groupCounts.set(key, group);
+  });
+  const groupItems = [...groupCounts.values()]
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'id'))
+    .map((group) => `<li><span>${escapeHtml(group.label)}</span><strong>${formatCount(group.count)} siswa</strong></li>`);
+  ui.arrearsSummaryStudentCount.textContent = formatCount(rows.length);
+  ui.arrearsSummaryStudentCaption.textContent = legacyCount
+    ? `Termasuk ${formatCount(legacyCount)} siswa dengan pembayaran lama yang perlu direkonsiliasi.`
+    : 'Sesuai tahun ajaran, periode, unit, dan kelas terpilih.';
+  ui.arrearsSummaryGroupList.innerHTML = groupItems.join('')
+    || '<li class="arrears-summary-empty">Tidak ada siswa menunggak pada filter ini.</li>';
+
+  const exportedRows = rows.map(arrearsExportValues);
+  const componentDefinitions = [
+    ['SPP berjalan', 7],
+    ['Komputer berjalan', 8],
+    ...ARREARS_EXPORT_COMPONENTS.map(([, label], index) => [label, index + 9])
+  ];
+  const componentItems = componentDefinitions
+    .map(([label, index]) => [
+      label,
+      exportedRows.reduce((total, values) => total + Number(values[index] || 0), 0)
+    ])
+    .filter(([, amount]) => amount > 0)
+    .map(([label, amount]) => `<li><span>${escapeHtml(label)}</span><strong>${formatRupiah(amount)}</strong></li>`);
+  ui.arrearsSummaryTotalDue.textContent = formatRupiah(totalDue);
+  ui.arrearsSummaryComponentList.innerHTML = componentItems.join('')
+    || '<li class="arrears-summary-empty">Tidak ada sisa tagihan terhitung.</li>';
+  ui.arrearsSummaryUnpaidCount.textContent = formatCount(unpaidRows.length);
+  const enrolledCount = Number(summary.enrolledCount || 0);
+  const scopeDescription = className
+    ? `di kelas ${className}`
+    : school
+      ? `di ${getSchoolName(school)}`
+      : 'di semua unit';
+  ui.arrearsSummaryUnpaidRate.textContent = enrolledCount
+    ? `${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format((unpaidRows.length / enrolledCount) * 100)}%`
+    : '—';
+  ui.arrearsSummaryUnpaidCaption.textContent = enrolledCount
+    ? `Dari ${formatCount(enrolledCount)} siswa ${scopeDescription}.`
+    : `Tidak ada siswa terdaftar ${scopeDescription}.`;
+  ui.arrearsSummaryUnpaidTotal.textContent = formatRupiah(unpaidTotal);
+  ui.arrearsSummaryUnpaidNote.textContent = legacyOnlyCount
+    ? `${formatCount(legacyOnlyCount)} siswa memiliki pembayaran lama yang perlu direkonsiliasi.`
+    : '';
+  ui.arrearsSummaryStatus.textContent = '';
+}
+
+async function fetchArrearsSummary(request, filters, initialRows) {
+  try {
+    const [rows, enrollmentResult] = await Promise.all([
+      fetchAllArrearsRows(filters.school, filters.className, {
+        year: filters.year,
+        period: filters.period,
+        initialRows
+      }),
+      countArrearsScopeStudents(filters)
+    ]);
+    if (request !== arrearsSummaryFetchSeq) return;
+    app.arrearsSummary = {
+      status: 'ready',
+      rows,
+      enrolledCount: enrollmentResult
+    };
+  } catch (error) {
+    if (request !== arrearsSummaryFetchSeq) return;
+    app.arrearsSummary = {
+      status: 'error',
+      message: error.message || 'Periksa koneksi dan izin akses laporan.'
+    };
+  }
+  renderArrearsSummary();
+}
+
+async function countArrearsScopeStudents(filters) {
+  let query = app.supabase.from('spp_app_student_overview')
+    .select('id_siswa', { count: 'exact', head: true })
+    .eq('tahun_ajaran', filters.year)
+    .or('is_staff_child.eq.false,show_in_billing.eq.true');
+  if (filters.school) query = query.eq('kdsek', filters.school);
+  if (filters.className) query = query.eq('kdkls', filters.className);
+  const { count, error } = await query;
+  if (error) throw error;
+  return Number(count || 0);
+}
+
 async function fetchArrearsReport(append = false) {
   if (!app.user) return;
+  const summaryRequest = append ? arrearsSummaryFetchSeq : ++arrearsSummaryFetchSeq;
+  if (!append) {
+    app.arrearsSummary = { status: 'loading' };
+    renderArrearsSummary();
+  }
   ui.reportPeriod.textContent = formatPeriodLabel(ui.reportPeriodFilter.value);
   if (!app.server) {
     ui.arrearsReportCount.textContent = 'Laporan per komponen membutuhkan backend Supabase dan migration 016.';
     ui.arrearsReportTable.innerHTML = '<tr><td colspan="6" class="empty-state">Hubungkan Supabase dan jalankan migration 016 untuk menghitung cicilan dan sisa per periode secara akurat.</td></tr>';
     ui.loadMoreArrears.hidden = true;
+    app.arrearsSummary = { status: 'error', message: 'Ringkasan membutuhkan backend Supabase.' };
+    renderArrearsSummary();
     return;
   }
 
@@ -4664,6 +4859,8 @@ async function fetchArrearsReport(append = false) {
     ui.arrearsReportTable.innerHTML = '<tr><td colspan="6" class="empty-state">Belum ada periode tagihan yang dapat dipilih.</td></tr>';
     ui.arrearsReportCount.textContent = 'Periode laporan tersedia sampai dua bulan setelah bulan aktif.';
     ui.loadMoreArrears.hidden = true;
+    app.arrearsSummary = { status: 'empty', message: 'Pilih periode tagihan untuk menghitung ringkasan.' };
+    renderArrearsSummary();
     return;
   }
   if (!append) {
@@ -4685,6 +4882,10 @@ async function fetchArrearsReport(append = false) {
     ui.arrearsReportTable.innerHTML = `<tr><td colspan="6" class="empty-state report-error" role="alert">Laporan gagal dimuat: ${escapeHtml(error.message)}. Periksa migration 016 dan 019.</td></tr>`;
     ui.arrearsReportCount.textContent = 'Laporan tidak dapat dimuat.';
     ui.loadMoreArrears.hidden = true;
+    if (!append) {
+      app.arrearsSummary = { status: 'error', message: error.message };
+      renderArrearsSummary();
+    }
     return;
   }
 
@@ -4696,6 +4897,14 @@ async function fetchArrearsReport(append = false) {
   app.arrearsRows = append ? [...app.arrearsRows, ...pageRows] : pageRows;
   app.arrearsOffset += pageRows.length;
   app.arrearsTotal = Number(pageRows[0]?.total_count || (append ? app.arrearsTotal : 0));
+  if (!append) {
+    fetchArrearsSummary(summaryRequest, {
+      year,
+      period,
+      school: ui.reportSchoolFilter.value,
+      className: ui.reportClassFilter.value
+    }, pageRows);
+  }
   renderArrearsReport();
 }
 

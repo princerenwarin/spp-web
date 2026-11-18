@@ -2924,6 +2924,179 @@ input[type='radio'] {
   width: 100%;
 }
 
+.arrears-summary-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 18px 0 16px;
+}
+
+.arrears-summary-card {
+  align-content: start;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(36, 33, 54, 0.045);
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 18px;
+}
+
+.arrears-summary-students {
+  border-top: 3px solid var(--primary);
+}
+
+.arrears-summary-total {
+  border-top: 3px solid var(--warning);
+}
+
+.arrears-summary-unpaid {
+  border-top: 3px solid var(--accent);
+}
+
+.arrears-summary-unpaid-stat {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.arrears-summary-unpaid-rate {
+  background: var(--panel);
+  border: 1px solid var(--warning);
+  border-radius: 999px;
+  color: var(--warning);
+  display: inline-flex;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 5px 10px;
+}
+
+.arrears-summary-label {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.arrears-summary-value {
+  color: var(--primary-2);
+  font-family: 'Barlow Condensed', 'Source Sans 3', sans-serif;
+  font-size: clamp(1.7rem, 2.4vw, 2.25rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+.arrears-summary-caption {
+  color: var(--muted);
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  min-height: 2.3em;
+}
+
+.arrears-summary-breakdown {
+  border-top: 1px solid var(--border);
+  min-width: 0;
+  padding-top: 10px;
+}
+
+.arrears-summary-breakdown h3 {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+}
+
+.arrears-summary-breakdown ul {
+  display: grid;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  max-height: 154px;
+  overflow: auto;
+  padding: 0;
+}
+
+.arrears-summary-breakdown li,
+.arrears-summary-unpaid-total {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.arrears-summary-breakdown li {
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.9375rem;
+  padding: 3px 0;
+}
+
+.arrears-summary-breakdown li span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.arrears-summary-breakdown li strong {
+  color: var(--text);
+  flex: 0 0 auto;
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.arrears-summary-breakdown li.arrears-summary-empty {
+  border: 0;
+  color: var(--muted);
+  display: block;
+}
+
+.arrears-summary-unpaid-total {
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.9375rem;
+  padding-top: 10px;
+}
+
+.arrears-summary-unpaid-total strong {
+  color: var(--primary-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.arrears-summary-status {
+  color: var(--danger);
+  font-size: 0.9375rem;
+  margin: -8px 0 12px;
+  min-height: 1.2em;
+}
+
+@media (max-width: 900px) {
+  .arrears-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 575px) {
+  .arrears-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .arrears-summary-card {
+    padding: 16px;
+  }
+}
+
 .report-download-actions {
   align-items: center;
   display: flex;
@@ -3380,6 +3553,19 @@ input[type='radio'] {
   display: inline-block;
   margin: 2px 0;
   text-decoration: none;
+}
+
+.whatsapp-action:disabled {
+  background: var(--panel-alt);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.whatsapp-unavailable {
+  color: var(--muted);
+  display: block;
+  font-size: 0.75rem;
+  margin: 2px 0 6px;
 }
 
 .print-action {

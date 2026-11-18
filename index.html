@@ -660,6 +660,40 @@
                 </select>
               </label>
             </div>
+            <div class="arrears-summary-grid" aria-label="Ringkasan tunggakan sesuai filter">
+              <article class="arrears-summary-card arrears-summary-students">
+                <p class="arrears-summary-label">Total siswa menunggak</p>
+                <strong class="arrears-summary-value" id="arrearsSummaryStudentCount">—</strong>
+                <small class="arrears-summary-caption" id="arrearsSummaryStudentCaption">Memuat ringkasan...</small>
+                <div class="arrears-summary-breakdown">
+                  <h3 id="arrearsSummaryGroupTitle">Rincian per unit</h3>
+                  <ul id="arrearsSummaryGroupList"><li>Memuat...</li></ul>
+                </div>
+              </article>
+              <article class="arrears-summary-card arrears-summary-total">
+                <p class="arrears-summary-label">Total tunggakan</p>
+                <strong class="arrears-summary-value" id="arrearsSummaryTotalDue">—</strong>
+                <small class="arrears-summary-caption">Pembayaran lama belum dialokasikan tidak termasuk.</small>
+                <div class="arrears-summary-breakdown">
+                  <h3>Rincian komponen</h3>
+                  <ul id="arrearsSummaryComponentList"><li>Memuat...</li></ul>
+                </div>
+              </article>
+              <article class="arrears-summary-card arrears-summary-unpaid">
+                <p class="arrears-summary-label" id="arrearsSummaryUnpaidTitle">Siswa belum lunas</p>
+                <div class="arrears-summary-unpaid-stat">
+                  <strong class="arrears-summary-value" id="arrearsSummaryUnpaidCount">—</strong>
+                  <span class="arrears-summary-unpaid-rate" id="arrearsSummaryUnpaidRate" aria-label="Persentase siswa belum lunas">—</span>
+                </div>
+                <small class="arrears-summary-caption" id="arrearsSummaryUnpaidCaption">Memuat ringkasan...</small>
+                <div class="arrears-summary-unpaid-total">
+                  <span>Total belum lunas</span>
+                  <strong id="arrearsSummaryUnpaidTotal">—</strong>
+                </div>
+                <small class="arrears-summary-caption" id="arrearsSummaryUnpaidNote"></small>
+              </article>
+            </div>
+            <p class="arrears-summary-status" id="arrearsSummaryStatus" role="status" aria-live="polite"></p>
             <div class="report-download-actions">
               <button type="button" class="secondary-button small-button" id="downloadArrearsSchoolBtn" disabled>Unduh per sekolah</button>
               <button type="button" class="secondary-button small-button" id="downloadArrearsClassBtn" disabled>Unduh per kelas</button>
