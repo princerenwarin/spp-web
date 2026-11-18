@@ -2960,32 +2960,304 @@ input[type='radio'] {
 
 .arrears-breakdown {
   display: grid;
-  gap: 10px 14px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  min-width: 280px;
-  max-width: 480px;
+  gap: 7px;
+  min-width: 260px;
+  max-width: 560px;
 }
 
-.arrears-breakdown.is-single {
-  grid-template-columns: minmax(0, 1fr);
+.arrears-breakdown-head {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
 }
 
-.arrears-detail-group {
+.arrears-summary-trigger {
+  align-items: center;
+  background: #fff5e3;
+  border: 1px solid #ecd8ad;
+  border-radius: 8px;
+  color: #765314;
+  cursor: pointer;
+  display: inline-flex;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  gap: 3px 6px;
+  line-height: 1.25;
+  min-height: 32px;
+  padding: 5px 9px;
+  text-align: left;
+}
+
+.arrears-summary-trigger:hover,
+.arrears-chip:hover {
+  border-color: #c8b37c;
+  background: #fff0d2;
+}
+
+.arrears-summary-trigger strong {
+  font-weight: 700;
+}
+
+.arrears-period-summary {
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  padding-top: 7px;
+}
+
+.arrears-chip-list {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.arrears-chip {
+  align-items: baseline;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  flex-wrap: wrap;
+  font-size: 0.73rem;
+  gap: 2px 4px;
+  line-height: 1.3;
+  min-height: 28px;
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.arrears-chip small {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.arrears-total-trigger {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--primary-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.arrears-total-trigger:hover {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.arrears-total-trigger strong {
+  font-weight: 750;
+}
+
+.balance-cell .arrears-balance-context {
+  color: var(--muted);
+  display: block;
+  font-size: 0.69rem;
+  font-weight: 500;
+  line-height: 1.35;
+  margin-top: 3px;
+  white-space: normal;
+}
+
+.arrears-detail-dialog {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  color: var(--text);
+  max-height: min(88vh, 820px);
+  max-width: min(760px, calc(100vw - 24px));
+  padding: 22px;
+  width: 100%;
+}
+
+.arrears-detail-dialog::backdrop {
+  background: rgba(25, 23, 39, 0.48);
+}
+
+.arrears-detail-dialog > form {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+  max-height: calc(min(88vh, 820px) - 44px);
+  overflow-y: auto;
+}
+
+.arrears-detail-dialog .card-print-dialog-heading {
+  margin-bottom: 0;
+}
+
+.arrears-detail-dialog .card-print-dialog-heading h2 {
+  margin: 0;
+}
+
+.arrears-detail-dialog .card-print-dialog-heading .muted-copy {
+  margin: 6px 0 0;
+}
+
+.arrears-detail-body {
+  display: grid;
+  gap: 18px;
+}
+
+.arrears-detail-section {
+  display: grid;
+  gap: 9px;
   min-width: 0;
 }
 
-.arrears-detail-heading {
-  display: block;
-  font-size: 0.75rem;
-  margin-bottom: 5px;
+.arrears-detail-section h3 {
+  color: var(--primary-2);
+  font-size: 0.98rem;
+  margin: 0;
 }
 
-.arrears-detail-group .arrears-period-items {
-  gap: 3px;
+.arrears-detail-table {
+  font-variant-numeric: tabular-nums;
+  min-width: 420px;
 }
 
-.arrears-one-time-item + .arrears-one-time-item {
-  margin-top: 5px;
+.arrears-detail-table th,
+.arrears-detail-table td {
+  padding: 9px 11px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.arrears-detail-table th:first-child,
+.arrears-detail-table td:first-child {
+  text-align: left;
+}
+
+.arrears-detail-table tfoot th,
+.arrears-detail-table tfoot td {
+  background: var(--panel-alt);
+  border-top: 1px solid var(--border);
+  font-weight: 700;
+}
+
+@media (max-width: 600px) {
+  .arrears-detail-table {
+    min-width: 100%;
+    table-layout: fixed;
+  }
+
+  .arrears-detail-table th,
+  .arrears-detail-table td {
+    font-size: 0.72rem;
+    padding: 7px 5px;
+  }
+
+  .arrears-detail-table th:first-child {
+    width: 40%;
+  }
+
+  .arrears-detail-table th:not(:first-child) {
+    width: 30%;
+  }
+}
+
+.arrears-detail-items {
+  display: grid;
+  gap: 8px;
+}
+
+.arrears-detail-item {
+  border-bottom: 1px solid var(--border);
+  padding: 0 0 8px;
+}
+
+.arrears-detail-item:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.arrears-detail-item-head,
+.arrears-detail-item li {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.arrears-detail-item-head {
+  font-size: 0.88rem;
+}
+
+.arrears-detail-note {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin: 7px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.arrears-detail-item-head strong:last-child,
+.arrears-detail-item li strong,
+.arrears-detail-total strong {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.arrears-detail-item ul {
+  color: var(--muted);
+  display: grid;
+  font-size: 0.78rem;
+  gap: 4px;
+  list-style: none;
+  margin: 7px 0 0;
+  padding: 0 0 0 12px;
+}
+
+.arrears-detail-item li strong {
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.arrears-detail-empty {
+  color: var(--muted);
+  margin: 0;
+}
+
+.arrears-detail-unallocated {
+  background: #fff5e3;
+  border: 1px solid #ecd8ad;
+  border-radius: 9px;
+  color: #765314;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  margin: 0;
+  padding: 10px 12px;
+}
+
+.arrears-detail-total {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  display: flex;
+  font-size: 0.92rem;
+  font-weight: 650;
+  gap: 12px;
+  justify-content: space-between;
+  padding-top: 12px;
+}
+
+.arrears-detail-total strong {
+  color: var(--primary-2);
+  font-size: 1.08rem;
+}
+
+.arrears-detail-dialog .form-actions {
+  margin-top: 0;
+  padding-top: 12px;
 }
 
 .arrears-cutoff-panel {
@@ -3039,6 +3311,17 @@ input[type='radio'] {
   cursor: pointer;
   font-size: 0.72rem;
   font-weight: 650;
+}
+
+.arrears-academic-year-details {
+  border-top: 1px solid var(--border);
+  margin-top: 0;
+  padding-top: 8px;
+}
+
+.arrears-academic-year-details > summary {
+  color: var(--text);
+  font-size: 0.9375rem;
 }
 
 .arrears-month-grid {

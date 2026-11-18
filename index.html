@@ -962,6 +962,26 @@
         </div>
       </form>
     </dialog>
+    <dialog id="arrearsDetailDialog" class="arrears-detail-dialog" aria-labelledby="arrearsDetailTitle" aria-describedby="arrearsDetailStudent">
+      <form method="dialog">
+        <div class="card-print-dialog-heading">
+          <div>
+            <h2 id="arrearsDetailTitle">Rincian seluruh tunggakan</h2>
+            <p id="arrearsDetailStudent" class="muted-copy"></p>
+          </div>
+          <button type="button" class="modal-close" id="arrearsDetailClose" aria-label="Tutup rincian tunggakan">&times;</button>
+        </div>
+        <div id="arrearsDetailBody" class="arrears-detail-body"></div>
+        <p id="arrearsDetailUnallocated" class="arrears-detail-unallocated" hidden></p>
+        <div class="arrears-detail-total">
+          <span>Total sisa terhitung</span>
+          <strong id="arrearsDetailTotal">Rp 0</strong>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="secondary-button">Tutup</button>
+        </div>
+      </form>
+    </dialog>
     <dialog id="userPasswordDialog" class="student-modal user-password-dialog">
       <form id="userPasswordForm" method="dialog" class="student-dialog">
         <div class="dialog-heading">

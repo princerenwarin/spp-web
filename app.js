@@ -147,6 +147,13 @@ const ui = {
   paymentTransactionHistory: document.getElementById('paymentTransactionHistory'),
   paymentHistoryClose: document.getElementById('paymentHistoryClose'),
   paymentHistoryCancel: document.getElementById('paymentHistoryCancel'),
+  arrearsDetailDialog: document.getElementById('arrearsDetailDialog'),
+  arrearsDetailTitle: document.getElementById('arrearsDetailTitle'),
+  arrearsDetailStudent: document.getElementById('arrearsDetailStudent'),
+  arrearsDetailBody: document.getElementById('arrearsDetailBody'),
+  arrearsDetailTotal: document.getElementById('arrearsDetailTotal'),
+  arrearsDetailUnallocated: document.getElementById('arrearsDetailUnallocated'),
+  arrearsDetailClose: document.getElementById('arrearsDetailClose'),
   studentTableBody: document.getElementById('studentTableBody'),
   studentForm: document.getElementById('studentForm'),
   studentNama: document.getElementById('studentNama'),
@@ -3898,7 +3905,7 @@ function parseBillingPeriod(value) {
   return null;
 }
 
-function compressBillingPeriods(periods) {
+function compressBillingPeriods(periods, compact = false) {
   const grouped = new Map();
   (periods || []).forEach((value) => {
     const parsed = parseBillingPeriod(value);
@@ -3913,12 +3920,14 @@ function compressBillingPeriods(periods) {
     let previous = start;
     const addRange = (first, last) => {
       const monthName = (month) => new Intl.DateTimeFormat('id-ID', {
-        month: 'long',
+        month: compact ? 'short' : 'long',
         timeZone: 'UTC'
       }).format(new Date(Date.UTC(year, month - 1, 1)));
       segments.push(first === last
         ? `${monthName(first)} ${year}`
-        : `${monthName(first)} - ${monthName(last)} ${year}`);
+        : compact
+          ? `${monthName(first)}–${monthName(last)} ${year}`
+          : `${monthName(first)} - ${monthName(last)} ${year}`);
     };
     months.slice(1).forEach((month) => {
       if (month === previous + 1) {
@@ -3931,7 +3940,7 @@ function compressBillingPeriods(periods) {
     });
     addRange(start, previous);
   });
-  return segments.join(', ');
+  return segments.join(compact ? ' · ' : ', ');
 }
 
 function populateReportPeriods() {
@@ -4178,66 +4187,343 @@ async function downloadArrearsGroup(scope) {
   }
 }
 
-function reportDetailMarkup(billing) {
+function arrearsSummaryData(billing) {
   const months = billing.periode_bulanan || [];
-  const monthlyRows = months.map((item) => {
-    const components = [
-      ['SPP', Number(item.spp.sisa || 0)],
-      ['Komputer', Number(item.komp.sisa || 0)]
-    ].filter(([, remaining]) => remaining > 0)
-      .map(([label, remaining]) => `
-        <div class="arrears-balance-line"><span>${label}</span><strong>${formatRupiah(remaining)}</strong></div>
-      `).join('');
-    if (!components) return '';
-    return `
-      <div class="arrears-period">
-        <strong>${escapeHtml(formatPeriodLabel(item.periode))}</strong>
-        <div class="arrears-period-items">${components}</div>
-      </div>
-    `;
-  }).filter(Boolean);
-  const monthlySpp = months.reduce((total, item) => total + Number(item.spp.sisa || 0), 0);
-  const monthlyComputer = months.reduce((total, item) => total + Number(item.komp.sisa || 0), 0);
-  const monthlySummary = [
-    ['SPP', billing.sisa_spp == null ? monthlySpp : Number(billing.sisa_spp || 0)],
-    ['Komputer', billing.sisa_komp == null ? monthlyComputer : Number(billing.sisa_komp || 0)]
-  ].filter(([, amount]) => amount > 0)
-    .map(([label, amount]) => `
-      <div class="arrears-balance-line"><span>${label}</span><strong>${formatRupiah(amount)}</strong></div>
-    `).join('');
-  const monthlyGroup = monthlyRows.length || monthlySummary
-    ? `<section class="arrears-detail-group">
-        <strong class="arrears-detail-heading">SPP &amp; Komputer</strong>
-        <div class="arrears-period-items">${monthlySummary || '<span class="student-sub">Tidak ada sisa tagihan.</span>'}</div>
-        ${monthlyRows.length
-          ? `<details class="arrears-period-details">
-              <summary>Rincian ${monthlyRows.length} periode</summary>
-              <div class="arrears-month-grid">${monthlyRows.join('')}</div>
-            </details>`
-          : ''}
-      </section>`
-    : '';
-  const components = Object.entries(billing.komponen_satu_kali || {})
-    .filter(([, item]) => Number(item.sisa || 0) > 0)
-    .map(([key, item]) => `
-      <div class="arrears-one-time-item">
-        <div class="arrears-balance-line"><span>${escapeHtml(getPaymentComponentLabel(key))}</span><strong>${formatRupiah(item.sisa)}</strong></div>
-        ${arrearsPeriodDetailsMarkup(item)}
-      </div>
-    `).join('');
-  const oneTimeGroup = components
-    ? `<section class="arrears-detail-group">
-        <strong class="arrears-detail-heading">Komponen lainnya</strong>
-        <div class="arrears-period-items">${components}</div>
-      </section>`
-    : '';
-  const reconciliation = Number(billing.belum_dialokasikan || 0) > 0
-    ? `<div class="arrears-reconciliation">Pembayaran lama belum dialokasikan <strong>${formatRupiah(billing.belum_dialokasikan)}</strong></div>`
-    : '';
-  const groups = [monthlyGroup, oneTimeGroup].filter(Boolean);
-  const items = `${groups.join('')}${reconciliation}`;
+  const monthlyRows = months.filter((item) => (
+    Number(item.spp?.sisa || 0) > 0 || Number(item.komp?.sisa || 0) > 0
+  ));
+  const monthlySpp = months.reduce((total, item) => total + Number(item.spp?.sisa || 0), 0);
+  const monthlyComputer = months.reduce((total, item) => total + Number(item.komp?.sisa || 0), 0);
+  const sppTotal = billing.sisa_spp == null ? monthlySpp : Number(billing.sisa_spp || 0);
+  const computerTotal = billing.sisa_komp == null ? monthlyComputer : Number(billing.sisa_komp || 0);
+  const oneTime = Object.entries(billing.komponen_satu_kali || {})
+    .filter(([, item]) => Number(item.sisa || 0) > 0);
+  const priorYearMonthly = oneTime.filter(([key]) => ['spp_tl', 'komp_tl'].includes(key));
+  const reportYear = ui.reportYearFilter.value;
+  const hasPreviousYear = oneTime.some(([key, item]) => (
+    key.endsWith('_tl')
+      || (reportYear && Array.isArray(item.rincian) && item.rincian.some((detail) => (
+        detail.tahun_ajaran && String(detail.tahun_ajaran) !== String(reportYear)
+      )))
+  ));
+  const periods = compressBillingPeriods(monthlyRows.map((item) => item.periode), true);
+  const periodSummary = [periods, hasPreviousYear ? 'Thn lalu' : ''].filter(Boolean).join(' & ');
+  const positionCount = Number(sppTotal > 0) + Number(computerTotal > 0) + oneTime.length;
 
-  return `<div class="arrears-breakdown${groups.length < 2 ? ' is-single' : ''}">${items || '<span class="student-sub">Tidak ada rincian sisa tagihan.</span>'}</div>`;
+  return {
+    sppTotal,
+    computerTotal,
+    oneTime,
+    priorYearMonthly,
+    monthlyRows,
+    hasPreviousYear,
+    periods,
+    periodSummary,
+    positionCount
+  };
+}
+
+function arrearsChipMarkup(studentId, component, label, detail = '') {
+  return `
+    <button type="button" class="arrears-chip" data-arrears-detail="${escapeHtml(studentId)}"
+      data-arrears-component="${escapeHtml(component)}" aria-haspopup="dialog">
+      <span>${escapeHtml(label)}</span>${detail ? `<small>${escapeHtml(detail)}</small>` : ''}
+    </button>`;
+}
+
+function reportDetailMarkup(row) {
+  const billing = row.billing || {};
+  const summary = arrearsSummaryData(billing);
+  const studentId = String(row.id_siswa);
+  const monthlyPositions = [summary.sppTotal, summary.computerTotal].filter((amount) => amount > 0);
+  const monthlyLabel = monthlyPositions.length === 2 ? 'SPP + Komputer' : (summary.sppTotal > 0 ? 'SPP' : 'Komputer');
+  const chips = [];
+
+  if (monthlyPositions.length) {
+    chips.push(arrearsChipMarkup(
+      studentId,
+      'monthly',
+      monthlyLabel,
+      summary.periods ? `(${summary.periods})` : ''
+    ));
+  }
+  if (summary.priorYearMonthly.length) {
+    chips.push(arrearsChipMarkup(
+      studentId,
+      'prior-year-monthly',
+      priorYearMonthlyLabel(summary.priorYearMonthly)
+    ));
+  }
+  summary.oneTime.filter(([key]) => !['spp_tl', 'komp_tl'].includes(key)).forEach(([key]) => {
+    chips.push(arrearsChipMarkup(studentId, key, getPaymentComponentLabel(key)));
+  });
+
+  const periodSummary = summary.periodSummary
+    ? `<span class="arrears-period-summary">${escapeHtml(summary.periodSummary)}</span>`
+    : '';
+  return `
+    <div class="arrears-breakdown">
+      <div class="arrears-breakdown-head">
+        <button type="button" class="arrears-summary-trigger" data-arrears-detail="${escapeHtml(studentId)}"
+          aria-haspopup="dialog">Semua <strong>${summary.positionCount} Pos Tertunggak</strong></button>
+        ${periodSummary}
+      </div>
+      <div class="arrears-chip-list">${chips.join('') || '<span class="student-sub">Tidak ada sisa tagihan.</span>'}</div>
+    </div>`;
+}
+
+function arrearsDetailMarkup(billing, component = '') {
+  const summary = arrearsSummaryData(billing);
+  const sections = [];
+
+  if (!component || component === 'monthly') {
+    const monthRows = summary.monthlyRows.map((item) => `
+      <tr>
+        <th scope="row">${escapeHtml(formatPeriodLabel(item.periode))}</th>
+        <td>${Number(item.spp?.sisa || 0) > 0 ? formatRupiah(item.spp.sisa) : '—'}</td>
+        <td>${Number(item.komp?.sisa || 0) > 0 ? formatRupiah(item.komp.sisa) : '—'}</td>
+      </tr>
+    `);
+    if (!monthRows.length && (summary.sppTotal > 0 || summary.computerTotal > 0)) {
+      monthRows.push(`
+        <tr>
+          <th scope="row">Akumulasi periode</th>
+          <td>${summary.sppTotal > 0 ? formatRupiah(summary.sppTotal) : '—'}</td>
+          <td>${summary.computerTotal > 0 ? formatRupiah(summary.computerTotal) : '—'}</td>
+        </tr>
+      `);
+    }
+    if (monthRows.length) {
+      sections.push(`
+        <section class="arrears-detail-section">
+          <h3>SPP &amp; Komputer</h3>
+          <div class="table-wrap">
+            <table class="arrears-detail-table">
+              <thead><tr><th>Periode</th><th>SPP</th><th>Komputer</th></tr></thead>
+              <tbody>${monthRows.join('')}</tbody>
+              <tfoot><tr>
+                <th scope="row">Total</th>
+                <td>${formatRupiah(summary.sppTotal)}</td>
+                <td>${formatRupiah(summary.computerTotal)}</td>
+              </tr></tfoot>
+            </table>
+          </div>
+        </section>`);
+    }
+  }
+
+  const priorYearMonthly = summary.priorYearMonthly;
+  if ((!component || component === 'prior-year-monthly') && priorYearMonthly.length) {
+    const academicYears = new Map();
+    const getAcademicYear = (year) => {
+      const label = String(year || 'Tahun sebelumnya');
+      if (!academicYears.has(label)) {
+        academicYears.set(label, {
+          label,
+          spp: 0,
+          komp: 0,
+          monthlyRows: new Map(),
+          descriptions: []
+        });
+      }
+      return academicYears.get(label);
+    };
+
+    priorYearMonthly.forEach(([key, item]) => {
+      const field = key === 'spp_tl' ? 'spp' : 'komp';
+      const componentLabel = field === 'spp' ? 'SPP' : 'Komputer';
+      const details = Array.isArray(item.rincian)
+        ? item.rincian.filter((detail) => Number(detail.sisa || 0) > 0)
+        : [];
+      if (!details.length && Number(item.sisa || 0) > 0) {
+        const group = getAcademicYear('Tahun sebelumnya');
+        const amount = Number(item.sisa || 0);
+        group[field] += amount;
+        group.descriptions.push({
+          component: componentLabel,
+          description: 'Rincian periode tidak tersedia',
+          sisa: amount
+        });
+        return;
+      }
+
+      details.forEach((detail) => {
+        const amount = Number(detail.sisa || 0);
+        const group = getAcademicYear(detail.tahun_ajaran);
+        group[field] += amount;
+        if (detail.periode) {
+          const rowKey = String(detail.periode);
+          if (!group.monthlyRows.has(rowKey)) {
+            group.monthlyRows.set(rowKey, {
+              periode: rowKey,
+              label: formatPeriodLabel(rowKey),
+              spp: 0,
+              komp: 0
+            });
+          }
+          group.monthlyRows.get(rowKey)[field] += amount;
+        } else {
+          const keterangan = String(detail.keterangan || '').trim();
+          group.descriptions.push({
+            component: componentLabel,
+            description: keterangan
+              ? `Keterangan: ${keterangan}`
+              : 'Periode tidak dicatat',
+            sisa: amount
+          });
+        }
+      });
+    });
+
+    const yearMarkup = [...academicYears.values()].sort((a, b) => {
+      const aMatch = /^(\d{4})-\d{4}$/.exec(a.label);
+      const bMatch = /^(\d{4})-\d{4}$/.exec(b.label);
+      const aStart = aMatch ? Number(aMatch[1]) : 0;
+      const bStart = bMatch ? Number(bMatch[1]) : 0;
+      if (aStart && bStart) return aStart - bStart;
+      if (aStart) return -1;
+      if (bStart) return 1;
+      return a.label.localeCompare(b.label, 'id');
+    }).map((group) => {
+      const monthlyRows = [...group.monthlyRows.values()].sort((a, b) => {
+        const aPeriod = parseBillingPeriod(a.periode);
+        const bPeriod = parseBillingPeriod(b.periode);
+        if (aPeriod && bPeriod) {
+          return aPeriod.year * 12 + aPeriod.month - (bPeriod.year * 12 + bPeriod.month);
+        }
+        if (aPeriod) return -1;
+        if (bPeriod) return 1;
+        return a.label.localeCompare(b.label, 'id');
+      });
+      const monthlyTotals = monthlyRows.reduce((total, row) => ({
+        spp: total.spp + row.spp,
+        komp: total.komp + row.komp
+      }), { spp: 0, komp: 0 });
+      const tableMarkup = monthlyRows.length
+        ? `<div class="table-wrap">
+            <table class="arrears-detail-table">
+              <thead><tr><th>Periode</th><th>SPP</th><th>Komputer</th></tr></thead>
+              <tbody>${monthlyRows.map((row) => `
+                <tr>
+                  <th scope="row">${escapeHtml(row.label)}</th>
+                  <td>${row.spp > 0 ? formatRupiah(row.spp) : '—'}</td>
+                  <td>${row.komp > 0 ? formatRupiah(row.komp) : '—'}</td>
+                </tr>`).join('')}</tbody>
+              <tfoot><tr>
+                <th scope="row">Total bulanan</th>
+                <td>${formatRupiah(monthlyTotals.spp)}</td>
+                <td>${formatRupiah(monthlyTotals.komp)}</td>
+              </tr></tfoot>
+            </table>
+          </div>`
+        : '';
+      const descriptionsMarkup = group.descriptions.length
+        ? `<div class="arrears-detail-items">
+            ${group.descriptions.map((detail) => `
+              <div class="arrears-detail-item">
+                <div class="arrears-detail-item-head">
+                  <strong>${escapeHtml(detail.component)}</strong>
+                  <strong>${formatRupiah(detail.sisa)}</strong>
+                </div>
+                <p class="arrears-detail-note">${escapeHtml(detail.description)}</p>
+              </div>`).join('')}
+          </div>`
+        : '';
+
+      return `
+        <details class="arrears-period-details arrears-academic-year-details">
+          <summary>Tagihan ${escapeHtml(group.label)} · ${formatRupiah(group.spp + group.komp)}</summary>
+          ${tableMarkup}
+          ${descriptionsMarkup}
+        </details>`;
+    }).join('');
+
+    sections.push(`
+      <section class="arrears-detail-section">
+        <h3>${escapeHtml(priorYearMonthlyLabel(priorYearMonthly))}</h3>
+        ${yearMarkup}
+      </section>`);
+  }
+
+  const components = summary.oneTime.filter(([key]) => (
+    !['spp_tl', 'komp_tl'].includes(key) && (!component || key === component)
+  ));
+  if (components.length) {
+    const rows = components.map(([key, item]) => {
+      const details = Array.isArray(item.rincian)
+        ? item.rincian.filter((detail) => Number(detail.sisa || 0) > 0)
+        : [];
+      const detailRows = details.map((detail) => {
+        const label = detail.periode
+          ? formatPeriodLabel(detail.periode)
+          : (detail.tahun_ajaran || 'Tahun sebelumnya');
+        return `<li><span>${escapeHtml(label)}</span><strong>${formatRupiah(detail.sisa)}</strong></li>`;
+      }).join('');
+      return `
+        <div class="arrears-detail-item">
+          <div class="arrears-detail-item-head">
+            <strong>${escapeHtml(getPaymentComponentLabel(key))}</strong>
+            <strong>${formatRupiah(item.sisa)}</strong>
+          </div>
+          ${detailRows ? `<ul>${detailRows}</ul>` : ''}
+        </div>`;
+    }).join('');
+    sections.push(`
+      <section class="arrears-detail-section">
+        <h3>Komponen lainnya</h3>
+        <div class="arrears-detail-items">${rows}</div>
+      </section>`);
+  }
+
+  return sections.join('') || '<p class="arrears-detail-empty">Tidak ada rincian sisa tagihan untuk pos ini.</p>';
+}
+
+function arrearsDetailTotal(billing, component = '') {
+  if (component === 'monthly') {
+    const summary = arrearsSummaryData(billing);
+    return summary.sppTotal + summary.computerTotal;
+  }
+  if (component === 'prior-year-monthly') {
+    return ['spp_tl', 'komp_tl'].reduce((total, key) => (
+      total + Number(billing.komponen_satu_kali?.[key]?.sisa || 0)
+    ), 0);
+  }
+  if (component) return Number(billing.komponen_satu_kali?.[component]?.sisa || 0);
+  return Number(billing.sisa_total || 0);
+}
+
+function priorYearMonthlyLabel(components) {
+  const hasSpp = components.some(([key]) => key === 'spp_tl');
+  const hasComputer = components.some(([key]) => key === 'komp_tl');
+  if (hasSpp && hasComputer) return 'SPP + Komputer tahun lalu';
+  return hasSpp ? 'SPP tahun lalu' : 'Komputer tahun lalu';
+}
+
+function openArrearsDetail(studentId, component = '') {
+  const row = app.arrearsRowsById?.get(String(studentId));
+  if (!row) {
+    setArrearsExportStatus('Data siswa tidak ditemukan. Muat ulang laporan lalu coba lagi.');
+    return;
+  }
+  const billing = row.billing || {};
+  const title = component === 'monthly'
+    ? 'Rincian SPP & Komputer'
+    : (component === 'prior-year-monthly'
+      ? `Rincian ${priorYearMonthlyLabel(arrearsSummaryData(billing).priorYearMonthly)}`
+      : (component ? `Rincian ${getPaymentComponentLabel(component)}` : 'Rincian seluruh tunggakan'));
+  const context = [row.kdkls ? `Kelas ${row.kdkls}` : '', getSchoolName(row.kdsek)].filter(Boolean);
+
+  ui.arrearsDetailTitle.textContent = title;
+  ui.arrearsDetailStudent.textContent = [row.nama || 'Siswa', ...context].join(' · ');
+  ui.arrearsDetailBody.innerHTML = arrearsDetailMarkup(billing, component);
+  ui.arrearsDetailTotal.textContent = formatRupiah(arrearsDetailTotal(billing, component));
+  const unallocated = Number(billing.belum_dialokasikan || 0);
+  ui.arrearsDetailUnallocated.hidden = Boolean(component) || unallocated <= 0;
+  if (unallocated > 0) {
+    ui.arrearsDetailUnallocated.innerHTML = `Pembayaran lama belum dialokasikan <strong>${formatRupiah(unallocated)}</strong>. Nilai ini tidak termasuk dalam total sisa tagihan.`;
+  }
+  ui.arrearsDetailDialog.querySelector('form').scrollTop = 0;
+  if (!ui.arrearsDetailDialog.open) ui.arrearsDetailDialog.showModal();
 }
 
 function normalizeWhatsAppNumber(value) {
@@ -4305,14 +4591,24 @@ function arrearsRowMarkup(row) {
     ? `https://wa.me/${phone}?text=${encodeURIComponent(whatsappMessage)}`
     : '';
   const canPrint = unallocated <= 0;
-  const balanceMarkup = `${formatRupiah(remaining)}${unallocated > 0
-    ? `<small class="unallocated-note">+ ${formatRupiah(unallocated)} belum dialokasikan</small>`
-    : ''}`;
+  const summary = arrearsSummaryData(billing);
+  const balanceContext = [];
+  if (summary.oneTime.some(([key]) => !['spp_tl', 'komp_tl'].includes(key))) {
+    balanceContext.push('pos non-SPP');
+  }
+  if (summary.hasPreviousYear) balanceContext.push('tahun lalu');
+  const balanceMarkup = `
+    <button type="button" class="arrears-total-trigger" data-arrears-detail="${escapeHtml(String(row.id_siswa))}"
+      aria-haspopup="dialog" aria-label="Lihat rincian sisa ${formatRupiah(remaining)}">
+      <strong>${formatRupiah(remaining)}</strong>
+    </button>
+    ${balanceContext.length ? `<small class="arrears-balance-context">Termasuk ${escapeHtml(balanceContext.join(' & '))}</small>` : ''}
+    ${unallocated > 0 ? `<small class="unallocated-note">+ ${formatRupiah(unallocated)} belum dialokasikan</small>` : ''}`;
 
   return `<tr>
     <td>${escapeHtml(row.kdkls || '-')}</td>
     <td><strong>${escapeHtml(name)}</strong></td>
-    <td>${reportDetailMarkup(billing)}</td>
+    <td>${reportDetailMarkup(row)}</td>
     <td class="balance-cell">${balanceMarkup}</td>
     <td><span class="status-pill ${statusClass}">${status}</span></td>
     <td class="report-actions">
@@ -6780,6 +7076,11 @@ function setupEvents() {
   ui.downloadArrearsClassBtn.addEventListener('click', () => downloadArrearsGroup('class'));
   ui.refreshRevenue.addEventListener('click', fetchDashboard);
   ui.arrearsReportTable.addEventListener('click', (event) => {
+    const detailButton = event.target.closest('[data-arrears-detail]');
+    if (detailButton) {
+      openArrearsDetail(detailButton.dataset.arrearsDetail, detailButton.dataset.arrearsComponent || '');
+      return;
+    }
     const downloadButton = event.target.closest('[data-download-arrears]');
     if (downloadButton) {
       downloadStudentArrears(downloadButton.dataset.downloadArrears);
@@ -6834,6 +7135,10 @@ function setupEvents() {
     if (event.target === ui.paymentHistoryDialog) ui.paymentHistoryDialog.close();
   });
   ui.paymentHistoryDialog.addEventListener('close', () => { app.paymentHistoryRequest += 1; });
+  ui.arrearsDetailClose.addEventListener('click', () => ui.arrearsDetailDialog.close());
+  ui.arrearsDetailDialog.addEventListener('click', (event) => {
+    if (event.target === ui.arrearsDetailDialog) ui.arrearsDetailDialog.close();
+  });
   document.getElementById('openStudentFormBtn').addEventListener('click', () => openStudentDialog('baru'));
   ui.studentType.addEventListener('change', updateStudentFormMode);
   document.getElementById('bulkGiatBtn').addEventListener('click', applyBulkActivity);
