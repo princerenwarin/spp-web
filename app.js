@@ -7005,6 +7005,10 @@ async function handlePaymentSubmit(event) {
     showPaymentMockupStatus('Mode mockup aktif. Pembayaran contoh tidak disimpan dan tidak mencetak kuitansi.');
     return;
   }
+  if (cashierPaymentMethod !== 'cash') {
+    alert('Penyimpanan Debit EDC/QRIS belum diaktifkan. Pilih Tunai atau tunggu fitur settlement selesai.');
+    return;
+  }
   if (!canAccessPayment()) {
     alert('Hanya Admin KKMS yang dapat melakukan pembayaran.');
     return;

@@ -5235,7 +5235,7 @@ table {
 }
 
 .payment-method-widget {
-  display: none;
+  display: grid;
   gap: 12px;
 }
 
