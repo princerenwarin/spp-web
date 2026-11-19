@@ -525,50 +525,6 @@
         </section>
 
         <section class="page" id="pembayaranPage">
-          <div class="payment-page-toolbar">
-            <details class="fold payment-import-fold">
-              <summary>Impor Pembayaran</summary>
-              <div class="fold-body">
-                <p class="muted-copy">Gunakan template. Setiap baris akan dicocokkan dan dikonfirmasi per siswa; periode kosong akan disarankan dari tunggakan terlama.</p>
-                <div class="form-actions">
-                  <button type="button" class="secondary-button" id="downloadPaymentTemplate">Unduh Template Pembayaran</button>
-                  <label class="secondary-button">
-                    Pilih File Excel / CSV
-                    <input id="paymentImportFile" type="file" accept=".xlsx,.xls,.csv" hidden />
-                  </label>
-                </div>
-                <section id="paymentImportReview" class="payment-import-review" hidden aria-label="Pratinjau impor pembayaran">
-                  <p id="paymentImportStatus" class="muted-copy" role="status" aria-live="polite"></p>
-                  <div class="table-wrap payment-import-table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Nama dari file</th>
-                          <th>Siswa</th>
-                          <th>Komponen</th>
-                          <th>Periode mulai</th>
-                          <th>Tanggal</th>
-                          <th>Nominal</th>
-                          <th>Konfirmasi</th>
-                        </tr>
-                      </thead>
-                      <tbody id="paymentImportRows"></tbody>
-                    </table>
-                  </div>
-                  <button type="button" class="primary-button" id="importPaymentsBtn" disabled>Impor pembayaran terkonfirmasi</button>
-                </section>
-              </div>
-            </details>
-            <details class="fold payment-settlement-fold">
-              <summary>Settlement EDC / QRIS / Transfer</summary>
-              <div class="fold-body">
-                <p class="muted-copy">Unduh format standar, lengkapi referensi pembayaran, lalu gunakan setelah pencocokan bank aktif.</p>
-                <div class="form-actions">
-                  <button type="button" class="secondary-button" id="downloadSettlementTemplate">Unduh Format Excel + Data Dummy</button>
-                </div>
-              </div>
-            </details>
-          </div>
           <div class="payment-mockup-banner" id="paymentMockupBanner" role="status">
             <strong>Mode mockup</strong>
             <span>Semua data hanya contoh; simpan, impor, settlement, dan cetak tidak menyimpan atau menghasilkan dokumen.</span>
@@ -608,9 +564,9 @@
                     <small class="field-hint">Pilih siswa dan tahun ajaran yang akan menerima pembayaran.</small>
                   </div>
                   <label class="field">
-                    <span>Tanggal uang masuk / transfer</span>
+                    <span>Tanggal pembayaran oleh wali</span>
                     <input id="paymentDate" type="date" name="tglbyr" required />
-                    <small class="field-hint">Tanggal pencatatan saat transaksi disimpan tetap tercatat otomatis.</small>
+                    <small class="field-hint">Gunakan tanggal pada bukti pembayaran, bukan tanggal input atau unggah. Waktu pencatatan disimpan otomatis.</small>
                   </label>
                 </div>
                 <div class="payment-billing-status" id="paymentBillingStatus" role="status" aria-live="polite">Pilih siswa untuk melihat sisa tagihan dan urutan alokasi.</div>
@@ -653,66 +609,74 @@
                 </label>
               </form>
             </div>
-            <aside class="panel payment-summary-panel" aria-labelledby="paymentSummaryHeading">
-              <div class="payment-summary-heading">
-                <h3 id="paymentSummaryHeading">Ringkasan Loket Kasir</h3>
-                <span class="payment-mockup-only" id="paymentMockupTimestamp"></span>
-              </div>
-              <span class="payment-component-count" id="paymentComponentCount">0 komponen</span>
-              <div class="payment-summary-total">
-                <span>Total yang harus dibayar (Orang Tua)</span>
-                <strong id="paymentAllocationTotal">Rp 0</strong>
-              </div>
-              <div class="payment-summary-breakdown">
-                <div><span>Total kotor SPP &amp; komponen</span><strong id="paymentGrossTotal">Rp 0</strong></div>
-                <div><span>Subsidi BOS · pengurang</span><strong>(−) <span id="paymentBosTotal">Rp 0</span></strong></div>
-              </div>
-              <section class="payment-method-widget" aria-labelledby="paymentMethodHeading">
-                <h4 id="paymentMethodHeading">Pilihan metode bayar di kasir</h4>
-                <div class="payment-method-options" role="group" aria-label="Metode pembayaran">
-                  <button type="button" class="is-selected" data-payment-method="cash" aria-pressed="true">Tunai / Cash</button>
-                  <button type="button" data-payment-method="edc" aria-pressed="false">Debit EDC</button>
-                  <button type="button" data-payment-method="qris" aria-pressed="false">QRIS</button>
+            <aside class="payment-side-rail" aria-label="Ringkasan dan proses pembayaran">
+              <section class="panel payment-summary-panel" aria-labelledby="paymentSummaryHeading">
+                <div class="payment-summary-heading">
+                  <h3 id="paymentSummaryHeading">Ringkasan Pembayaran</h3>
+                  <span class="payment-component-count" id="paymentComponentCount">0 komponen</span>
                 </div>
-                <label class="payment-digital-reference" id="paymentDigitalReferenceField" for="paymentDigitalReference" hidden>
-                  <span>ID/referensi transaksi EDC/QRIS</span>
-                  <input id="paymentDigitalReference" type="text" maxlength="100" autocomplete="off" placeholder="Wajib diisi untuk pencocokan settlement" />
-                </label>
-                <label class="payment-cashier-amount" for="paymentCashReceived">
-                  <span id="paymentCashReceivedLabel">Uang diterima dari wali (Rp)</span>
-                  <input id="paymentCashReceived" class="money-input" type="text" inputmode="numeric" placeholder="Rp 0" />
-                </label>
-                <div class="payment-cash-quick-actions" aria-label="Pilihan nominal cepat">
-                  <button type="button" data-cash-tender="exact">Uang pas <strong id="paymentExactAmount">Rp 0</strong></button>
-                  <button type="button" data-cash-tender="50000">+ Rp 50.000</button>
-                  <button type="button" data-cash-tender="100000">+ Rp 100.000</button>
+                <div class="payment-summary-total">
+                  <span>Total yang harus dibayar (Orang Tua)</span>
+                  <strong id="paymentAllocationTotal">Rp 0</strong>
                 </div>
-                <div class="payment-cash-change">
-                  <span id="paymentCashChangeLabel">Kembalian ke wali</span>
-                  <strong id="paymentCashChange">Rp 0</strong>
+                <div class="payment-summary-breakdown">
+                  <div><span>Total kotor SPP &amp; komponen</span><strong id="paymentGrossTotal">Rp 0</strong></div>
+                  <div><span>Subsidi BOS · pengurang</span><strong>(−) <span id="paymentBosTotal">Rp 0</span></strong></div>
                 </div>
-                <p class="payment-settlement-status" id="paymentSettlementStatus" role="status" aria-live="polite">Tunai · masuk ke kas laci</p>
               </section>
-              <div class="payment-print-actions">
+              <section class="panel payment-method-panel" aria-labelledby="paymentMethodHeading">
+                <div class="payment-summary-heading">
+                  <h3 id="paymentMethodHeading">Kalkulator Pembayaran</h3>
+                  <span class="payment-mockup-only" id="paymentMockupTimestamp"></span>
+                </div>
+                <div class="payment-method-widget">
+                  <div class="payment-method-options" role="group" aria-label="Metode pembayaran">
+                    <button type="button" class="is-selected" data-payment-method="cash" aria-pressed="true">Tunai / Cash</button>
+                    <button type="button" data-payment-method="edc" aria-pressed="false">Debit EDC</button>
+                    <button type="button" data-payment-method="qris" aria-pressed="false">QRIS</button>
+                  </div>
+                  <label class="payment-digital-reference" id="paymentDigitalReferenceField" for="paymentDigitalReference" hidden>
+                    <span>ID/referensi transaksi EDC/QRIS</span>
+                    <input id="paymentDigitalReference" type="text" maxlength="100" autocomplete="off" placeholder="Wajib diisi untuk pencocokan settlement" />
+                  </label>
+                  <label class="payment-cashier-amount" for="paymentCashReceived">
+                    <span id="paymentCashReceivedLabel">Uang diterima dari wali (Rp)</span>
+                    <input id="paymentCashReceived" class="money-input" type="text" inputmode="numeric" placeholder="Rp 0" />
+                  </label>
+                  <div class="payment-cash-quick-actions" aria-label="Pilihan nominal cepat">
+                    <button type="button" data-cash-tender="exact">Uang pas <strong id="paymentExactAmount">Rp 0</strong></button>
+                    <button type="button" data-cash-tender="50000">+ Rp 50.000</button>
+                    <button type="button" data-cash-tender="100000">+ Rp 100.000</button>
+                  </div>
+                  <div class="payment-cash-change">
+                    <span id="paymentCashChangeLabel">Kembalian ke wali</span>
+                    <strong id="paymentCashChange">Rp 0</strong>
+                  </div>
+                  <p class="payment-settlement-status" id="paymentSettlementStatus" role="status" aria-live="polite">Tunai · masuk ke kas laci</p>
+                </div>
+                <div class="payment-receipt-actions">
+                  <button type="submit" class="primary-button payment-save-receipt" form="paymentForm">
+                    <span>Simpan Penerimaan &amp; Cetak Kwitansi</span>
+                    <strong id="paymentSaveAmount">Rp 0</strong>
+                  </button>
+                  <button type="button" class="secondary-button small-button payment-mockup-only" id="paymentMockupReceiptBtn">Pratinjau Slip Kwitansi Contoh</button>
+                  <div class="payment-secondary-actions">
+                    <button type="button" class="secondary-button small-button" id="paymentLastReceiptBtn">Cetak Kwitansi Terakhir</button>
+                    <button type="button" class="secondary-button small-button payment-mockup-only" id="paymentResetBtn">Reset Formulir</button>
+                  </div>
+                </div>
+                <p class="payment-mockup-only payment-method-note">Untuk EDC/QRIS, status contoh menunggu file settlement; tidak masuk ke kas laci.</p>
+              </section>
+              <section class="panel payment-card-print-panel" aria-labelledby="paymentCardPrintHeading">
                 <div class="payment-card-print">
                   <div>
-                    <strong>Cetak Kartu SPP Fisik</strong>
+                    <h3 id="paymentCardPrintHeading">Cetak Kartu SPP Fisik</h3>
                     <p>Cetak buku kartu SPP siswa untuk pembayaran periode terpilih.</p>
                   </div>
                   <button type="button" class="secondary-button small-button" id="paymentCardPrintBtn">Buka Pratinjau &amp; Cetak</button>
                 </div>
-                <button type="submit" class="primary-button payment-save-receipt" form="paymentForm">
-                  <span>Simpan Penerimaan &amp; Cetak Kwitansi</span>
-                  <strong id="paymentSaveAmount">Rp 0</strong>
-                </button>
-                <button type="button" class="secondary-button small-button payment-mockup-only" id="paymentMockupReceiptBtn">Pratinjau Slip Kwitansi Contoh</button>
-                <div class="payment-secondary-actions">
-                  <button type="button" class="secondary-button small-button" id="paymentLastReceiptBtn">Cetak Kwitansi Terakhir</button>
-                  <button type="button" class="secondary-button small-button payment-mockup-only" id="paymentResetBtn">Reset Formulir</button>
-                </div>
-                <p class="payment-mockup-status" id="paymentMockupStatus" role="status" aria-live="polite" hidden></p>
-              </div>
-              <p class="payment-mockup-only">Untuk EDC/QRIS, status contoh menunggu file settlement; tidak masuk ke kas laci.</p>
+              </section>
+              <p class="payment-mockup-status" id="paymentMockupStatus" role="status" aria-live="polite" hidden></p>
             </aside>
           </div>
 
@@ -727,8 +691,6 @@
                 <input type="search" id="paymentSearch" class="inline-search" aria-label="Cari pembayaran berdasarkan nomor bukti, siswa, atau nomor SPP" placeholder="Cari no. bukti, siswa, atau No. SPP" />
                 <div class="payment-mockup-only payment-mockup-history-actions">
                   <span id="paymentMockupDate">Hari ini</span>
-                  <button type="button" class="secondary-button small-button" id="paymentSettlementUploadBtn">Impor Settlement</button>
-                  <input id="paymentSettlementFile" type="file" accept=".xlsx,.xls,.csv" hidden />
                 </div>
               </div>
             </div>
@@ -739,8 +701,9 @@
                     <th>No. Bukti</th>
                     <th>Siswa / penerima</th>
                     <th>Sumber</th>
-                    <th>Uang masuk</th>
+                    <th>Tanggal pembayaran</th>
                     <th>Dicatat / diunggah</th>
+                    <th>Metode &amp; settlement</th>
                     <th>Nominal</th>
                     <th>Aksi</th>
                   </tr>
@@ -751,7 +714,7 @@
                     <th>Komponen Dibayar</th>
                     <th>Total Bayar</th>
                     <th>Metode</th>
-                    <th>Status</th>
+                    <th>Settlement / dana masuk</th>
                     <th>Aksi</th>
                   </tr>
                 </thead>
@@ -764,7 +727,7 @@
                     <td>SPP, Komputer, DPP, Seragam</td>
                     <td><strong>Rp 1.425.000</strong></td>
                     <td>Tunai</td>
-                    <td><span class="payment-state is-paid">Tercatat</span></td>
+                    <td><span class="payment-state is-neutral">Tidak perlu settlement</span><small>Tanggal pembayaran langsung</small></td>
                     <td><button type="button" class="secondary-button small-button" disabled>Cetak</button></td>
                   </tr>
                   <tr>
@@ -774,7 +737,7 @@
                     <td>SPP November 2026</td>
                     <td><strong>Rp 350.000</strong></td>
                     <td>QRIS</td>
-                    <td><span class="payment-state is-pending-settlement">Menunggu Settlement</span></td>
+                    <td><span class="payment-state is-pending-settlement">Menunggu settlement</span><small>Transaksi tercatat 19 Nov</small></td>
                     <td><button type="button" class="secondary-button small-button" disabled>Cetak</button></td>
                   </tr>
                   <tr>
@@ -784,7 +747,7 @@
                     <td>SPP, Komputer</td>
                     <td><strong>Rp 288.000</strong></td>
                     <td>Debit EDC</td>
-                    <td><span class="payment-state is-pending-settlement">Menunggu Settlement</span></td>
+                    <td><span class="payment-state is-pending-settlement">Menunggu settlement</span><small>Transaksi tercatat 19 Nov</small></td>
                     <td><button type="button" class="secondary-button small-button" disabled>Cetak</button></td>
                   </tr>
                 </tbody>
@@ -792,6 +755,55 @@
             </div>
             <div class="pager" data-pager="payments"></div>
           </div>
+          <details class="fold payment-tools-fold" id="paymentImportTools">
+            <summary>Impor &amp; Rekonsiliasi</summary>
+            <div class="fold-body payment-tools-body">
+              <p class="payment-tools-intro">Alat impor tersedia di sini agar pencatatan transaksi harian tetap menjadi fokus utama.</p>
+              <div class="payment-tools-grid">
+                <section class="payment-tool-section" aria-labelledby="paymentImportHeading">
+                  <h3 id="paymentImportHeading">Impor Pembayaran</h3>
+                  <p>Untuk pembayaran baru dari file. Setiap baris ditinjau dan dialokasikan ke siswa sebelum disimpan. Tanggal pembayaran wajib sesuai bukti; tanggal unggah dicatat terpisah.</p>
+                  <div class="form-actions">
+                    <button type="button" class="secondary-button" id="downloadPaymentTemplate">Unduh Format + Contoh</button>
+                    <label class="secondary-button">
+                      Pilih File Excel / CSV
+                      <input id="paymentImportFile" type="file" accept=".xlsx,.xls,.csv" hidden />
+                    </label>
+                  </div>
+                  <section id="paymentImportReview" class="payment-import-review" hidden aria-label="Pratinjau impor pembayaran">
+                    <p id="paymentImportStatus" class="muted-copy" role="status" aria-live="polite"></p>
+                    <div class="table-wrap payment-import-table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Nama dari file</th>
+                            <th>Siswa</th>
+                            <th>Komponen</th>
+                            <th>Periode mulai</th>
+                            <th>Tanggal pembayaran</th>
+                            <th>Nominal</th>
+                            <th>Konfirmasi</th>
+                          </tr>
+                        </thead>
+                        <tbody id="paymentImportRows"></tbody>
+                      </table>
+                    </div>
+                    <button type="button" class="primary-button" id="importPaymentsBtn" disabled>Impor pembayaran terkonfirmasi</button>
+                  </section>
+                </section>
+                <section class="payment-tool-section payment-settlement-tool" aria-labelledby="paymentSettlementHeading">
+                  <h3 id="paymentSettlementHeading">Rekonsiliasi EDC / QRIS / Transfer</h3>
+                  <p>EDC dan QRIS dicocokkan dengan transaksi yang sudah tercatat. Transfer yang belum tercatat perlu ditinjau dan dialokasikan admin sebelum dibuat sebagai pembayaran.</p>
+                  <p class="payment-settlement-notice">Pencocokan file provider belum aktif. Template ini membantu menyiapkan tanggal transaksi dan settlement dengan benar.</p>
+                  <div class="form-actions">
+                    <button type="button" class="secondary-button" id="downloadSettlementTemplate">Unduh Format + Contoh</button>
+                    <button type="button" class="secondary-button small-button payment-mockup-only" id="paymentSettlementUploadBtn">Pilih File Settlement (Pratinjau)</button>
+                    <input id="paymentSettlementFile" type="file" accept=".xlsx,.xls,.csv" hidden />
+                  </div>
+                </section>
+              </div>
+            </div>
+          </details>
         </section>
 
         <section class="page" id="laporanPage">

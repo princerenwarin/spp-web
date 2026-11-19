@@ -1627,7 +1627,7 @@ let paymentFetchSeq = 0;
 async function fetchPaymentPage() {
   if (!app.user) return;
   const seq = ++paymentFetchSeq;
-  ui.paymentList.innerHTML = skeletonRows(7);
+  ui.paymentList.innerHTML = skeletonRows(8);
   let query = app.supabase.from('spp_app_payment_batch_list').select('*', { count: 'exact' });
   const school = currentSchoolScope();
   const keyword = cleanKeyword(ui.paymentSearch.value);
@@ -1639,7 +1639,7 @@ async function fetchPaymentPage() {
     .range(from, from + PAGE_SIZE - 1);
   if (seq !== paymentFetchSeq) return;
   if (error) {
-    ui.paymentList.innerHTML = `<tr><td colspan="7" class="empty-state">Data gagal dimuat: ${escapeHtml(error.message)}</td></tr>`;
+    ui.paymentList.innerHTML = `<tr><td colspan="8" class="empty-state">Data gagal dimuat: ${escapeHtml(error.message)}</td></tr>`;
     return;
   }
   app.state.transaksi = (data || []).map(normalizeSupabasePaymentBatch);
@@ -1661,7 +1661,7 @@ function drawPaymentList() {
   if (app.server) renderPager('payments', app.totals.payments);
 
   if (!rows.length) {
-    ui.paymentList.innerHTML = '<tr><td colspan="7" class="empty-state">Belum ada riwayat pembayaran.</td></tr>';
+    ui.paymentList.innerHTML = '<tr><td colspan="8" class="empty-state">Belum ada riwayat pembayaran.</td></tr>';
     return;
   }
 
@@ -1674,6 +1674,11 @@ function drawPaymentList() {
       <td>${escapeHtml(getPaymentBatchSourceLabel(row))}${row.voided_at ? '<small>Dikoreksi</small>' : ''}</td>
       <td>${escapeHtml(row.tglbyr)}</td>
       <td>${escapeHtml(formatDateTime(row.created_at))}</td>
+      <td>${getPaymentMethodLabel(row.payment_method)}
+        <small><span class="payment-state ${getSettlementStateClass(row)}">${getSettlementStateLabel(row)}</span></small>
+        ${row.settlement_reference ? `<small>Ref: ${escapeHtml(row.settlement_reference)}</small>` : ''}
+        ${row.settled_at ? `<small>Dana masuk ${escapeHtml(formatDateTime(row.settled_at))}</small>` : ''}
+      </td>
       <td>${formatRupiah(row.source === 'bos' ? row.nominal : (row.parent_nominal ?? row.nominal))}
         ${row.source !== 'bos' && Number(row.bos_nominal || 0) > 0
           ? `<small>Termasuk BOS ${formatRupiah(row.bos_nominal)}</small>` : ''}
@@ -2390,6 +2395,35 @@ function getPaymentBatchSourceLabel(batch) {
   return batch.source !== 'bos' && Number(batch.bos_nominal || 0) > 0
     ? `${source} + BOS`
     : source;
+}
+
+function getPaymentMethodLabel(method) {
+  return ({
+    cash: 'Tunai',
+    edc: 'EDC',
+    qris: 'QRIS'
+  })[method] || 'Belum dicatat';
+}
+
+function getSettlementStateLabel(batch) {
+  if (!batch.payment_method) return 'Status belum tersedia';
+  if (batch.payment_method === 'cash') return 'Tidak perlu settlement';
+  return ({
+    pending: 'Menunggu settlement',
+    matched: 'Cocok, menunggu dana masuk',
+    settled: 'Settlement selesai',
+    failed: 'Perlu diperiksa'
+  })[batch.settlement_status] || 'Status belum tersedia';
+}
+
+function getSettlementStateClass(batch) {
+  if (!batch.payment_method || batch.payment_method === 'cash') return 'is-neutral';
+  return ({
+    pending: 'is-pending-settlement',
+    matched: 'is-partial',
+    settled: 'is-paid',
+    failed: 'is-unpaid'
+  })[batch.settlement_status] || 'is-neutral';
 }
 
 function formatDateTime(value) {
@@ -5528,7 +5562,7 @@ function normalizeImportHeader(value) {
 }
 
 function importDateValue(value) {
-  if (value === '' || value === null || value === undefined) return localDateInputValue();
+  if (value === '' || value === null || value === undefined || String(value).trim() === '') return '';
   let iso = '';
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     iso = `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
@@ -5606,7 +5640,7 @@ async function parsePaymentImportFile(file) {
     nospp: findColumn('nosp', 'nomorspp'),
     nama: findColumn('nama', 'namasiswa', 'siswa'),
     nominal: findColumn('nominal', 'jumlah', 'jumlahbayar', 'amount', 'total'),
-    tanggal: findColumn('tanggal', 'tanggalbayar', 'tanggaluangmasuk', 'tanggaltransfer', 'tglbyr', 'date', 'transactiondate'),
+    tanggal: findColumn('tanggal', 'tanggalbayar', 'tanggalpembayaran', 'tanggaluangmasuk', 'tanggaltransfer', 'tglbyr', 'date', 'transactiondate'),
     periode: findColumn('periode', 'periodetagihan', 'bulan')
   };
   if (columns.nominal < 0 || (columns.nama < 0 && columns.nospp < 0)) {
@@ -5628,7 +5662,6 @@ async function parsePaymentImportFile(file) {
       sourceNoSpp: nospp,
       nominal,
       tglbyr: importDateValue(rawDate),
-      dateWasDefaulted: rawDate === '' || rawDate === null || rawDate === undefined,
       importedPeriod: importPeriodValue(value(columns.periode))
     };
   }).filter(Boolean);
@@ -5743,7 +5776,8 @@ function renderPaymentImportRows() {
       `<option value="${value}">${escapeHtml(formatPeriodLabel(value))}</option>`
     )).join('');
     const validPeriod = allowedPeriods.includes(row.period);
-    const canConfirm = Boolean(row.selectedStudent?.nospp && row.component && row.nominal > 0
+    const validPaymentDate = Boolean(row.tglbyr && row.tglbyr <= localDateInputValue());
+    const canConfirm = Boolean(validPaymentDate && row.selectedStudent?.nospp && row.component && row.nominal > 0
       && ((row.component !== 'spp' && row.component !== 'komp')
         || (row.billing && !row.billingError && validPeriod
           && Number(row.billing.belum_dialokasikan || 0) === 0)));
@@ -5762,7 +5796,10 @@ function renderPaymentImportRows() {
       <td><select data-import-period aria-label="Pilih periode mulai pada baris ${row.sourceRow}" ${row.component === 'spp' || row.component === 'komp' ? '' : 'disabled'}>
         <option value="">Periode terlama yang disarankan</option>${periodOptions}</select>
         <small>${row.billing && Number(row.billing.belum_dialokasikan || 0) > 0 ? 'Rekonsiliasi pembayaran lama dahulu.' : periodLabel}</small></td>
-      <td>${escapeHtml(row.tglbyr)}${row.dateWasDefaulted ? '<small>Tanggal file kosong: gunakan hari ini</small>' : ''}</td>
+      <td><input type="date" class="payment-import-date ${validPaymentDate ? '' : 'is-missing'}" data-import-date
+        value="${escapeHtml(row.tglbyr)}" max="${localDateInputValue()}" required
+        aria-label="Tanggal pembayaran pada baris ${row.sourceRow}" />
+        <small>${validPaymentDate ? 'Sesuai tanggal pada bukti.' : 'Wajib diisi; jangan gunakan tanggal unggah.'}</small></td>
       <td>${formatRupiah(row.nominal)}</td>
       <td><label class="import-confirm"><input type="checkbox" data-import-confirm ${row.confirmed ? 'checked' : ''} ${canConfirm && !row.skipped ? '' : 'disabled'}>Konfirmasi</label>
         <label class="import-skip"><input type="checkbox" data-import-skip ${row.skipped ? 'checked' : ''}>Lewati</label></td>
@@ -5807,20 +5844,26 @@ function downloadPaymentTemplate() {
   }
   const workbook = window.XLSX.utils.book_new();
   const template = window.XLSX.utils.aoa_to_sheet([
-    ['no_spp', 'nama', 'nominal', 'tanggal_uang_masuk', 'periode'],
+    ['no_spp', 'nama', 'nominal', 'tanggal_pembayaran', 'periode'],
     ['', '', '', '', '']
   ]);
   template['!cols'] = [{ wch: 20 }, { wch: 28 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
+  const examples = window.XLSX.utils.aoa_to_sheet([
+    ['no_spp', 'nama', 'nominal', 'tanggal_pembayaran', 'periode'],
+    ['M3B00342', 'ANNA CONTOH', 350000, '2025-01-15', '012025']
+  ]);
+  examples['!cols'] = template['!cols'];
   const instructions = window.XLSX.utils.aoa_to_sheet([
     ['Panduan impor pembayaran'],
     ['Isi Nama atau No. SPP dan Nominal.'],
-    ['Tanggal uang masuk memakai format YYYY-MM-DD; boleh dikosongkan untuk memakai tanggal hari ini.'],
-    ['Waktu file diunggah dicatat otomatis oleh sistem dan tidak menggantikan tanggal uang masuk.'],
+    ['Tanggal pembayaran wajib diisi memakai format YYYY-MM-DD sesuai bukti pembayaran. Tanggal kosong tidak otomatis diganti tanggal unggah.'],
+    ['Waktu file dicatat otomatis oleh sistem dan tersimpan terpisah dari tanggal pembayaran.'],
     ['Periode opsional; jika kosong, aplikasi menyarankan periode tunggakan terlama.'],
     ['Komponen dan siswa dikonfirmasi satu per satu setelah file dibaca.'],
     ['Simpan satu transaksi pembayaran per baris. Maksimal 500 baris.']
   ]);
   window.XLSX.utils.book_append_sheet(workbook, template, 'Pembayaran');
+  window.XLSX.utils.book_append_sheet(workbook, examples, 'Contoh');
   window.XLSX.utils.book_append_sheet(workbook, instructions, 'Panduan');
   window.XLSX.writeFile(workbook, 'template_impor_pembayaran.xlsx');
 }
@@ -5838,35 +5881,48 @@ function downloadSettlementTemplate() {
     'periode',
     'metode',
     'referensi',
-    'tanggal_transaksi',
+    'tanggal_pembayaran',
+    'tanggal_settlement',
     'tujuan_penerimaan',
     'keterangan'
   ];
   const template = window.XLSX.utils.aoa_to_sheet([
     headers,
-    ['M3B00342', 'ANNA CONTOH', 355000, '112026', 'QRIS', 'QRIS-DUMMY-001', '2026-11-19', 'SPP', 'Contoh dummy - hapus sebelum unggah'],
-    ['Y5B00140', 'BUDI CONTOH', 500000, '112026', 'EDC', 'EDC-DUMMY-002', '2026-11-19', 'SPP', 'Contoh dummy - hapus sebelum unggah'],
-    ['', 'WALI CONTOH', 750000, '112026', 'TRANSFER', 'TRANSFER-DUMMY-003', '2026-11-19', 'TINJAU_MANUAL', 'Contoh transfer tanpa No. SPP']
+    ['', '', '', '', '', '', '', '', '', '']
   ]);
   template['!cols'] = [
     { wch: 16 }, { wch: 24 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
-    { wch: 24 }, { wch: 18 }, { wch: 18 }, { wch: 34 }
+    { wch: 24 }, { wch: 20 }, { wch: 20 }, { wch: 18 }, { wch: 34 }
   ];
+  const examples = window.XLSX.utils.aoa_to_sheet([
+    headers,
+    ['M3B00342', 'ANNA CONTOH', 355000, '012025', 'QRIS', 'QRIS-DUMMY-001', '2025-01-15', '2025-01-16', 'SPP', 'Contoh dummy - hapus sebelum unggah'],
+    ['Y5B00140', 'BUDI CONTOH', 500000, '012025', 'EDC', 'EDC-DUMMY-002', '2025-01-15', '2025-01-17', 'SPP', 'Contoh dummy - hapus sebelum unggah'],
+    ['', 'WALI CONTOH', 750000, '012025', 'TRANSFER', 'TRANSFER-DUMMY-003', '2025-01-15', '2025-01-16', 'TINJAU_MANUAL', 'Contoh transfer tanpa No. SPP']
+  ]);
+  examples['!cols'] = template['!cols'];
 
   const instructions = window.XLSX.utils.aoa_to_sheet([
-    ['Panduan format settlement'],
-    ['Baris berisi kata CONTOH/DUMMY adalah data sampel dan wajib dihapus sebelum impor produksi.'],
+    ['Panduan format pembayaran dan settlement'],
+    ['Gunakan lembar Settlement untuk data yang akan disiapkan; lembar Contoh terpisah dan tidak untuk diunggah.'],
+    ['Baris berisi kata CONTOH/DUMMY adalah data sampel dan tidak boleh dipakai sebagai transaksi nyata.'],
     ['no_spp: isi untuk pembayaran SPP siswa; boleh dikosongkan untuk transfer yang perlu pilihan manual.'],
     ['nama: nama siswa atau wali sesuai sumber pencairan.'],
     ['nominal: nominal satu transaksi dalam angka, tanpa Rp atau titik.'],
-    ['periode: format MMYYYY, contoh 112026 untuk November 2026.'],
+    ['periode: format MMYYYY, contoh 012025 untuk Januari 2025.'],
     ['metode: QRIS, EDC, atau TRANSFER.'],
     ['referensi: kode unik QRIS/EDC/nomor referensi transfer.'],
-    ['tanggal_transaksi: format YYYY-MM-DD.'],
+    ['tanggal_pembayaran: tanggal sesuai bukti transfer atau transaksi wali, format YYYY-MM-DD.'],
+    ['tanggal_settlement: tanggal dana masuk rekening; isi sesuai laporan bank/provider, format YYYY-MM-DD.'],
+    ['QRIS umumnya masuk H+1 dan EDC dapat masuk H+2; tanggal settlement tidak menggantikan tanggal pembayaran.'],
+    ['Waktu pencatatan/unggah di aplikasi diisi otomatis dan tidak perlu menjadi kolom file.'],
+    ['Jika tanggal settlement belum diketahui, biarkan kosong; jangan menebaknya.'],
     ['tujuan_penerimaan: SPP atau TINJAU_MANUAL untuk memilih tujuan secara manual.'],
-    ['Transfer wajib dikonfirmasi admin karena tidak selalu merupakan pembayaran SPP.']
+    ['Transfer wajib ditinjau admin karena dapat belum tercatat dan tidak selalu merupakan pembayaran SPP.'],
+    ['Pencocokan otomatis file EDC/QRIS dan penyimpanan settlement belum aktif pada versi ini.']
   ]);
   window.XLSX.utils.book_append_sheet(workbook, template, 'Settlement');
+  window.XLSX.utils.book_append_sheet(workbook, examples, 'Contoh');
   window.XLSX.utils.book_append_sheet(workbook, instructions, 'Panduan');
   window.XLSX.writeFile(workbook, 'template_settlement_edc_qris_transfer.xlsx');
 }
@@ -5978,6 +6034,10 @@ async function handlePaymentImportChange(event) {
     }
   } else if (control.matches('[data-import-period]')) {
     row.period = control.value;
+    row.confirmed = false;
+    row.skipped = false;
+  } else if (control.matches('[data-import-date]')) {
+    row.tglbyr = control.value;
     row.confirmed = false;
     row.skipped = false;
   } else if (control.matches('[data-import-confirm]')) {

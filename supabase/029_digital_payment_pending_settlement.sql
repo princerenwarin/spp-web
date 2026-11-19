@@ -130,9 +130,9 @@ CREATE OR REPLACE VIEW public.spp_app_payment_list AS
 SELECT p.id, p.nospp, p.id_siswa, p.kdsek, p.periode, p.nominal, p.tglbyr,
   p.idpemakai, p.ket, s.nama, p.component,
   b.id AS batch_id, b.receipt_no, b.source, b.operator_code, b.created_at,
-  b.payment_method, b.settlement_status, b.settlement_reference, b.settled_at,
   b.voided_at, b.void_reason, b.correction_no, b.correction_created_at,
-  b.correction_operator_code
+  b.correction_operator_code,
+  b.payment_method, b.settlement_status, b.settlement_reference, b.settled_at
 FROM public.spp_app_payments p
 JOIN public.spp_app_payment_batches b ON b.id = p.batch_id
 LEFT JOIN public.spp_app_students s ON s.id_siswa = p.id_siswa;
@@ -140,7 +140,6 @@ LEFT JOIN public.spp_app_students s ON s.id_siswa = p.id_siswa;
 CREATE OR REPLACE VIEW public.spp_app_payment_batch_list AS
 SELECT b.id, b.receipt_no, b.nospp, b.id_siswa, COALESCE(b.kdsek, min(p.kdsek)) AS kdsek, b.source,
   b.tglbyr, b.idpemakai, b.operator_code, b.created_at, b.notes,
-  b.payment_method, b.settlement_status, b.settlement_reference, b.settled_at,
   b.voided_at, b.voided_by, b.void_reason, b.correction_no,
   b.correction_created_at, b.correction_operator_code,
   CASE WHEN b.source = 'bos' THEN 'Alokasi BOS' ELSE COALESCE(s.nama, 'Siswa') END AS nama,
@@ -148,7 +147,9 @@ SELECT b.id, b.receipt_no, b.nospp, b.id_siswa, COALESCE(b.kdsek, min(p.kdsek)) 
   count(p.id)::integer AS item_count,
   count(DISTINCT p.id_siswa)::integer AS student_count,
   COALESCE(sum(p.nominal) FILTER (WHERE b.source = 'bos' OR p.component = 'spp_bos'), 0) AS bos_nominal,
-  COALESCE(sum(p.nominal) FILTER (WHERE b.source <> 'bos' AND p.component <> 'spp_bos'), 0) AS parent_nominal
+  COALESCE(sum(p.nominal) FILTER (WHERE b.source <> 'bos' AND p.component <> 'spp_bos'), 0) AS parent_nominal,
+  b.tahun_ajaran,
+  b.payment_method, b.settlement_status, b.settlement_reference, b.settled_at
 FROM public.spp_app_payment_batches b
 LEFT JOIN public.spp_app_payments p ON p.batch_id = b.id
 LEFT JOIN public.spp_app_students s ON s.id_siswa = b.id_siswa
