@@ -320,6 +320,7 @@ const ui = {
   paymentImportStatus: document.getElementById('paymentImportStatus'),
   paymentImportRows: document.getElementById('paymentImportRows'),
   importPaymentsBtn: document.getElementById('importPaymentsBtn'),
+  downloadSettlementTemplate: document.getElementById('downloadSettlementTemplate'),
   downloadPaymentTemplate: document.getElementById('downloadPaymentTemplate'),
   addOneTimePaymentComponent: document.getElementById('addOneTimePaymentComponent'),
   refreshRevenue: document.getElementById('refreshRevenue'),
@@ -5824,6 +5825,52 @@ function downloadPaymentTemplate() {
   window.XLSX.writeFile(workbook, 'template_impor_pembayaran.xlsx');
 }
 
+function downloadSettlementTemplate() {
+  if (!window.XLSX) {
+    alert('Pembaca Excel tidak tersedia. Coba muat ulang aplikasi.');
+    return;
+  }
+  const workbook = window.XLSX.utils.book_new();
+  const headers = [
+    'no_spp',
+    'nama',
+    'nominal',
+    'periode',
+    'metode',
+    'referensi',
+    'tanggal_transaksi',
+    'tujuan_penerimaan',
+    'keterangan'
+  ];
+  const template = window.XLSX.utils.aoa_to_sheet([
+    headers,
+    ['M3B00342', 'ANNA CONTOH', 355000, '112026', 'QRIS', 'QRIS-DUMMY-001', '2026-11-19', 'SPP', 'Contoh dummy - hapus sebelum unggah'],
+    ['Y5B00140', 'BUDI CONTOH', 500000, '112026', 'EDC', 'EDC-DUMMY-002', '2026-11-19', 'SPP', 'Contoh dummy - hapus sebelum unggah'],
+    ['', 'WALI CONTOH', 750000, '112026', 'TRANSFER', 'TRANSFER-DUMMY-003', '2026-11-19', 'TINJAU_MANUAL', 'Contoh transfer tanpa No. SPP']
+  ]);
+  template['!cols'] = [
+    { wch: 16 }, { wch: 24 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
+    { wch: 24 }, { wch: 18 }, { wch: 18 }, { wch: 34 }
+  ];
+
+  const instructions = window.XLSX.utils.aoa_to_sheet([
+    ['Panduan format settlement'],
+    ['Baris berisi kata CONTOH/DUMMY adalah data sampel dan wajib dihapus sebelum impor produksi.'],
+    ['no_spp: isi untuk pembayaran SPP siswa; boleh dikosongkan untuk transfer yang perlu pilihan manual.'],
+    ['nama: nama siswa atau wali sesuai sumber pencairan.'],
+    ['nominal: nominal satu transaksi dalam angka, tanpa Rp atau titik.'],
+    ['periode: format MMYYYY, contoh 112026 untuk November 2026.'],
+    ['metode: QRIS, EDC, atau TRANSFER.'],
+    ['referensi: kode unik QRIS/EDC/nomor referensi transfer.'],
+    ['tanggal_transaksi: format YYYY-MM-DD.'],
+    ['tujuan_penerimaan: SPP atau TINJAU_MANUAL untuk memilih tujuan secara manual.'],
+    ['Transfer wajib dikonfirmasi admin karena tidak selalu merupakan pembayaran SPP.']
+  ]);
+  window.XLSX.utils.book_append_sheet(workbook, template, 'Settlement');
+  window.XLSX.utils.book_append_sheet(workbook, instructions, 'Panduan');
+  window.XLSX.writeFile(workbook, 'template_settlement_edc_qris_transfer.xlsx');
+}
+
 async function submitPaymentImport() {
   if (PAYMENT_MOCKUP_MODE) {
     showPaymentMockupStatus('Mode mockup aktif. Impor pembayaran hanya dapat dipratinjau dan tidak disimpan.');
@@ -7685,6 +7732,7 @@ function setupEvents() {
   });
   ui.paymentImportRows.addEventListener('change', handlePaymentImportChange);
   ui.downloadPaymentTemplate.addEventListener('click', downloadPaymentTemplate);
+  ui.downloadSettlementTemplate.addEventListener('click', downloadSettlementTemplate);
   ui.importPaymentsBtn.addEventListener('click', submitPaymentImport);
   ui.paymentForm.addEventListener('submit', handlePaymentSubmit);
   ui.paymentMethodOptions.addEventListener('click', (event) => {

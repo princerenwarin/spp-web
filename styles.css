@@ -5121,8 +5121,37 @@ table {
 
 .payment-page-toolbar {
   display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   justify-content: flex-end;
   margin-bottom: 14px;
+}
+
+.payment-settlement-fold > summary {
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--primary-2);
+  cursor: pointer;
+  display: flex;
+  font-weight: 700;
+  justify-content: center;
+  min-height: 42px;
+  padding: 8px 16px;
+}
+
+.payment-settlement-fold[open] > summary {
+  border-radius: 10px 10px 0 0;
+}
+
+.payment-settlement-fold .fold-body {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 0 0 10px 10px;
+  margin-top: -1px;
+  max-width: min(760px, calc(100vw - 32px));
+  padding: 16px;
 }
 
 .payment-import-fold > summary {
