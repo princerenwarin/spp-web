@@ -2971,17 +2971,44 @@ input[type='radio'] {
   gap: 12px;
 }
 
-.arrears-summary-unpaid-rate {
-  background: var(--panel);
-  border: 1px solid var(--warning);
-  border-radius: 999px;
-  color: var(--warning);
-  display: inline-flex;
-  font-size: 0.8125rem;
+.arrears-summary-unpaid > .arrears-summary-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.arrears-summary-rates {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-top: 10px;
+}
+
+.arrears-summary-rate {
+  align-content: start;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.arrears-summary-rate > span {
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.arrears-summary-rate > strong {
+  color: var(--primary-2);
+  font-size: clamp(1.25rem, 1.8vw, 1.5rem);
   font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  line-height: 1.2;
-  padding: 5px 10px;
+  line-height: 1.05;
+}
+
+.arrears-summary-rate > small {
+  color: var(--muted);
+  font-size: 0.875rem;
+  line-height: 1.35;
 }
 
 .arrears-summary-label {
@@ -3036,8 +3063,7 @@ input[type='radio'] {
   padding: 0;
 }
 
-.arrears-summary-breakdown li,
-.arrears-summary-unpaid-total {
+.arrears-summary-breakdown li {
   align-items: baseline;
   display: flex;
   gap: 10px;
@@ -3069,19 +3095,6 @@ input[type='radio'] {
   border: 0;
   color: var(--muted);
   display: block;
-}
-
-.arrears-summary-unpaid-total {
-  border-top: 1px solid var(--border);
-  color: var(--muted);
-  font-size: 0.9375rem;
-  padding-top: 10px;
-}
-
-.arrears-summary-unpaid-total strong {
-  color: var(--primary-2);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 .arrears-summary-status {

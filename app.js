@@ -220,9 +220,9 @@ const ui = {
   arrearsSummaryComponentList: document.getElementById('arrearsSummaryComponentList'),
   arrearsSummaryUnpaidTitle: document.getElementById('arrearsSummaryUnpaidTitle'),
   arrearsSummaryUnpaidCount: document.getElementById('arrearsSummaryUnpaidCount'),
+  arrearsSummaryDebtRate: document.getElementById('arrearsSummaryDebtRate'),
   arrearsSummaryUnpaidRate: document.getElementById('arrearsSummaryUnpaidRate'),
   arrearsSummaryUnpaidCaption: document.getElementById('arrearsSummaryUnpaidCaption'),
-  arrearsSummaryUnpaidTotal: document.getElementById('arrearsSummaryUnpaidTotal'),
   arrearsSummaryUnpaidNote: document.getElementById('arrearsSummaryUnpaidNote'),
   arrearsSummaryStatus: document.getElementById('arrearsSummaryStatus'),
   arrearsPageInfo: document.getElementById('arrearsPageInfo'),
@@ -4725,9 +4725,9 @@ function renderArrearsSummary() {
     ui.arrearsSummaryTotalDue.textContent = value;
     ui.arrearsSummaryComponentList.innerHTML = `<li>${escapeHtml(message)}</li>`;
     ui.arrearsSummaryUnpaidCount.textContent = value;
+    ui.arrearsSummaryDebtRate.textContent = value;
     ui.arrearsSummaryUnpaidRate.textContent = value;
     ui.arrearsSummaryUnpaidCaption.textContent = message;
-    ui.arrearsSummaryUnpaidTotal.textContent = value;
     ui.arrearsSummaryUnpaidNote.textContent = '';
     ui.arrearsSummaryStatus.textContent = summary.status === 'error'
       ? `Ringkasan tunggakan gagal dimuat: ${summary.message}`
@@ -4744,6 +4744,16 @@ function renderArrearsSummary() {
   const unpaidTotal = unpaidRows.reduce((total, row) => (
     total + Number(row.billing?.sisa_total || 0)
   ), 0);
+  const totalBilled = rows.reduce((total, row) => {
+    const billing = row.billing || {};
+    const monthlyTotal = (billing.periode_bulanan || []).reduce((periodTotal, item) => (
+      periodTotal + Number(item.spp?.tagihan || 0) + Number(item.komp?.tagihan || 0)
+    ), 0);
+    const oneTimeTotal = Object.values(billing.komponen_satu_kali || {}).reduce((componentTotal, item) => (
+      componentTotal + Number(item.tagihan || 0)
+    ), 0);
+    return total + monthlyTotal + oneTimeTotal;
+  }, 0);
   const legacyCount = rows.filter((row) => Number(row.billing?.belum_dialokasikan || 0) > 0).length;
   const legacyOnlyCount = rows.filter((row) => (
     Number(row.billing?.sisa_total || 0) <= 0
@@ -4793,10 +4803,12 @@ function renderArrearsSummary() {
   ui.arrearsSummaryUnpaidRate.textContent = enrolledCount
     ? `${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format((unpaidRows.length / enrolledCount) * 100)}%`
     : '—';
+  ui.arrearsSummaryDebtRate.textContent = totalBilled > 0
+    ? `${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format((unpaidTotal / totalBilled) * 100)}%`
+    : '—';
   ui.arrearsSummaryUnpaidCaption.textContent = enrolledCount
     ? `Dari ${formatCount(enrolledCount)} siswa ${scopeDescription}.`
     : `Tidak ada siswa terdaftar ${scopeDescription}.`;
-  ui.arrearsSummaryUnpaidTotal.textContent = formatRupiah(unpaidTotal);
   ui.arrearsSummaryUnpaidNote.textContent = legacyOnlyCount
     ? `${formatCount(legacyOnlyCount)} siswa memiliki pembayaran lama yang perlu direkonsiliasi.`
     : '';

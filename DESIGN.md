@@ -38,6 +38,21 @@ typography:
     fontFamily: "Source Sans 3, sans-serif"
     fontSize: "0.75rem"
     fontWeight: 600
+  metricLabel:
+    fontFamily: "Source Sans 3, sans-serif"
+    fontSize: "0.875rem"
+    fontWeight: 600
+    lineHeight: 1.25
+  metricValue:
+    fontFamily: "Source Sans 3, sans-serif"
+    fontSize: "clamp(1.25rem, 1.8vw, 1.5rem)"
+    fontWeight: 700
+    lineHeight: 1.05
+  metricSupporting:
+    fontFamily: "Source Sans 3, sans-serif"
+    fontSize: "0.875rem"
+    fontWeight: 400
+    lineHeight: 1.35
 rounded:
   sm: "9px"
   md: "14px"
@@ -137,6 +152,7 @@ The palette pairs warm neutral surfaces with a restrained violet route, while gr
 - **Title** (600, `1.55rem`, line-height 1.05): Panel, report, and student-section headings.
 - **Body** (400, `0.9375rem`): Data, descriptions, and form content.
 - **Label** (600, `0.75rem`): Field labels and compact supporting text.
+- **Compact metric** (700, `clamp(1.25rem, 1.8vw, 1.5rem)`): Values in supporting report metrics, with `0.875rem` labels and captions.
 
 ### Named Rules
 **The Two-Voice Rule.** Use Barlow Condensed for headings and Source Sans 3 for controls, labels, and body copy.

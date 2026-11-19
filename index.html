@@ -685,12 +685,18 @@
                 <p class="arrears-summary-label" id="arrearsSummaryUnpaidTitle">Siswa belum lunas</p>
                 <div class="arrears-summary-unpaid-stat">
                   <strong class="arrears-summary-value" id="arrearsSummaryUnpaidCount">—</strong>
-                  <span class="arrears-summary-unpaid-rate" id="arrearsSummaryUnpaidRate" aria-label="Persentase siswa belum lunas">—</span>
                 </div>
-                <small class="arrears-summary-caption" id="arrearsSummaryUnpaidCaption">Memuat ringkasan...</small>
-                <div class="arrears-summary-unpaid-total">
-                  <span>Total belum lunas</span>
-                  <strong id="arrearsSummaryUnpaidTotal">—</strong>
+                <div class="arrears-summary-rates" role="group" aria-label="Persentase tunggakan dan siswa">
+                  <div class="arrears-summary-rate">
+                    <span>Persentase tunggakan</span>
+                    <strong id="arrearsSummaryDebtRate">—</strong>
+                    <small>Dari total tagihan pada filter terpilih.</small>
+                  </div>
+                  <div class="arrears-summary-rate">
+                    <span>Persentase siswa</span>
+                    <strong id="arrearsSummaryUnpaidRate" aria-label="Persentase siswa belum lunas">—</strong>
+                    <small id="arrearsSummaryUnpaidCaption">Memuat ringkasan...</small>
+                  </div>
                 </div>
                 <small class="arrears-summary-caption" id="arrearsSummaryUnpaidNote"></small>
               </article>
