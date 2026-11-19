@@ -5281,6 +5281,21 @@ table {
   gap: 6px;
 }
 
+.payment-digital-reference {
+  color: #fff;
+  display: grid;
+  font-size: 0.85rem;
+  font-weight: 650;
+  gap: 6px;
+}
+
+.payment-digital-reference input {
+  background: #fff;
+  color: var(--primary-2);
+  min-height: 42px;
+  width: 100%;
+}
+
 .payment-cashier-amount input {
   background: #fff;
   color: var(--primary-2);

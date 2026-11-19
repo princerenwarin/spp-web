@@ -294,6 +294,8 @@ const ui = {
   paymentComponentCount: document.getElementById('paymentComponentCount'),
   paymentCashierName: document.getElementById('paymentCashierName'),
   paymentMethodOptions: document.querySelector('.payment-method-options'),
+  paymentDigitalReferenceField: document.getElementById('paymentDigitalReferenceField'),
+  paymentDigitalReference: document.getElementById('paymentDigitalReference'),
   paymentCashReceived: document.getElementById('paymentCashReceived'),
   paymentCashReceivedLabel: document.getElementById('paymentCashReceivedLabel'),
   paymentCashQuickActions: document.querySelector('.payment-cash-quick-actions'),
@@ -6738,6 +6740,8 @@ function updatePaymentAllocationTotal() {
 
 function updateCashierPaymentPreview(amountDue) {
   const isCash = cashierPaymentMethod === 'cash';
+  ui.paymentDigitalReferenceField.hidden = isCash;
+  if (isCash) ui.paymentDigitalReference.value = '';
   ui.paymentCashReceivedLabel.textContent = isCash
     ? 'Uang diterima dari wali (Rp)'
     : 'Nominal transaksi (Rp)';
@@ -7005,12 +7009,13 @@ async function handlePaymentSubmit(event) {
     showPaymentMockupStatus('Mode mockup aktif. Pembayaran contoh tidak disimpan dan tidak mencetak kuitansi.');
     return;
   }
-  if (cashierPaymentMethod !== 'cash') {
-    alert('Penyimpanan Debit EDC/QRIS belum diaktifkan. Pilih Tunai atau tunggu fitur settlement selesai.');
-    return;
-  }
   if (!canAccessPayment()) {
     alert('Hanya Admin KKMS yang dapat melakukan pembayaran.');
+    return;
+  }
+  if (cashierPaymentMethod !== 'cash'
+      && !ui.paymentDigitalReference.value.trim()) {
+    alert(`Masukkan ID/referensi transaksi ${cashierPaymentMethod === 'edc' ? 'EDC' : 'QRIS'} untuk pencocokan settlement.`);
     return;
   }
 
@@ -7047,23 +7052,33 @@ async function handlePaymentSubmit(event) {
       const selectedYear = app.paymentBilling?.tahun_ajaran || app.selectedPaymentStudent.tahunAjaran;
       if (app.provisionalEnrollmentReady) {
         if (!selectedYear) throw new Error('Tahun ajaran pendaftaran siswa tidak ditemukan.');
+        const digitalPaymentArgs = cashierPaymentMethod === 'cash' ? {} : {
+          p_payment_method: cashierPaymentMethod,
+          p_settlement_reference: ui.paymentDigitalReference.value.trim()
+        };
         const { data, error } = await app.supabase.rpc('save_payment_batch_v2', {
           ...credentials,
           p_id_siswa: idSiswa,
           p_tahun_ajaran: selectedYear,
           p_tglbyr: paymentDate,
-          p_items: items
+          p_items: items,
+          ...digitalPaymentArgs
         });
         if (error) throw error;
         batchId = String(data);
       } else {
         const nospp = app.selectedPaymentStudent.nospp;
         if (!nospp) throw new Error('Migration pendaftaran sementara belum dipasang. Tentukan kelas dan No. SPP terlebih dahulu.');
+        const digitalPaymentArgs = cashierPaymentMethod === 'cash' ? {} : {
+          p_payment_method: cashierPaymentMethod,
+          p_settlement_reference: ui.paymentDigitalReference.value.trim()
+        };
         const { data, error } = await app.supabase.rpc('save_payment_batch_v1', {
           ...credentials,
           p_nospp: nospp,
           p_tglbyr: paymentDate,
-          p_items: items
+          p_items: items,
+          ...digitalPaymentArgs
         });
         if (error) throw error;
         batchId = String(data);
@@ -7111,6 +7126,11 @@ async function handlePaymentSubmit(event) {
       component: item.component,
       tglbyr: paymentDate,
       idpemakai: app.user ? app.user.idpemakai : 'admin',
+      payment_method: cashierPaymentMethod,
+      settlement_status: cashierPaymentMethod === 'cash' ? 'settled' : 'pending',
+      settlement_reference: cashierPaymentMethod === 'cash'
+        ? ''
+        : ui.paymentDigitalReference.value.trim(),
       ket: 'Pembayaran via web'
     });
   });

@@ -665,6 +665,10 @@
                   <button type="button" data-payment-method="edc" aria-pressed="false">Debit EDC</button>
                   <button type="button" data-payment-method="qris" aria-pressed="false">QRIS</button>
                 </div>
+                <label class="payment-digital-reference" id="paymentDigitalReferenceField" for="paymentDigitalReference" hidden>
+                  <span>ID/referensi transaksi EDC/QRIS</span>
+                  <input id="paymentDigitalReference" type="text" maxlength="100" autocomplete="off" placeholder="Wajib diisi untuk pencocokan settlement" />
+                </label>
                 <label class="payment-cashier-amount" for="paymentCashReceived">
                   <span id="paymentCashReceivedLabel">Uang diterima dari wali (Rp)</span>
                   <input id="paymentCashReceived" class="money-input" type="text" inputmode="numeric" placeholder="Rp 0" />
