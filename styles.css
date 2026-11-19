@@ -3195,13 +3195,6 @@ input[type='radio'] {
   font-weight: 700;
 }
 
-.arrears-period-summary {
-  color: var(--muted);
-  font-size: 0.75rem;
-  line-height: 1.4;
-  padding-top: 7px;
-}
-
 .arrears-chip-list {
   align-items: flex-start;
   display: flex;
@@ -3674,7 +3667,7 @@ input[type='radio'] {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  justify-content: space-between;
+  justify-content: flex-start;
   padding-top: 14px;
 }
 
@@ -3683,17 +3676,6 @@ input[type='radio'] {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-}
-
-.payment-allocation-footer p {
-  color: var(--muted);
-  margin: 0;
-}
-
-.payment-allocation-footer strong {
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-  margin-left: 8px;
 }
 
 .daily-summary-date {
@@ -5040,9 +5022,562 @@ table {
   padding: 12px 14px;
 }
 
+#pembayaranPage .payment-workspace {
+  align-items: start;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1.65fr) minmax(280px, 0.75fr);
+}
+
+#pembayaranPage .payment-entry-panel {
+  margin: 0;
+  min-width: 0;
+}
+
+#pembayaranPage .payment-summary-panel {
+  align-content: start;
+  background: var(--primary-2);
+  border-color: var(--primary-2);
+  color: #fff;
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+  position: sticky;
+  top: 104px;
+}
+
+#pembayaranPage .payment-summary-panel h3 {
+  color: #fff;
+  margin: 0;
+}
+
+#pembayaranPage .payment-summary-total {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+  display: grid;
+  gap: 6px;
+  padding-bottom: 18px;
+}
+
+#pembayaranPage .payment-summary-total span,
+#pembayaranPage .payment-summary-breakdown span,
+#pembayaranPage .payment-summary-panel p {
+  color: var(--panel-alt);
+}
+
+#pembayaranPage .payment-summary-total strong {
+  color: #fff;
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+#pembayaranPage .payment-summary-breakdown {
+  align-items: baseline;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding-bottom: 14px;
+}
+
+#pembayaranPage .payment-summary-breakdown strong {
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+#pembayaranPage .payment-summary-panel .primary-button {
+  min-height: 46px;
+  width: 100%;
+}
+
+#pembayaranPage .payment-summary-panel p {
+  font-size: 0.875rem;
+  line-height: 1.45;
+  margin: -6px 0 0;
+}
+
+@media (max-width: 1100px) {
+  #pembayaranPage .payment-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #pembayaranPage .payment-summary-panel {
+    position: static;
+  }
+}
+
 #pembayaranPage .payment-allocation {
   background: #fbfaf7;
   border-color: var(--border);
+}
+
+.payment-mockup-only,
+.payment-history-mockup-title,
+.payment-history-mockup-head {
+  display: none !important;
+}
+
+.payment-page-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 14px;
+}
+
+.payment-import-fold > summary {
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--primary-2);
+  cursor: pointer;
+  display: flex;
+  font-weight: 700;
+  justify-content: center;
+  min-height: 42px;
+  padding: 8px 16px;
+}
+
+.payment-import-fold[open] > summary {
+  border-radius: 10px 10px 0 0;
+}
+
+.payment-import-fold .fold-body {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 0 0 10px 10px;
+  margin-top: -1px;
+  max-width: min(760px, calc(100vw - 32px));
+  padding: 16px;
+}
+
+.payment-mockup-banner {
+  align-items: baseline;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--primary-2);
+  display: none;
+  gap: 8px 16px;
+  line-height: 1.45;
+  margin: 0 0 18px;
+  padding: 12px 16px;
+}
+
+.payment-cashier-stats {
+  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  display: none;
+  gap: 18px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0 0 20px;
+  padding: 14px 0;
+}
+
+.payment-cashier-stats article {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.payment-cashier-stats article + article {
+  border-left: 1px solid var(--border);
+  padding-left: 18px;
+}
+
+.payment-cashier-stats span,
+.payment-cashier-stats small {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.payment-cashier-stats strong {
+  color: var(--primary-2);
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+#pembayaranPage .payment-summary-panel {
+  gap: 14px;
+}
+
+.payment-summary-heading {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.payment-component-count {
+  color: var(--panel-alt);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+#pembayaranPage .payment-summary-breakdown {
+  align-items: stretch;
+  display: grid;
+  gap: 10px;
+}
+
+.payment-summary-breakdown > div {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+#pembayaranPage .payment-summary-breakdown strong {
+  overflow-wrap: anywhere;
+}
+
+.payment-method-widget {
+  display: none;
+  gap: 12px;
+}
+
+.payment-method-widget h4 {
+  color: #fff;
+  font-size: 0.97rem;
+  margin: 0;
+}
+
+.payment-method-options {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.payment-method-options button,
+.payment-cash-quick-actions button {
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.83rem;
+  font-weight: 650;
+  min-height: 40px;
+  padding: 7px 8px;
+}
+
+.payment-method-options button {
+  background: transparent;
+  color: #fff;
+}
+
+.payment-method-options button.is-selected {
+  background: #fff;
+  border-color: #fff;
+  color: var(--primary-2);
+}
+
+.payment-cashier-amount {
+  color: #fff;
+  display: grid;
+  font-size: 0.85rem;
+  font-weight: 650;
+  gap: 6px;
+}
+
+.payment-cashier-amount input {
+  background: #fff;
+  color: var(--primary-2);
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  min-height: 46px;
+  width: 100%;
+}
+
+.payment-cashier-amount input:disabled {
+  background: var(--panel-alt);
+  color: var(--primary-2);
+  opacity: 1;
+}
+
+.payment-cash-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.payment-cash-quick-actions button {
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+
+.payment-cash-quick-actions button strong {
+  color: inherit;
+}
+
+.payment-cash-quick-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.payment-cash-change {
+  align-items: center;
+  background: var(--accent);
+  border-radius: 8px;
+  color: #fff;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 11px 13px;
+}
+
+.payment-cash-change span {
+  font-size: 0.87rem;
+}
+
+.payment-cash-change strong {
+  color: #fff;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+#pembayaranPage .payment-summary-panel .payment-settlement-status {
+  background: var(--panel-alt);
+  border-radius: 8px;
+  color: var(--primary-2);
+  font-size: 0.84rem;
+  margin: 0;
+  padding: 9px 11px;
+}
+
+.payment-print-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.payment-card-print {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  padding: 0 0 14px;
+  text-align: center;
+}
+
+.payment-card-print strong {
+  color: #fff;
+}
+
+#pembayaranPage .payment-card-print p {
+  margin: 4px 0 0;
+}
+
+.payment-save-receipt {
+  display: grid;
+  gap: 3px;
+  justify-items: center;
+  padding: 11px 14px;
+  text-align: center;
+}
+
+.payment-save-receipt strong {
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.payment-secondary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.payment-mockup-status {
+  background: var(--panel-alt);
+  border-radius: 8px;
+  color: var(--primary-2);
+  line-height: 1.45;
+  margin: 0;
+  padding: 10px 12px;
+}
+
+.payment-notes {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.payment-notes > span {
+  color: var(--primary-2);
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+
+.payment-notes textarea {
+  resize: vertical;
+  width: 100%;
+}
+
+.payment-list-heading {
+  min-width: 0;
+}
+
+.payment-list-heading h3,
+.payment-list-heading p {
+  margin-bottom: 0;
+}
+
+.payment-list-heading p {
+  margin-top: 4px;
+}
+
+.payment-list-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.payment-mockup-history-actions {
+  align-items: center;
+  gap: 8px;
+}
+
+.payment-history-mockup-head {
+  display: none;
+}
+
+.cashier-history-table {
+  min-width: 1040px;
+}
+
+.cashier-history-table td {
+  font-variant-numeric: tabular-nums;
+}
+
+.cashier-history-table td small {
+  color: var(--muted);
+  display: block;
+  font-size: 0.78rem;
+  margin-top: 3px;
+}
+
+.payment-list-panel .cashier-history-table td:last-child {
+  min-width: 92px;
+}
+
+.payment-state.is-pending-settlement {
+  background: #fff2d6;
+  color: #73500d;
+}
+
+body.payment-mockup #pembayaranPage .payment-mockup-banner {
+  display: flex;
+}
+
+body.payment-mockup #pembayaranPage .payment-cashier-stats {
+  display: grid;
+}
+
+body.payment-mockup #pembayaranPage .payment-method-widget {
+  display: grid;
+}
+
+body.payment-mockup #pembayaranPage .payment-mockup-only {
+  display: block !important;
+}
+
+body.payment-mockup #pembayaranPage .payment-notes.payment-mockup-only {
+  display: grid !important;
+}
+
+body.payment-mockup #pembayaranPage .payment-secondary-actions .payment-mockup-only {
+  display: inline-flex !important;
+}
+
+body.payment-mockup #pembayaranPage .payment-mockup-history-actions {
+  display: flex !important;
+}
+
+body.payment-mockup #pembayaranPage .payment-history-default-title,
+body.payment-mockup #pembayaranPage .payment-history-default-head,
+body.payment-mockup #pembayaranPage #paymentList {
+  display: none !important;
+}
+
+body.payment-mockup #pembayaranPage .payment-history-mockup-title {
+  display: block !important;
+}
+
+body.payment-mockup #pembayaranPage .payment-history-mockup-head {
+  display: table-row !important;
+}
+
+body.payment-mockup #pembayaranPage #paymentMockupList {
+  display: table-row-group !important;
+}
+
+body.payment-mockup #pembayaranPage #paymentMockupTimestamp {
+  display: inline-block !important;
+}
+
+@media (max-width: 760px) {
+  .payment-list-actions {
+    align-items: stretch;
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .payment-mockup-history-actions {
+    justify-content: space-between;
+  }
+
+  .payment-method-options {
+    grid-template-columns: 1fr;
+  }
+
+  .payment-cashier-stats {
+    gap: 10px;
+  }
+
+  .payment-cashier-stats article + article {
+    padding-left: 10px;
+  }
+}
+
+@media (max-width: 600px) {
+  .payment-page-toolbar {
+    margin-bottom: 10px;
+  }
+
+  .payment-mockup-banner {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .payment-cashier-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .payment-cashier-stats article + article {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    padding: 10px 0 0;
+  }
+
+  .payment-list-actions {
+    flex-direction: column;
+  }
+
+  .payment-mockup-history-actions {
+    flex-wrap: wrap;
+  }
+
+  .payment-summary-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 .report-table-wrap {

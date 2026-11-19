@@ -48,6 +48,10 @@ const DEFAULT_DB = {
   ]
 };
 
+const PAYMENT_MOCKUP_MODE = new URLSearchParams(window.location.search).get('payment-mockup') === '1';
+let cashierPaymentMethod = 'cash';
+let cashierPaymentAmountDue = 0;
+
 const app = {
   supabase: null,
   user: null,
@@ -257,6 +261,7 @@ const ui = {
   paymentBankName: document.getElementById('paymentBankName'),
   searchStudent: document.getElementById('searchStudent'),
   paymentForm: document.getElementById('paymentForm'),
+  paymentNospp: document.getElementById('paymentNospp'),
   paymentDate: document.getElementById('paymentDate'),
   paymentPrintSheet: document.getElementById('paymentPrintSheet'),
   paymentCorrectionDialog: document.getElementById('paymentCorrectionDialog'),
@@ -285,6 +290,27 @@ const ui = {
   paymentComponentRows: document.getElementById('paymentComponentRows'),
   paymentBosTotal: document.getElementById('paymentBosTotal'),
   paymentAllocationTotal: document.getElementById('paymentAllocationTotal'),
+  paymentGrossTotal: document.getElementById('paymentGrossTotal'),
+  paymentComponentCount: document.getElementById('paymentComponentCount'),
+  paymentCashierName: document.getElementById('paymentCashierName'),
+  paymentMethodOptions: document.querySelector('.payment-method-options'),
+  paymentCashReceived: document.getElementById('paymentCashReceived'),
+  paymentCashReceivedLabel: document.getElementById('paymentCashReceivedLabel'),
+  paymentCashQuickActions: document.querySelector('.payment-cash-quick-actions'),
+  paymentExactAmount: document.getElementById('paymentExactAmount'),
+  paymentCashChangeLabel: document.getElementById('paymentCashChangeLabel'),
+  paymentCashChange: document.getElementById('paymentCashChange'),
+  paymentSettlementStatus: document.getElementById('paymentSettlementStatus'),
+  paymentSaveAmount: document.getElementById('paymentSaveAmount'),
+  paymentMockupStatus: document.getElementById('paymentMockupStatus'),
+  paymentMockupTimestamp: document.getElementById('paymentMockupTimestamp'),
+  paymentMockupDate: document.getElementById('paymentMockupDate'),
+  paymentMockupList: document.getElementById('paymentMockupList'),
+  paymentSettlementUploadBtn: document.getElementById('paymentSettlementUploadBtn'),
+  paymentSettlementFile: document.getElementById('paymentSettlementFile'),
+  paymentCardPrintBtn: document.getElementById('paymentCardPrintBtn'),
+  paymentLastReceiptBtn: document.getElementById('paymentLastReceiptBtn'),
+  paymentResetBtn: document.getElementById('paymentResetBtn'),
   paymentBillingStatus: document.getElementById('paymentBillingStatus'),
   addPaymentComponent: document.getElementById('addPaymentComponent'),
   paymentImportFile: document.getElementById('paymentImportFile'),
@@ -951,6 +977,7 @@ window.addEventListener('resize', updateCourseIndicator);
 document.fonts.ready.then(updateCourseIndicator);
 
 function applyUserAccess() {
+  ui.paymentCashierName.textContent = ui.userName.textContent || app.user?.email || 'Petugas aktif';
   const paymentNav = document.querySelector('.nav[data-page="pembayaran"]');
   if (paymentNav) {
     paymentNav.hidden = !canAccessPayment();
@@ -4232,7 +4259,6 @@ function arrearsSummaryData(billing) {
       )))
   ));
   const periods = compressBillingPeriods(monthlyRows.map((item) => item.periode), true);
-  const periodSummary = [periods, hasPreviousYear ? 'Thn lalu' : ''].filter(Boolean).join(' & ');
   const positionCount = Number(sppTotal > 0) + Number(computerTotal > 0) + oneTime.length;
 
   return {
@@ -4243,7 +4269,6 @@ function arrearsSummaryData(billing) {
     monthlyRows,
     hasPreviousYear,
     periods,
-    periodSummary,
     positionCount
   };
 }
@@ -4283,15 +4308,11 @@ function reportDetailMarkup(row) {
     chips.push(arrearsChipMarkup(studentId, key, getPaymentComponentLabel(key)));
   });
 
-  const periodSummary = summary.periodSummary
-    ? `<span class="arrears-period-summary">${escapeHtml(summary.periodSummary)}</span>`
-    : '';
   return `
     <div class="arrears-breakdown">
       <div class="arrears-breakdown-head">
         <button type="button" class="arrears-summary-trigger" data-arrears-detail="${escapeHtml(studentId)}"
           aria-haspopup="dialog">Semua <strong>${summary.positionCount} Pos Tertunggak</strong></button>
-        ${periodSummary}
       </div>
       <div class="arrears-chip-list">${chips.join('') || '<span class="student-sub">Tidak ada sisa tagihan.</span>'}</div>
     </div>`;
@@ -5802,6 +5823,10 @@ function downloadPaymentTemplate() {
 }
 
 async function submitPaymentImport() {
+  if (PAYMENT_MOCKUP_MODE) {
+    showPaymentMockupStatus('Mode mockup aktif. Impor pembayaran hanya dapat dipratinjau dan tidak disimpan.');
+    return;
+  }
   const rows = app.paymentImportRows;
   const confirmed = rows.filter((row) => row.confirmed && !row.skipped);
   if (!confirmed.length || confirmed.length + rows.filter((row) => row.skipped).length !== rows.length) {
@@ -6689,13 +6714,80 @@ function updatePaymentAllocationTotal() {
     .reduce((sum, input) => sum + parseMoney(input.value), 0);
   const bosTotal = [...ui.paymentComponentRows.querySelectorAll('.payment-bos-amount')]
     .reduce((sum, input) => sum + parseMoney(input.value), 0);
+  const componentTypes = new Set();
+  ui.paymentComponentRows.querySelectorAll('.payment-monthly-row').forEach((row) => {
+    if (parseMoney(row.querySelector('.payment-spp-amount').value) > 0) componentTypes.add('SPP');
+    if (parseMoney(row.querySelector('.payment-komp-amount').value) > 0) componentTypes.add('Komputer');
+  });
+  ui.paymentComponentRows.querySelectorAll('.payment-one-time-row').forEach((row) => {
+    const component = row.querySelector('.payment-component').value;
+    if (component && parseMoney(row.querySelector('.payment-one-time-amount').value) > 0) {
+      componentTypes.add(component);
+    }
+  });
+  if (bosTotal > 0) componentTypes.add('BOS');
+  cashierPaymentAmountDue = total - bosTotal;
   ui.paymentBosTotal.textContent = formatRupiah(bosTotal);
-  ui.paymentAllocationTotal.textContent = formatRupiah(total - bosTotal);
+  ui.paymentGrossTotal.textContent = formatRupiah(total);
+  ui.paymentAllocationTotal.textContent = formatRupiah(cashierPaymentAmountDue);
+  ui.paymentSaveAmount.textContent = formatRupiah(cashierPaymentAmountDue);
+  ui.paymentExactAmount.textContent = formatRupiah(cashierPaymentAmountDue);
+  ui.paymentComponentCount.textContent = `${componentTypes.size} komponen dialokasikan`;
+  updateCashierPaymentPreview(cashierPaymentAmountDue);
+}
+
+function updateCashierPaymentPreview(amountDue) {
+  const isCash = cashierPaymentMethod === 'cash';
+  ui.paymentCashReceivedLabel.textContent = isCash
+    ? 'Uang diterima dari wali (Rp)'
+    : 'Nominal transaksi (Rp)';
+  ui.paymentCashReceived.disabled = !isCash;
+  ui.paymentCashQuickActions.querySelectorAll('button').forEach((button) => {
+    button.disabled = !isCash;
+  });
+
+  if (!isCash) {
+    const methodLabel = cashierPaymentMethod === 'edc' ? 'Debit EDC' : 'QRIS';
+    ui.paymentCashReceived.value = formatRupiah(amountDue);
+    ui.paymentCashChangeLabel.textContent = 'Status Settlement';
+    ui.paymentCashChange.textContent = 'Menunggu Settlement';
+    ui.paymentSettlementStatus.textContent = `${methodLabel} · menunggu file settlement; status tagihan diperbarui saat disimpan`;
+    ui.paymentSettlementStatus.classList.add('is-pending-settlement');
+    return;
+  }
+
+  const received = parseMoney(ui.paymentCashReceived.value);
+  const remaining = amountDue - received;
+  if (amountDue <= 0) {
+    ui.paymentCashChangeLabel.textContent = 'Status pembayaran';
+    ui.paymentCashChange.textContent = 'Isi alokasi terlebih dahulu';
+    ui.paymentSettlementStatus.textContent = 'Pilih siswa dan isi alokasi pembayaran.';
+  } else if (remaining > 0) {
+    ui.paymentCashChangeLabel.textContent = 'Kekurangan pembayaran';
+    ui.paymentCashChange.textContent = formatRupiah(remaining);
+    ui.paymentSettlementStatus.textContent = 'Tunai · nominal yang diterima belum mencukupi';
+  } else {
+    ui.paymentCashChangeLabel.textContent = 'Kembalian ke wali';
+    ui.paymentCashChange.textContent = formatRupiah(Math.abs(remaining));
+    ui.paymentSettlementStatus.textContent = 'Tunai · masuk ke kas laci setelah pembayaran disimpan';
+  }
+  ui.paymentSettlementStatus.classList.remove('is-pending-settlement');
 }
 
 function updatePaymentAllocationRows() {
   const monthlyRows = [...ui.paymentComponentRows.querySelectorAll('.payment-monthly-row')];
   const oneTimeRows = [...ui.paymentComponentRows.querySelectorAll('.payment-one-time-row')];
+  if (PAYMENT_MOCKUP_MODE) {
+    monthlyRows.forEach((row) => {
+      row.querySelector('.payment-period').disabled = true;
+      row.querySelector('.payment-remove').disabled = monthlyRows.length <= 1;
+    });
+    oneTimeRows.forEach((row) => { row.querySelector('.payment-remove').disabled = false; });
+    ui.addPaymentComponent.disabled = true;
+    ui.addOneTimePaymentComponent.disabled = oneTimeRows.length >= 12;
+    updatePaymentAllocationTotal();
+    return;
+  }
   monthlyRows.forEach((row) => {
     updateMonthlyPaymentRow(row);
     row.querySelector('.payment-remove').disabled = monthlyRows.length <= 1;
@@ -6706,6 +6798,76 @@ function updatePaymentAllocationRows() {
   ui.addPaymentComponent.disabled = !app.paymentBilling || !nextPaymentPeriod(lastPeriod);
   ui.addOneTimePaymentComponent.disabled = oneTimeRows.length >= 12;
   updatePaymentAllocationTotal();
+}
+
+function showPaymentMockupStatus(message) {
+  ui.paymentMockupStatus.textContent = message;
+  ui.paymentMockupStatus.hidden = false;
+}
+
+function initializePaymentMockup() {
+  if (!PAYMENT_MOCKUP_MODE) return;
+  document.body.classList.add('payment-mockup');
+  const studentPicker = ui.paymentForm.querySelector('.picker-input');
+  studentPicker.value = 'Siswa Contoh · Kelas 7A';
+  studentPicker.disabled = true;
+  ui.paymentNospp.value = '';
+  ui.paymentDate.value = localDateInputValue();
+  ui.paymentForm.querySelector('#paymentNotes').value = '';
+  ui.paymentBillingStatus.textContent = 'Data siswa, tagihan, dan transaksi di layar ini hanya contoh.';
+  ui.paymentComponentRows.replaceChildren();
+
+  [
+    { period: '2026-11', label: 'November 2026', spp: 350000, komputer: 50000, bos: 100000 },
+    { period: '2026-12', label: 'Desember 2026', spp: 350000, komputer: 50000, bos: 0 },
+    { period: '2027-01', label: 'Januari 2027', spp: 350000, komputer: 50000, bos: 0 }
+  ].forEach((item) => {
+    const row = makePaymentComponentRow(item.period);
+    const period = row.querySelector('.payment-period');
+    const option = document.createElement('option');
+    option.value = item.period;
+    option.textContent = item.label;
+    period.replaceChildren(option);
+    period.disabled = true;
+    row.querySelector('.payment-spp-amount').value = formatRupiah(item.spp);
+    row.querySelector('.payment-komp-amount').value = formatRupiah(item.komputer);
+    row.querySelector('.payment-bos-amount').value = formatRupiah(item.bos);
+    row.querySelectorAll('.payment-component-amount, .payment-bos-amount').forEach((input) => {
+      input.disabled = false;
+    });
+    ui.paymentComponentRows.append(row);
+  });
+
+  [
+    { component: 'dpp', amount: 200000 },
+    { component: 'seragam', amount: 125000 }
+  ].forEach((item) => {
+    const row = makeOneTimePaymentRow();
+    row.querySelector('.payment-component').value = item.component;
+    row.querySelector('.payment-one-time-amount').value = formatRupiah(item.amount);
+    ui.paymentComponentRows.append(row);
+  });
+
+  const today = new Date();
+  const dateLabel = today.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+  const timeLabel = today.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  ui.paymentMockupTimestamp.textContent = `${dateLabel} · ${timeLabel}`;
+  ui.paymentMockupDate.textContent = `Hari ini · ${dateLabel}`;
+  ['paymentMockupDateCash', 'paymentMockupDateQris', 'paymentMockupDateEdc']
+    .forEach((id) => { document.getElementById(id).textContent = dateLabel; });
+  ui.paymentCashierName.textContent = ui.userName.textContent || app.user?.email || 'Petugas aktif';
+  ui.paymentCashReceived.value = formatRupiah(1500000);
+  ui.paymentSettlementFile.value = '';
+  ui.paymentSearch.value = '';
+  ui.paymentMockupList.querySelectorAll('tr').forEach((row) => { row.hidden = false; });
+  ui.paymentMockupStatus.hidden = true;
+  cashierPaymentMethod = 'cash';
+  ui.paymentMethodOptions.querySelectorAll('[data-payment-method]').forEach((button) => {
+    const selected = button.dataset.paymentMethod === cashierPaymentMethod;
+    button.classList.toggle('is-selected', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  });
+  updatePaymentAllocationRows();
 }
 
 function resetPaymentAllocationForm() {
@@ -6839,6 +7001,10 @@ async function collectPaymentItems() {
 
 async function handlePaymentSubmit(event) {
   event.preventDefault();
+  if (PAYMENT_MOCKUP_MODE) {
+    showPaymentMockupStatus('Mode mockup aktif. Pembayaran contoh tidak disimpan dan tidak mencetak kuitansi.');
+    return;
+  }
   if (!canAccessPayment()) {
     alert('Hanya Admin KKMS yang dapat melakukan pembayaran.');
     return;
@@ -7257,6 +7423,13 @@ function setupEvents() {
     else drawStudentTable();
   });
   ui.paymentSearch.addEventListener('input', () => {
+    if (PAYMENT_MOCKUP_MODE) {
+      const query = ui.paymentSearch.value.trim().toLowerCase();
+      ui.paymentMockupList.querySelectorAll('tr').forEach((row) => {
+        row.hidden = !row.textContent.toLowerCase().includes(query);
+      });
+      return;
+    }
     app.paging.payments = 0;
     if (app.server) refreshPaymentsSoon();
   });
@@ -7432,6 +7605,7 @@ function setupEvents() {
       formatMoneyInput(event.target);
       if (event.target.classList.contains('payment-component-amount')
           || event.target.classList.contains('payment-bos-amount')) updatePaymentAllocationTotal();
+      if (event.target === ui.paymentCashReceived) updateCashierPaymentPreview(cashierPaymentAmountDue);
     }
   });
   formatAllMoneyInputs();
@@ -7465,6 +7639,8 @@ function setupEvents() {
     if (event.target.matches('.payment-period')) {
       updateMonthlyPaymentRow(event.target.closest('.payment-monthly-row'), true);
       updatePaymentAllocationRows();
+    } else if (event.target.matches('.payment-component')) {
+      updatePaymentAllocationTotal();
     }
   });
   ui.paymentComponentRows.addEventListener('click', (event) => {
@@ -7487,6 +7663,66 @@ function setupEvents() {
   ui.downloadPaymentTemplate.addEventListener('click', downloadPaymentTemplate);
   ui.importPaymentsBtn.addEventListener('click', submitPaymentImport);
   ui.paymentForm.addEventListener('submit', handlePaymentSubmit);
+  ui.paymentMethodOptions.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-payment-method]');
+    if (!button) return;
+    cashierPaymentMethod = button.dataset.paymentMethod;
+    ui.paymentMethodOptions.querySelectorAll('[data-payment-method]').forEach((option) => {
+      const selected = option === button;
+      option.classList.toggle('is-selected', selected);
+      option.setAttribute('aria-pressed', String(selected));
+    });
+    updateCashierPaymentPreview(cashierPaymentAmountDue);
+  });
+  ui.paymentCashQuickActions.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-cash-tender]');
+    if (!button || cashierPaymentMethod !== 'cash') return;
+    const amount = button.dataset.cashTender === 'exact'
+      ? cashierPaymentAmountDue
+      : parseMoney(ui.paymentCashReceived.value) + Number(button.dataset.cashTender);
+    ui.paymentCashReceived.value = formatRupiah(amount);
+    updateCashierPaymentPreview(cashierPaymentAmountDue);
+  });
+  ui.paymentCardPrintBtn.addEventListener('click', () => {
+    if (PAYMENT_MOCKUP_MODE) {
+      showPaymentMockupStatus('Pratinjau cetak kartu SPP tidak tersedia untuk data siswa contoh.');
+      return;
+    }
+    if (!app.selectedPaymentStudent) {
+      alert('Pilih siswa terlebih dahulu untuk mencetak kartu SPP.');
+      return;
+    }
+    openStudentCardPrintDialog(app.selectedPaymentStudent);
+  });
+  ui.paymentLastReceiptBtn.addEventListener('click', async () => {
+    if (PAYMENT_MOCKUP_MODE) {
+      showPaymentMockupStatus('Kwitansi contoh tidak dicetak dari mode mockup.');
+      return;
+    }
+    const latestBatch = [...(app.state.transaksi || [])]
+      .sort((a, b) => String(b.created_at || b.tglbyr || '').localeCompare(String(a.created_at || a.tglbyr || '')))[0];
+    if (!latestBatch?.id) {
+      alert('Belum ada pembayaran untuk dicetak sebagai kwitansi terakhir.');
+      return;
+    }
+    try {
+      await printPaymentBatch(String(latestBatch.id), false);
+    } catch (error) {
+      console.error('Unable to print the latest payment receipt:', error);
+      alert('Kwitansi terakhir gagal dicetak. Periksa koneksi, lalu coba kembali.');
+    }
+  });
+  ui.paymentResetBtn.addEventListener('click', () => {
+    if (PAYMENT_MOCKUP_MODE) initializePaymentMockup();
+  });
+  ui.paymentSettlementUploadBtn.addEventListener('click', () => ui.paymentSettlementFile.click());
+  ui.paymentSettlementFile.addEventListener('change', () => {
+    const file = ui.paymentSettlementFile.files[0];
+    if (file) {
+      showPaymentMockupStatus(`File "${file.name}" dipilih. Mode mockup tidak mencocokkan atau menyimpan settlement.`);
+    }
+  });
+  initializePaymentMockup();
   ui.paymentCorrectionDialog.querySelector('form').addEventListener('submit', voidPaymentBatch);
   document.getElementById('paymentCorrectionClose').addEventListener('click', () => {
     ui.paymentCorrectionDialog.close();
@@ -7769,7 +8005,7 @@ function setupEvents() {
 
     ui.loginForm.reset();
     renderAll();
-    setPage('dashboard');
+    setPage(PAYMENT_MOCKUP_MODE && canAccessPayment() ? 'pembayaran' : 'dashboard');
   });
 }
 

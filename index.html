@@ -525,69 +525,9 @@
         </section>
 
         <section class="page" id="pembayaranPage">
-          <div class="panel form-panel">
-            <div class="panel-header">
-              <h3>Input Pembayaran</h3>
-            </div>
-            <p class="bank-payment-note">Bank VA aktif: <strong id="paymentBankName">Belum diatur</strong>. Nomor VA setiap siswa ditampilkan pada data siswa.</p>
-            <form id="paymentForm">
-              <div class="form-grid payment-student-grid">
-                <div class="field">
-                  <span>Nama Siswa</span>
-                  <div class="picker" data-picker="paymentStudent" data-value-field="id">
-                    <input type="search" class="picker-input" placeholder="Ketik nama siswa" autocomplete="off" />
-                    <input type="hidden" id="paymentNospp" name="id_siswa" required />
-                    <div class="picker-results" hidden></div>
-                  </div>
-                  <small class="field-hint">Pilih siswa dan tahun ajaran yang akan menerima pembayaran.</small>
-                </div>
-                <label class="field">
-                  <span>Tanggal uang masuk / transfer</span>
-                  <input id="paymentDate" type="date" name="tglbyr" required />
-                  <small class="field-hint">Tanggal pencatatan saat transaksi disimpan tetap tercatat otomatis.</small>
-                </label>
-              </div>
-              <div class="payment-billing-status" id="paymentBillingStatus" role="status" aria-live="polite">Pilih siswa untuk melihat sisa tagihan dan urutan alokasi.</div>
-              <fieldset class="payment-allocation">
-                <legend>Alokasi pembayaran</legend>
-                <p class="muted-copy">SPP dan Komputer ditampilkan bersama per periode. Isi kolom BOS untuk memisahkan bantuan dari nominal SPP; penerimaan orang tua otomatis dihitung setelah dikurangi BOS. Untuk siswa baru, tambahkan DPP, DPS, seragam, kegiatan, serta SPP/Komputer bulan masuk dalam satu transaksi.</p>
-                <div id="paymentComponentRows">
-                  <div class="payment-component-row payment-monthly-row" data-payment-row="monthly">
-                    <label>
-                      <span>Periode</span>
-                      <select class="payment-period" aria-label="Periode tagihan" disabled>
-                        <option value="">Pilih siswa dahulu</option>
-                      </select>
-                    </label>
-                    <label>
-                      <span>SPP</span>
-                      <input class="money-input payment-component-amount payment-spp-amount" type="text" inputmode="numeric" aria-label="Nominal SPP" disabled />
-                    </label>
-                    <label>
-                      <span>BOS</span>
-                      <input class="money-input payment-bos-amount" type="text" inputmode="numeric" aria-label="Nominal BOS untuk SPP" placeholder="Rp 0" disabled />
-                    </label>
-                    <label>
-                      <span>Komputer</span>
-                      <input class="money-input payment-component-amount payment-komp-amount" type="text" inputmode="numeric" aria-label="Nominal Komputer" disabled />
-                    </label>
-                    <button type="button" class="action-btn delete payment-remove" aria-label="Hapus periode" disabled>Hapus</button>
-                  </div>
-                </div>
-                <div class="payment-allocation-footer">
-                  <div class="payment-add-actions">
-                    <button type="button" class="secondary-button small-button" id="addPaymentComponent" disabled>Tambah periode berikutnya</button>
-                    <button type="button" class="secondary-button small-button" id="addOneTimePaymentComponent">Tambah komponen lain</button>
-                  </div>
-                  <p>Alokasi BOS <strong id="paymentBosTotal">Rp 0</strong><br />Penerimaan orang tua <strong id="paymentAllocationTotal">Rp 0</strong></p>
-                </div>
-              </fieldset>
-              <div class="form-actions">
-                <button type="submit" class="primary-button">Simpan Pembayaran</button>
-              </div>
-            </form>
+          <div class="payment-page-toolbar">
             <details class="fold payment-import-fold">
-              <summary>Impor pembayaran dari Excel / CSV</summary>
+              <summary>Impor Pembayaran</summary>
               <div class="fold-body">
                 <p class="muted-copy">Gunakan template. Setiap baris akan dicocokkan dan dikonfirmasi per siswa; periode kosong akan disarankan dari tunggakan terlama.</p>
                 <div class="form-actions">
@@ -620,16 +560,169 @@
               </div>
             </details>
           </div>
+          <div class="payment-mockup-banner" id="paymentMockupBanner" role="status">
+            <strong>Mode mockup</strong>
+            <span>Semua data hanya contoh; simpan, impor, settlement, dan cetak tidak menyimpan atau menghasilkan dokumen.</span>
+          </div>
+          <section class="payment-cashier-stats" aria-label="Informasi kasir">
+            <article>
+              <span>Petugas Kasir</span>
+              <strong id="paymentCashierName">Petugas aktif</strong>
+              <small>Sesuai akun yang sedang masuk</small>
+            </article>
+            <article>
+              <span>Kwitansi Berikutnya</span>
+              <strong>SPP-2026-00000126</strong>
+              <small>Contoh nomor berikutnya · bukan nomor produksi</small>
+            </article>
+            <article>
+              <span>Kas Laci Hari Ini</span>
+              <strong>Rp 1.425.000</strong>
+              <small>1 transaksi tunai · contoh mockup</small>
+            </article>
+          </section>
+          <div class="payment-workspace">
+            <div class="panel form-panel payment-entry-panel">
+              <div class="panel-header">
+                <h3>Input Pembayaran</h3>
+              </div>
+              <p class="bank-payment-note">Bank VA aktif: <strong id="paymentBankName">Belum diatur</strong>. Nomor VA setiap siswa ditampilkan pada data siswa.</p>
+              <form id="paymentForm">
+                <div class="form-grid payment-student-grid">
+                  <div class="field">
+                    <span>Nama Siswa</span>
+                    <div class="picker" data-picker="paymentStudent" data-value-field="id">
+                      <input type="search" class="picker-input" placeholder="Ketik nama siswa" autocomplete="off" />
+                      <input type="hidden" id="paymentNospp" name="id_siswa" required />
+                      <div class="picker-results" hidden></div>
+                    </div>
+                    <small class="field-hint">Pilih siswa dan tahun ajaran yang akan menerima pembayaran.</small>
+                  </div>
+                  <label class="field">
+                    <span>Tanggal uang masuk / transfer</span>
+                    <input id="paymentDate" type="date" name="tglbyr" required />
+                    <small class="field-hint">Tanggal pencatatan saat transaksi disimpan tetap tercatat otomatis.</small>
+                  </label>
+                </div>
+                <div class="payment-billing-status" id="paymentBillingStatus" role="status" aria-live="polite">Pilih siswa untuk melihat sisa tagihan dan urutan alokasi.</div>
+                <fieldset class="payment-allocation">
+                  <legend>Alokasi pembayaran</legend>
+                  <p class="muted-copy">Isi nominal per periode. Subsidi BOS mengurangi total yang diterima dari orang tua.</p>
+                  <div id="paymentComponentRows">
+                    <div class="payment-component-row payment-monthly-row" data-payment-row="monthly">
+                      <label>
+                        <span>Periode</span>
+                        <select class="payment-period" aria-label="Periode tagihan" disabled>
+                          <option value="">Pilih siswa dahulu</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>SPP</span>
+                        <input class="money-input payment-component-amount payment-spp-amount" type="text" inputmode="numeric" aria-label="Nominal SPP" disabled />
+                      </label>
+                      <label>
+                        <span>BOS</span>
+                        <input class="money-input payment-bos-amount" type="text" inputmode="numeric" aria-label="Nominal BOS untuk SPP" placeholder="Rp 0" disabled />
+                      </label>
+                      <label>
+                        <span>Komputer</span>
+                        <input class="money-input payment-component-amount payment-komp-amount" type="text" inputmode="numeric" aria-label="Nominal Komputer" disabled />
+                      </label>
+                      <button type="button" class="action-btn delete payment-remove" aria-label="Hapus periode" disabled>Hapus</button>
+                    </div>
+                  </div>
+                  <div class="payment-allocation-footer">
+                    <div class="payment-add-actions">
+                      <button type="button" class="secondary-button small-button" id="addPaymentComponent" disabled>Tambah periode berikutnya</button>
+                      <button type="button" class="secondary-button small-button" id="addOneTimePaymentComponent">Tambah komponen lain</button>
+                    </div>
+                  </div>
+                </fieldset>
+                <label class="payment-notes payment-mockup-only">
+                  <span>Catatan Pembayaran (Opsional)</span>
+                  <textarea id="paymentNotes" rows="2" maxlength="200" placeholder="Tambahkan keterangan untuk kuitansi"></textarea>
+                </label>
+              </form>
+            </div>
+            <aside class="panel payment-summary-panel" aria-labelledby="paymentSummaryHeading">
+              <div class="payment-summary-heading">
+                <h3 id="paymentSummaryHeading">Ringkasan Loket Kasir</h3>
+                <span class="payment-mockup-only" id="paymentMockupTimestamp"></span>
+              </div>
+              <span class="payment-component-count" id="paymentComponentCount">0 komponen</span>
+              <div class="payment-summary-total">
+                <span>Total yang harus dibayar (Orang Tua)</span>
+                <strong id="paymentAllocationTotal">Rp 0</strong>
+              </div>
+              <div class="payment-summary-breakdown">
+                <div><span>Total kotor SPP &amp; komponen</span><strong id="paymentGrossTotal">Rp 0</strong></div>
+                <div><span>Subsidi BOS · pengurang</span><strong>(−) <span id="paymentBosTotal">Rp 0</span></strong></div>
+              </div>
+              <section class="payment-method-widget" aria-labelledby="paymentMethodHeading">
+                <h4 id="paymentMethodHeading">Pilihan metode bayar di kasir</h4>
+                <div class="payment-method-options" role="group" aria-label="Metode pembayaran">
+                  <button type="button" class="is-selected" data-payment-method="cash" aria-pressed="true">Tunai / Cash</button>
+                  <button type="button" data-payment-method="edc" aria-pressed="false">Debit EDC</button>
+                  <button type="button" data-payment-method="qris" aria-pressed="false">QRIS</button>
+                </div>
+                <label class="payment-cashier-amount" for="paymentCashReceived">
+                  <span id="paymentCashReceivedLabel">Uang diterima dari wali (Rp)</span>
+                  <input id="paymentCashReceived" class="money-input" type="text" inputmode="numeric" placeholder="Rp 0" />
+                </label>
+                <div class="payment-cash-quick-actions" aria-label="Pilihan nominal cepat">
+                  <button type="button" data-cash-tender="exact">Uang pas <strong id="paymentExactAmount">Rp 0</strong></button>
+                  <button type="button" data-cash-tender="50000">+ Rp 50.000</button>
+                  <button type="button" data-cash-tender="100000">+ Rp 100.000</button>
+                </div>
+                <div class="payment-cash-change">
+                  <span id="paymentCashChangeLabel">Kembalian ke wali</span>
+                  <strong id="paymentCashChange">Rp 0</strong>
+                </div>
+                <p class="payment-settlement-status" id="paymentSettlementStatus" role="status" aria-live="polite">Tunai · masuk ke kas laci</p>
+              </section>
+              <div class="payment-print-actions">
+                <div class="payment-card-print">
+                  <div>
+                    <strong>Cetak Kartu SPP Fisik</strong>
+                    <p>Cetak buku kartu SPP siswa untuk pembayaran periode terpilih.</p>
+                  </div>
+                  <button type="button" class="secondary-button small-button" id="paymentCardPrintBtn">Buka Pratinjau &amp; Cetak</button>
+                </div>
+                <button type="submit" class="primary-button payment-save-receipt" form="paymentForm">
+                  <span>Simpan Penerimaan &amp; Cetak Kwitansi</span>
+                  <strong id="paymentSaveAmount">Rp 0</strong>
+                </button>
+                <button type="button" class="secondary-button small-button payment-mockup-only" id="paymentMockupReceiptBtn">Pratinjau Slip Kwitansi Contoh</button>
+                <div class="payment-secondary-actions">
+                  <button type="button" class="secondary-button small-button" id="paymentLastReceiptBtn">Cetak Kwitansi Terakhir</button>
+                  <button type="button" class="secondary-button small-button payment-mockup-only" id="paymentResetBtn">Reset Formulir</button>
+                </div>
+                <p class="payment-mockup-status" id="paymentMockupStatus" role="status" aria-live="polite" hidden></p>
+              </div>
+              <p class="payment-mockup-only">Untuk EDC/QRIS, status contoh menunggu file settlement; tidak masuk ke kas laci.</p>
+            </aside>
+          </div>
 
           <div class="panel payment-list-panel">
             <div class="panel-header">
-              <h3>Riwayat Pembayaran</h3>
-              <input type="search" id="paymentSearch" class="inline-search" aria-label="Cari pembayaran berdasarkan nomor bukti, siswa, atau nomor SPP" placeholder="Cari no. bukti, siswa, atau No. SPP" />
+              <div class="payment-list-heading">
+                <h3 class="payment-history-default-title">Riwayat Pembayaran</h3>
+                <h3 class="payment-history-mockup-title">Riwayat Transaksi Kasir Hari Ini</h3>
+                <p class="payment-mockup-only">Contoh tampilan transaksi; data ini tidak tersimpan.</p>
+              </div>
+              <div class="payment-list-actions">
+                <input type="search" id="paymentSearch" class="inline-search" aria-label="Cari pembayaran berdasarkan nomor bukti, siswa, atau nomor SPP" placeholder="Cari no. bukti, siswa, atau No. SPP" />
+                <div class="payment-mockup-only payment-mockup-history-actions">
+                  <span id="paymentMockupDate">Hari ini</span>
+                  <button type="button" class="secondary-button small-button" id="paymentSettlementUploadBtn">Impor Settlement</button>
+                  <input id="paymentSettlementFile" type="file" accept=".xlsx,.xls,.csv" hidden />
+                </div>
+              </div>
             </div>
             <div class="table-wrap">
-              <table>
+              <table class="cashier-history-table">
                 <thead>
-                  <tr>
+                  <tr class="payment-history-default-head">
                     <th>No. Bukti</th>
                     <th>Siswa / penerima</th>
                     <th>Sumber</th>
@@ -638,8 +731,50 @@
                     <th>Nominal</th>
                     <th>Aksi</th>
                   </tr>
+                  <tr class="payment-history-mockup-head">
+                    <th>No. Kwitansi</th>
+                    <th>Waktu</th>
+                    <th>Nama Siswa &amp; Kelas</th>
+                    <th>Komponen Dibayar</th>
+                    <th>Total Bayar</th>
+                    <th>Metode</th>
+                    <th>Status</th>
+                    <th>Aksi</th>
+                  </tr>
                 </thead>
                 <tbody id="paymentList"></tbody>
+                <tbody class="payment-mockup-only" id="paymentMockupList">
+                  <tr>
+                    <td><strong>SPP-2026-00000123</strong></td>
+                    <td>10:28<small id="paymentMockupDateCash"></small></td>
+                    <td>Siswa Contoh<small>Kelas 7A</small></td>
+                    <td>SPP, Komputer, DPP, Seragam</td>
+                    <td><strong>Rp 1.425.000</strong></td>
+                    <td>Tunai</td>
+                    <td><span class="payment-state is-paid">Tercatat</span></td>
+                    <td><button type="button" class="secondary-button small-button" disabled>Cetak</button></td>
+                  </tr>
+                  <tr>
+                    <td><strong>SPP-2026-00000124</strong></td>
+                    <td>09:55<small id="paymentMockupDateQris"></small></td>
+                    <td>Siswa Contoh<small>Kelas 7A</small></td>
+                    <td>SPP November 2026</td>
+                    <td><strong>Rp 350.000</strong></td>
+                    <td>QRIS</td>
+                    <td><span class="payment-state is-pending-settlement">Menunggu Settlement</span></td>
+                    <td><button type="button" class="secondary-button small-button" disabled>Cetak</button></td>
+                  </tr>
+                  <tr>
+                    <td><strong>SPP-2026-00000125</strong></td>
+                    <td>09:12<small id="paymentMockupDateEdc"></small></td>
+                    <td>Siswa Contoh<small>Kelas 8A</small></td>
+                    <td>SPP, Komputer</td>
+                    <td><strong>Rp 288.000</strong></td>
+                    <td>Debit EDC</td>
+                    <td><span class="payment-state is-pending-settlement">Menunggu Settlement</span></td>
+                    <td><button type="button" class="secondary-button small-button" disabled>Cetak</button></td>
+                  </tr>
+                </tbody>
               </table>
             </div>
             <div class="pager" data-pager="payments"></div>
@@ -1047,6 +1182,27 @@
           <button type="submit" class="primary-button" id="userPasswordSubmit">Simpan password</button>
         </div>
       </form>
+    </dialog>
+    <dialog id="paymentReceiptPreviewDialog" class="payment-receipt-preview-dialog" aria-labelledby="paymentReceiptPreviewTitle" aria-describedby="paymentReceiptPreviewNote">
+      <div class="payment-receipt-preview-shell">
+        <header class="payment-receipt-preview-header">
+          <div>
+            <h2 id="paymentReceiptPreviewTitle">Pratinjau Cetak Slip Kwitansi</h2>
+            <p>Format Cetak Dot-Matrix / Buku Pasbook (Epson LQ-20 · 1/3 F4 Landscape)</p>
+          </div>
+          <button type="button" class="modal-close" id="paymentReceiptPreviewClose" aria-label="Tutup pratinjau">&times;</button>
+        </header>
+        <div class="payment-receipt-preview-scroll">
+          <div id="paymentReceiptPreviewContent" class="payment-receipt-preview-content"></div>
+        </div>
+        <footer class="payment-receipt-preview-footer">
+          <p id="paymentReceiptPreviewNote" role="status" aria-live="polite"></p>
+          <div>
+            <button type="button" class="secondary-button" id="paymentReceiptPreviewCancel">Tutup</button>
+            <button type="button" class="primary-button" id="paymentReceiptPreviewPrint">Cetak Slip</button>
+          </div>
+        </footer>
+      </div>
     </dialog>
     <div id="arrearsPrintSheet" hidden></div>
     <div id="paymentPrintSheet" hidden></div>
