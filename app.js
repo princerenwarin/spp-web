@@ -3968,9 +3968,10 @@ async function fetchDashboard() {
 }
 
 function dashboardPeriodKey(value) {
-  const compact = /^(0[1-9]|1[0-2])(\d{4})$/.exec(String(value || ''));
+  const period = String(value || '').trim();
+  const compact = /^(0[1-9]|1[0-2])(\d{4})$/.exec(period);
   if (compact) return `${compact[2]}-${compact[1]}`;
-  const iso = /^(\d{4})-(\d{2})/.exec(String(value || ''));
+  const iso = /^(\d{4})-(\d{2})/.exec(period);
   return iso ? `${iso[1]}-${iso[2]}` : '';
 }
 
@@ -5194,7 +5195,7 @@ function updateStudentFormMode() {
   ui.studentEditSummary.hidden = !isEdit;
   ui.studentNama.required = isNew;
   ui.studentWa.required = isNew;
-  ui.studentPeriode.required = isNew;
+  ui.studentPeriode.required = isNew || isEdit;
   ui.studentGiat.required = mode === 'baru' || mode === 'naik';
   ui.studentSpp.required = mode === 'baru' || mode === 'naik';
   ui.studentKomp.required = mode === 'baru' || mode === 'naik';
@@ -5485,6 +5486,7 @@ async function changeStudentSpp(nospp) {
   ui.studentSpp.value = formatRupiah(row.spp || 0);
   ui.studentKomp.value = formatRupiah(row.komp || 0);
   const [start] = row.tahunAjaran.split('-').map(Number);
+  ui.studentPeriode.value = dashboardPeriodKey(row.periodeMasuk) || `${start}-07`;
   ui.studentEffective.value = `${start}-07`;
   ui.studentEditSummary.innerHTML = `
     <strong>${escapeHtml(row.nama)}</strong>
@@ -5496,14 +5498,20 @@ async function saveEnrollmentFees() {
   const row = app.editingEnrollment;
   const spp = parseMoney(ui.studentSpp.value);
   const komp = parseMoney(ui.studentKomp.value);
+  const entryPeriod = toPeriode(ui.studentPeriode.value);
   const feeChanged = spp !== Number(row.spp || 0) || komp !== Number(row.komp || 0);
+  const [start] = row.tahunAjaran.split('-').map(Number);
+  const previousEntryPeriod = String(row.periodeMasuk || '').trim() || `07${start}`;
+  if (entryPeriod !== previousEntryPeriod && !window.confirm(
+    `Periode masuk akan berubah dari ${formatAcademicMonth(dashboardPeriodKey(previousEntryPeriod))} ke ${formatAcademicMonth(ui.studentPeriode.value)}. Perubahan ini dapat mengubah jumlah tagihan. Lanjutkan?`
+  )) return;
   if (feeChanged && !ui.studentEffective.value) {
     alert('Isi periode berlaku untuk perubahan SPP/Komputer.');
     return;
   }
   try {
     const credentials = requireStudentRules();
-    const { error } = await app.supabase.rpc('update_enrollment_fees_v1', {
+    const { error } = await app.supabase.rpc('update_enrollment_fees_v2', {
       ...credentials,
       p_id_siswa: row.id,
       p_tahun_ajaran: row.tahunAjaran,
@@ -5513,13 +5521,14 @@ async function saveEnrollmentFees() {
       p_giat: parseMoney(ui.studentGiat.value),
       p_spp: spp,
       p_komp: komp,
-      p_effective_period: feeChanged ? toPeriode(ui.studentEffective.value) : null
+      p_effective_period: feeChanged ? toPeriode(ui.studentEffective.value) : null,
+      p_entry_period: entryPeriod
     });
     if (error) throw error;
     closeStudentDialog();
     await reloadStudentData();
   } catch (error) {
-    alert(error.message || 'Tagihan gagal diubah. Pastikan migration 014 sudah dijalankan.');
+    alert(error.message || 'Tagihan gagal diubah. Pastikan migration 033 sudah dijalankan.');
   }
 }
 
