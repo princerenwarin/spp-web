@@ -7856,7 +7856,7 @@ async function openStudentPaymentHistory(student) {
 }
 
 function oldestDuePeriod(billing, component) {
-  const period = (billing?.periode_bulanan || []).find((item) => Number(item[component]?.sisa || 0) > 0);
+  const period = paymentSchedule(billing).find((item) => Number(item[component]?.sisa || 0) > 0);
   return period?.periode || billing?.periode_aktif || '';
 }
 
@@ -7946,7 +7946,10 @@ async function loadPaymentBilling(student) {
 }
 
 function paymentSchedule(billing = app.paymentBilling) {
-  return billing?.payment_periods || billing?.periode_bulanan || [];
+  const schedule = billing?.payment_periods || billing?.periode_bulanan || [];
+  return [...schedule].sort((left, right) => (
+    paymentPeriodSequence(left.periode) - paymentPeriodSequence(right.periode)
+  ));
 }
 
 function defaultPaymentPeriod(billing = app.paymentBilling) {
@@ -8247,6 +8250,7 @@ function resetMonthlyPaymentRows() {
     row.querySelector('.payment-spp-amount').value = '';
     row.querySelector('.payment-bos-amount').value = '';
     row.querySelector('.payment-komp-amount').value = '';
+    delete row.dataset.initialPeriod;
     delete row.dataset.paymentPeriod;
     delete row.dataset.autoSpp;
     delete row.dataset.autoKomp;
