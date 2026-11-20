@@ -684,16 +684,24 @@
             <div class="panel-header">
               <div class="payment-list-heading">
                 <h3 class="payment-history-default-title">Riwayat Pembayaran</h3>
-                <h3 class="payment-history-mockup-title">Riwayat Transaksi Kasir Hari Ini</h3>
+                <h3 class="payment-history-mockup-title">Riwayat Transaksi Kasir</h3>
                 <p class="payment-mockup-only">Contoh tampilan transaksi; data ini tidak tersimpan.</p>
               </div>
               <div class="payment-list-actions">
-                <input type="search" id="paymentSearch" class="inline-search" aria-label="Cari pembayaran berdasarkan nomor bukti, siswa, atau nomor SPP" placeholder="Cari no. bukti, siswa, atau No. SPP" />
-                <div class="payment-mockup-only payment-mockup-history-actions">
-                  <span id="paymentMockupDate">Hari ini</span>
+                <div class="payment-history-date-range">
+                  <label class="payment-history-date-filter">
+                    <span>Dari</span>
+                    <input id="paymentDateFrom" type="date" aria-label="Tanggal transaksi dari" />
+                  </label>
+                  <label class="payment-history-date-filter">
+                    <span>Sampai</span>
+                    <input id="paymentDateTo" type="date" aria-label="Tanggal transaksi sampai" />
+                  </label>
                 </div>
+                <input type="search" id="paymentSearch" class="inline-search" aria-label="Cari pembayaran berdasarkan nomor bukti, siswa, atau nomor SPP" placeholder="Cari no. bukti, siswa, atau No. SPP" />
               </div>
             </div>
+            <p id="paymentHistoryFilterStatus" class="payment-history-filter-status" role="status" aria-live="polite" hidden></p>
             <div class="table-wrap">
               <table class="cashier-history-table">
                 <thead>
@@ -764,41 +772,23 @@
                   <h3 id="paymentImportHeading">Impor Pembayaran</h3>
                   <p>Untuk pembayaran baru dari file. Setiap baris ditinjau dan dialokasikan ke siswa sebelum disimpan. Tanggal pembayaran wajib sesuai bukti; tanggal unggah dicatat terpisah.</p>
                   <div class="form-actions">
-                    <button type="button" class="secondary-button" id="downloadPaymentTemplate">Unduh Format + Contoh</button>
-                    <label class="secondary-button">
-                      Pilih File Excel / CSV
-                      <input id="paymentImportFile" type="file" accept=".xlsx,.xls,.csv" hidden />
-                    </label>
+                    <button type="button" class="primary-button" id="paymentImportOpenBtn">Buka Impor Pembayaran</button>
                   </div>
-                  <section id="paymentImportReview" class="payment-import-review" hidden aria-label="Pratinjau impor pembayaran">
-                    <p id="paymentImportStatus" class="muted-copy" role="status" aria-live="polite"></p>
-                    <div class="table-wrap payment-import-table-wrap">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Nama dari file</th>
-                            <th>Siswa</th>
-                            <th>Komponen</th>
-                            <th>Periode mulai</th>
-                            <th>Tanggal pembayaran</th>
-                            <th>Nominal</th>
-                            <th>Konfirmasi</th>
-                          </tr>
-                        </thead>
-                        <tbody id="paymentImportRows"></tbody>
-                      </table>
-                    </div>
-                    <button type="button" class="primary-button" id="importPaymentsBtn" disabled>Impor pembayaran terkonfirmasi</button>
-                  </section>
                 </section>
                 <section class="payment-tool-section payment-settlement-tool" aria-labelledby="paymentSettlementHeading">
-                  <h3 id="paymentSettlementHeading">Rekonsiliasi EDC / QRIS / Transfer</h3>
-                  <p>EDC dan QRIS dicocokkan dengan transaksi yang sudah tercatat. Transfer yang belum tercatat perlu ditinjau dan dialokasikan admin sebelum dibuat sebagai pembayaran.</p>
-                  <p class="payment-settlement-notice">Pencocokan file provider belum aktif. Template ini membantu menyiapkan tanggal transaksi dan settlement dengan benar.</p>
-                  <div class="form-actions">
-                    <button type="button" class="secondary-button" id="downloadSettlementTemplate">Unduh Format + Contoh</button>
-                    <button type="button" class="secondary-button small-button payment-mockup-only" id="paymentSettlementUploadBtn">Pilih File Settlement (Pratinjau)</button>
-                    <input id="paymentSettlementFile" type="file" accept=".xlsx,.xls,.csv" hidden />
+                  <h3 id="paymentSettlementHeading">Rekonsiliasi Settlement</h3>
+                  <p>Pilih alur sesuai sumber pembayaran. Setiap alur memiliki file, format, dan proses tinjau sendiri.</p>
+                  <div class="payment-settlement-workflows">
+                    <section class="payment-settlement-workflow" aria-labelledby="paymentDigitalSettlementHeading">
+                      <h4 id="paymentDigitalSettlementHeading">Crosscheck EDC / QRIS</h4>
+                      <p>Cocokkan metode, referensi, nominal, dan tanggal pembayaran dengan transaksi yang sudah tercatat.</p>
+                      <button type="button" class="primary-button" id="paymentSettlementUploadBtn">Buka Crosscheck EDC / QRIS</button>
+                    </section>
+                    <section class="payment-settlement-workflow" aria-labelledby="paymentTransferHeading">
+                      <h4 id="paymentTransferHeading">Impor Transfer</h4>
+                      <p>Pilih siswa, tinjau saran tagihan, lalu konfirmasi transfer yang belum tercatat.</p>
+                      <button type="button" class="primary-button" id="paymentTransferUploadBtn">Buka Impor Transfer</button>
+                    </section>
                   </div>
                 </section>
               </div>
@@ -1225,6 +1215,203 @@
           <div>
             <button type="button" class="secondary-button" id="paymentReceiptPreviewCancel">Tutup</button>
             <button type="button" class="primary-button" id="paymentReceiptPreviewPrint">Cetak Slip</button>
+          </div>
+        </footer>
+      </div>
+    </dialog>
+    <dialog id="paymentImportDialog" class="payment-settlement-dialog" aria-labelledby="paymentImportTitle">
+      <div class="payment-settlement-shell">
+        <header class="payment-settlement-header">
+          <div>
+            <h2 id="paymentImportTitle">Impor Pembayaran</h2>
+            <p>Unggah pembayaran baru, lalu tinjau siswa, komponen, periode, dan tanggal sebelum menyimpan.</p>
+          </div>
+          <button type="button" class="modal-close" id="paymentImportClose" aria-label="Tutup impor pembayaran">&times;</button>
+        </header>
+        <div class="payment-settlement-body">
+          <div class="payment-settlement-file-toolbar">
+            <button type="button" class="secondary-button" id="downloadPaymentTemplate">Unduh Format + Contoh</button>
+            <label class="secondary-button payment-settlement-file-button">
+              Pilih File Excel / CSV
+              <input id="paymentImportFile" type="file" accept=".xlsx,.xls,.csv" hidden />
+            </label>
+          </div>
+          <section id="paymentImportReview" class="payment-import-review" hidden aria-label="Pratinjau impor pembayaran">
+            <p id="paymentImportStatus" class="muted-copy" role="status" aria-live="polite"></p>
+            <div class="table-wrap payment-import-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nama dari file</th>
+                    <th>Siswa</th>
+                    <th>Komponen</th>
+                    <th>Periode mulai</th>
+                    <th>Tanggal pembayaran</th>
+                    <th>Nominal</th>
+                    <th>Konfirmasi</th>
+                  </tr>
+                </thead>
+                <tbody id="paymentImportRows"></tbody>
+              </table>
+            </div>
+            <button type="button" class="primary-button" id="importPaymentsBtn" disabled>Impor pembayaran terkonfirmasi</button>
+          </section>
+        </div>
+        <footer class="payment-settlement-footer">
+          <p>Pastikan tanggal pembayaran mengikuti bukti transaksi, bukan tanggal unggah.</p>
+          <div>
+            <button type="button" class="secondary-button" id="paymentImportCancel">Tutup</button>
+          </div>
+        </footer>
+      </div>
+    </dialog>
+    <dialog id="paymentDigitalSettlementDialog" class="payment-settlement-dialog" aria-labelledby="paymentDigitalSettlementTitle">
+      <div class="payment-settlement-shell">
+        <header class="payment-settlement-header">
+          <div>
+            <h2 id="paymentDigitalSettlementTitle">Crosscheck EDC / QRIS</h2>
+            <p>Cari transaksi lama berdasarkan tanggal pembayaran, lalu periksa hasil pencocokan sebelum memperbarui settlement.</p>
+          </div>
+          <button type="button" class="modal-close" id="paymentDigitalSettlementClose" aria-label="Tutup crosscheck EDC dan QRIS">&times;</button>
+        </header>
+        <div class="payment-settlement-body">
+          <div class="payment-settlement-toolbar">
+            <label class="field">
+              <span>Tanggal pembayaran dari</span>
+              <input type="date" id="paymentDigitalDateFrom" required />
+            </label>
+            <label class="field">
+              <span>Sampai</span>
+              <input type="date" id="paymentDigitalDateTo" required />
+            </label>
+            <button type="button" class="secondary-button" id="refreshPaymentDigitalCandidates">Cari transaksi</button>
+          </div>
+          <div class="payment-settlement-file-toolbar">
+            <button type="button" class="secondary-button" id="downloadPaymentDigitalSettlementTemplate">Unduh Format + Contoh</button>
+            <label class="secondary-button payment-settlement-file-button">
+              Pilih File EDC / QRIS
+              <input id="paymentSettlementFile" type="file" accept=".xlsx,.xls,.csv" hidden />
+            </label>
+            <span id="paymentDigitalFileName" class="payment-settlement-file-name">Belum ada file dipilih</span>
+          </div>
+          <p class="payment-settlement-date-hint">Rentang awal mencakup tiga hari terakhir, termasuk hari sebelumnya. Ubah rentang untuk mencari transaksi pada tanggal pembayaran lain.</p>
+          <p id="paymentDigitalStatus" class="payment-settlement-status" role="status" aria-live="polite"></p>
+          <section class="payment-settlement-candidate-section" aria-labelledby="paymentSettlementCandidatesTitle">
+            <div class="payment-settlement-section-heading">
+              <div>
+                <h3 id="paymentSettlementCandidatesTitle">Transaksi EDC / QRIS menunggu dana masuk</h3>
+                <p>Daftar transaksi yang sudah tercatat dalam rentang tanggal pembayaran di atas.</p>
+              </div>
+              <span id="paymentDigitalCandidateCount" class="payment-settlement-count">0 transaksi</span>
+            </div>
+            <div class="table-wrap">
+              <table class="payment-settlement-candidate-table">
+                <thead>
+                  <tr>
+                    <th>No. Bukti</th>
+                    <th>Tanggal pembayaran</th>
+                    <th>Siswa</th>
+                    <th>Metode</th>
+                    <th>Referensi</th>
+                    <th>Nominal</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="paymentDigitalCandidates"></tbody>
+              </table>
+            </div>
+          </section>
+          <section id="paymentDigitalReview" class="payment-settlement-review" hidden aria-labelledby="paymentDigitalReviewTitle">
+            <div class="payment-settlement-section-heading">
+              <div>
+                <h3 id="paymentDigitalReviewTitle">Tinjau baris file</h3>
+                <p>Baris hanya dapat dikonfirmasi jika metode, referensi, nominal, dan tanggal pembayarannya cocok.</p>
+              </div>
+              <span id="paymentDigitalReviewCount" class="payment-settlement-count">0 baris</span>
+            </div>
+            <div id="paymentDigitalRows" class="payment-settlement-rows"></div>
+          </section>
+        </div>
+        <footer class="payment-settlement-footer">
+          <p id="paymentDigitalFooterNote" role="status" aria-live="polite"></p>
+          <div>
+            <button type="button" class="secondary-button" id="paymentDigitalSettlementCancel">Tutup</button>
+            <button type="button" class="primary-button" id="confirmPaymentDigitalSettlement" disabled>Konfirmasi pencocokan</button>
+          </div>
+        </footer>
+      </div>
+    </dialog>
+    <dialog id="paymentTransferImportDialog" class="payment-settlement-dialog" aria-labelledby="paymentTransferImportTitle">
+      <div class="payment-settlement-shell">
+        <header class="payment-settlement-header">
+          <div>
+            <h2 id="paymentTransferImportTitle">Impor Transfer</h2>
+            <p>Tinjau transfer yang belum tercatat. Pilih siswa dan periksa saran alokasi sebelum membuat pembayaran.</p>
+          </div>
+          <button type="button" class="modal-close" id="paymentTransferImportClose" aria-label="Tutup impor transfer">&times;</button>
+        </header>
+        <div class="payment-settlement-body">
+          <div class="payment-settlement-toolbar">
+            <label class="field">
+              <span>Tanggal pembayaran dari</span>
+              <input type="date" id="paymentTransferDateFrom" required />
+            </label>
+            <label class="field">
+              <span>Sampai</span>
+              <input type="date" id="paymentTransferDateTo" required />
+            </label>
+            <button type="button" class="secondary-button" id="refreshPaymentTransferCandidates">Cari transfer tercatat</button>
+          </div>
+          <div class="payment-settlement-file-toolbar">
+            <button type="button" class="secondary-button" id="downloadPaymentTransferTemplate">Unduh Format + Contoh</button>
+            <label class="secondary-button payment-settlement-file-button">
+              Pilih File Transfer
+              <input id="paymentTransferFile" type="file" accept=".xlsx,.xls,.csv" hidden />
+            </label>
+            <span id="paymentTransferFileName" class="payment-settlement-file-name">Belum ada file dipilih</span>
+          </div>
+          <p class="payment-settlement-date-hint">Rentang awal mencakup tiga hari terakhir, termasuk hari sebelumnya. Tanggal transfer tetap mengikuti bukti wali.</p>
+          <p id="paymentTransferStatus" class="payment-settlement-status" role="status" aria-live="polite"></p>
+          <section class="payment-settlement-candidate-section" aria-labelledby="paymentTransferCandidatesTitle">
+            <div class="payment-settlement-section-heading">
+              <div>
+                <h3 id="paymentTransferCandidatesTitle">Transfer yang sudah tercatat</h3>
+                <p>Gunakan daftar ini untuk mencegah transfer yang sama dibuat dua kali.</p>
+              </div>
+              <span id="paymentTransferCandidateCount" class="payment-settlement-count">0 transaksi</span>
+            </div>
+            <div class="table-wrap">
+              <table class="payment-settlement-candidate-table">
+                <thead>
+                  <tr>
+                    <th>No. Bukti</th>
+                    <th>Tanggal pembayaran</th>
+                    <th>Siswa</th>
+                    <th>Referensi</th>
+                    <th>Nominal</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="paymentTransferCandidates"></tbody>
+              </table>
+            </div>
+          </section>
+          <section id="paymentTransferReview" class="payment-settlement-review" hidden aria-labelledby="paymentTransferReviewTitle">
+            <div class="payment-settlement-section-heading">
+              <div>
+                <h3 id="paymentTransferReviewTitle">Tinjau transfer baru</h3>
+                <p>Pilih siswa secara eksplisit; saran tagihan membantu crosscheck dan tidak menggantikan keputusan admin.</p>
+              </div>
+              <span id="paymentTransferReviewCount" class="payment-settlement-count">0 baris</span>
+            </div>
+            <div id="paymentTransferRows" class="payment-settlement-rows"></div>
+          </section>
+        </div>
+        <footer class="payment-settlement-footer">
+          <p id="paymentTransferFooterNote" role="status" aria-live="polite"></p>
+          <div>
+            <button type="button" class="secondary-button" id="paymentTransferImportCancel">Tutup</button>
+            <button type="button" class="primary-button" id="confirmPaymentTransferImport" disabled>Konfirmasi transfer</button>
           </div>
         </footer>
       </div>

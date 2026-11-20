@@ -5558,6 +5558,31 @@ table {
   justify-content: flex-end;
 }
 
+.payment-history-date-range {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.payment-history-date-filter {
+  color: var(--muted);
+  display: grid;
+  font-size: 0.75rem;
+  font-weight: 600;
+  gap: 3px;
+}
+
+.payment-history-date-filter input {
+  min-height: 38px;
+  min-width: 142px;
+}
+
+.payment-history-filter-status {
+  color: var(--danger);
+  font-size: 0.88rem;
+  margin: 0 20px 12px;
+}
+
 .payment-mockup-history-actions {
   align-items: center;
   gap: 8px;
@@ -5652,6 +5677,19 @@ body.payment-mockup #pembayaranPage #paymentMockupTimestamp {
     width: 100%;
   }
 
+  .payment-history-date-range {
+    width: 100%;
+  }
+
+  .payment-history-date-filter {
+    flex: 1 1 140px;
+  }
+
+  .payment-history-date-filter input {
+    min-width: 0;
+    width: 100%;
+  }
+
   .payment-mockup-history-actions {
     justify-content: space-between;
   }
@@ -5684,6 +5722,15 @@ body.payment-mockup #pembayaranPage #paymentMockupTimestamp {
 
   .payment-list-actions {
     flex-direction: column;
+  }
+
+  .payment-history-date-range {
+    flex-direction: column;
+  }
+
+  .payment-history-filter-status {
+    margin-left: 14px;
+    margin-right: 14px;
   }
 
   .payment-mockup-history-actions {
@@ -6225,5 +6272,484 @@ body.payment-mockup #pembayaranPage #paymentMockupTimestamp {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+.payment-settlement-workflows {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: 16px;
+}
+
+.payment-settlement-workflow {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+
+.payment-tool-section > .payment-settlement-workflow {
+  margin-top: 16px;
+}
+
+.payment-settlement-workflow h4 {
+  color: var(--primary-2);
+  font-size: 0.98rem;
+  margin: 0;
+}
+
+.payment-settlement-workflow p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.payment-settlement-workflow button {
+  justify-self: start;
+  margin-top: 4px;
+}
+
+.payment-settlement-workflow .form-actions {
+  margin-top: 4px;
+}
+
+.payment-settlement-dialog {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 16px 28px rgba(30, 27, 47, 0.24);
+  color: var(--text);
+  height: min(90vh, 960px);
+  margin: auto;
+  max-height: calc(100vh - 32px);
+  max-width: min(1180px, calc(100vw - 32px));
+  padding: 0;
+  width: 100%;
+}
+
+.payment-settlement-dialog::backdrop {
+  background: rgba(25, 23, 39, 0.52);
+}
+
+.payment-settlement-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100%;
+  max-height: inherit;
+}
+
+.payment-settlement-header {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+}
+
+.payment-settlement-header h2 {
+  color: var(--primary-2);
+  font-size: 1.45rem;
+  margin: 0;
+}
+
+.payment-settlement-header p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 6px 0 0;
+  max-width: 72ch;
+}
+
+.payment-settlement-body {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 18px 24px 22px;
+}
+
+.payment-settlement-toolbar {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) auto auto minmax(140px, 1fr);
+}
+
+.payment-settlement-toolbar .field {
+  min-width: 0;
+}
+
+.payment-settlement-toolbar input,
+.payment-settlement-transfer-fields input,
+.payment-settlement-transfer-fields select,
+.payment-settlement-select-field select {
+  min-height: 42px;
+  width: 100%;
+}
+
+.payment-settlement-toolbar > button,
+.payment-settlement-file-button {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 42px;
+  white-space: nowrap;
+}
+
+.payment-settlement-file-button {
+  cursor: pointer;
+  margin: 0;
+}
+
+.payment-settlement-file-toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.payment-settlement-file-name {
+  color: var(--muted);
+  flex: 1 1 200px;
+  font-size: 0.82rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payment-settlement-date-hint {
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+  margin: 10px 0 0;
+  max-width: 78ch;
+}
+
+.payment-settlement-status {
+  background: var(--panel-alt);
+  border-radius: 9px;
+  color: var(--primary-2);
+  line-height: 1.45;
+  margin: 14px 0 0;
+  min-height: 22px;
+  padding: 9px 12px;
+}
+
+.payment-settlement-status.is-error {
+  background: #fff3f2;
+  color: #963e43;
+}
+
+.payment-settlement-status.is-success {
+  background: #e8f4ed;
+  color: #246246;
+}
+
+.payment-settlement-candidate-section,
+.payment-settlement-review {
+  border-top: 1px solid var(--border);
+  margin-top: 20px;
+  padding-top: 18px;
+}
+
+.payment-settlement-section-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.payment-settlement-section-heading h3 {
+  color: var(--primary-2);
+  font-size: 1.08rem;
+  margin: 0;
+}
+
+.payment-settlement-section-heading p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 4px 0 0;
+  max-width: 72ch;
+}
+
+.payment-settlement-count {
+  color: var(--muted);
+  font-size: 0.83rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.payment-settlement-dialog .table-wrap {
+  max-height: 260px;
+  overflow: auto;
+}
+
+.payment-settlement-candidate-table {
+  min-width: 850px;
+}
+
+.payment-settlement-candidate-table td {
+  vertical-align: middle;
+}
+
+.payment-settlement-candidate-table td small {
+  color: var(--muted);
+  display: block;
+  margin-top: 3px;
+}
+
+.payment-settlement-rows {
+  display: grid;
+}
+
+.payment-settlement-row {
+  border-top: 1px solid var(--border);
+  min-width: 0;
+  padding: 15px 0;
+}
+
+.payment-settlement-row:first-child {
+  border-top: 0;
+  padding-top: 2px;
+}
+
+.payment-settlement-row.is-skipped {
+  opacity: 0.62;
+}
+
+.payment-settlement-row-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.payment-settlement-row-header h4 {
+  color: var(--primary-2);
+  font-size: 0.98rem;
+  margin: 0;
+}
+
+.payment-settlement-row-header p {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  margin: 3px 0 0;
+}
+
+.payment-settlement-row-badge {
+  background: #eeedf2;
+  border-radius: 999px;
+  color: #595765;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 4px 9px;
+  white-space: nowrap;
+}
+
+.payment-settlement-row.is-matched .payment-settlement-row-badge {
+  background: #e8f4ed;
+  color: #246246;
+}
+
+.payment-settlement-row.is-new-transfer .payment-settlement-row-badge {
+  background: #fff2d6;
+  color: #73500d;
+}
+
+.payment-settlement-select-field {
+  max-width: 620px;
+}
+
+.payment-settlement-transfer-fields {
+  display: grid;
+  gap: 10px 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.payment-settlement-transfer-fields .field {
+  min-width: 0;
+}
+
+.payment-settlement-student-details,
+.payment-settlement-guidance {
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+  margin: -2px 0 2px;
+}
+
+.payment-settlement-student-details,
+.payment-settlement-guidance,
+.payment-settlement-allocation-preview {
+  grid-column: 1 / -1;
+}
+
+.payment-settlement-guidance {
+  background: var(--panel-alt);
+  border-radius: 8px;
+  margin: 0;
+  padding: 9px 11px;
+}
+
+.payment-settlement-allocation-preview {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.payment-settlement-allocation-preview > span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.payment-settlement-allocation {
+  list-style: none;
+  margin: 5px 0 0;
+  padding: 0;
+}
+
+.payment-settlement-allocation li {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 4px 0;
+}
+
+.payment-settlement-allocation strong {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.payment-settlement-row-hint,
+.payment-settlement-row-warning {
+  line-height: 1.45;
+  margin: 8px 0 0;
+}
+
+.payment-settlement-row-hint {
+  color: var(--muted);
+}
+
+.payment-settlement-row-warning {
+  color: #80570d;
+}
+
+.payment-settlement-row-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 13px;
+}
+
+.payment-settlement-row-actions label {
+  align-items: center;
+  color: var(--text);
+  display: inline-flex;
+  gap: 7px;
+}
+
+.payment-settlement-footer {
+  align-items: center;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 13px 24px;
+}
+
+.payment-settlement-footer > p {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.payment-settlement-footer > div {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.payment-settlement-dialog button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 900px) {
+  .payment-settlement-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .payment-settlement-file-name {
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .payment-settlement-workflow button {
+    justify-self: stretch;
+    width: 100%;
+  }
+
+  .payment-settlement-dialog {
+    border-radius: 0;
+    height: 100vh;
+    max-height: 100vh;
+    max-width: 100vw;
+    width: 100vw;
+  }
+
+  .payment-settlement-header {
+    padding: 16px;
+  }
+
+  .payment-settlement-header h2 {
+    font-size: 1.22rem;
+  }
+
+  .payment-settlement-header p {
+    font-size: 0.88rem;
+  }
+
+  .payment-settlement-body {
+    padding: 14px 16px 18px;
+  }
+
+  .payment-settlement-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .payment-settlement-toolbar > button,
+  .payment-settlement-file-button {
+    width: 100%;
+  }
+
+  .payment-settlement-section-heading {
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .payment-settlement-transfer-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .payment-settlement-footer {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 12px 16px;
+  }
+
+  .payment-settlement-footer > div {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
