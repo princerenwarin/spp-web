@@ -1084,15 +1084,51 @@
           <div id="studentCardPrintOptions" class="card-print-groups"></div>
           <aside class="card-print-preview-panel" aria-labelledby="studentCardPrintPreviewTitle">
             <div class="card-print-preview-heading">
-              <h3 id="studentCardPrintPreviewTitle">Pratinjau kartu</h3>
+              <div>
+                <h3 id="studentCardPrintPreviewTitle">Pratinjau kartu</h3>
+                <p class="card-print-preview-guide">Foto kartu hanya panduan layar dan tidak ikut tercetak.</p>
+              </div>
               <span>214 × 162 mm</span>
             </div>
             <div class="card-print-preview-viewport">
               <div id="studentCardPrintPreview" class="card-print-preview-stage" aria-live="polite"></div>
             </div>
             <p id="studentCardPrintPreviewCaption" class="card-print-preview-caption">Pilih pembayaran untuk melihat hasil cetak.</p>
-            <p class="card-print-preview-columns">Nonperiode: tanggal, DPP, DPS, kegiatan, administrasi/seragam. Per periode: tanggal, periode, SPP, komputer, kegiatan.</p>
-            <p class="card-print-preview-guide">Garis tabel pada pratinjau hanya panduan layar; tidak ikut dicetak.</p>
+            <p class="card-print-preview-columns">Nonperiode: tanggal, DPP, DPS, kegiatan, administrasi/seragam. Per periode: tanggal, periode, SPP setelah dikurangi BOS, komputer, kegiatan.</p>
+            <section class="card-print-calibration" aria-labelledby="studentCardCalibrationHeading">
+              <div>
+                <h4 id="studentCardCalibrationHeading">Kalibrasi printer</h4>
+                <p class="card-print-preview-guide">Simpan pengaturan sebagai profil printer agar dapat dipakai bersama.</p>
+              </div>
+              <div class="card-print-calibration-profiles">
+                <label>
+                  <span>Pilih profil</span>
+                  <select id="studentCardCalibrationProfile" aria-label="Profil kalibrasi printer"></select>
+                </label>
+                <label>
+                  <span>Nama profil</span>
+                  <input id="studentCardCalibrationName" type="text" maxlength="60" required placeholder="Contoh: Printer kantor" />
+                </label>
+              </div>
+              <div class="card-print-calibration-fields">
+                <label>
+                  <span>Geser horizontal (mm)</span>
+                  <input id="studentCardCalibrationX" type="number" min="-10" max="10" step="0.1" value="0" required />
+                </label>
+                <label>
+                  <span>Geser vertikal (mm)</span>
+                  <input id="studentCardCalibrationY" type="number" min="-10" max="10" step="0.1" value="0" required />
+                </label>
+                <label>
+                  <span>Skala (%)</span>
+                  <input id="studentCardCalibrationScale" type="number" min="95" max="105" step="0.1" value="100" required />
+                </label>
+              </div>
+              <div class="card-print-calibration-actions">
+                <button type="button" class="secondary-button small-button" id="studentCardCalibrationSave" disabled>Simpan profil</button>
+                <p id="studentCardCalibrationStatus" role="status" aria-live="polite">Memuat profil printer…</p>
+              </div>
+            </section>
           </aside>
         </div>
         <div class="form-actions">

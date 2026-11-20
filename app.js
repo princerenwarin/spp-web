@@ -150,6 +150,13 @@ const ui = {
   studentCardPrintOptions: document.getElementById('studentCardPrintOptions'),
   studentCardPrintPreview: document.getElementById('studentCardPrintPreview'),
   studentCardPrintPreviewCaption: document.getElementById('studentCardPrintPreviewCaption'),
+  studentCardCalibrationProfile: document.getElementById('studentCardCalibrationProfile'),
+  studentCardCalibrationName: document.getElementById('studentCardCalibrationName'),
+  studentCardCalibrationX: document.getElementById('studentCardCalibrationX'),
+  studentCardCalibrationY: document.getElementById('studentCardCalibrationY'),
+  studentCardCalibrationScale: document.getElementById('studentCardCalibrationScale'),
+  studentCardCalibrationSave: document.getElementById('studentCardCalibrationSave'),
+  studentCardCalibrationStatus: document.getElementById('studentCardCalibrationStatus'),
   studentCardPrintSubmit: document.getElementById('studentCardPrintSubmit'),
   studentCardPrintClose: document.getElementById('studentCardPrintClose'),
   studentCardPrintCancel: document.getElementById('studentCardPrintCancel'),
@@ -1908,7 +1915,8 @@ function buildStudentCardRows(items) {
     const itemKey = `${batchId}|${period || 'once'}`;
 
     let monthlyColumn = '';
-    if (['spp', 'spp_bos', 'spp_tl'].includes(component)) monthlyColumn = 'spp';
+    if (component === 'spp_bos') return;
+    if (['spp', 'spp_tl'].includes(component)) monthlyColumn = 'spp';
     if (['komp', 'komp_tl'].includes(component)) monthlyColumn = 'komp';
     if (component === 'giat' && period) monthlyColumn = 'giat';
 
@@ -2011,36 +2019,60 @@ function renderStudentCardGrid(rows, fields) {
   `).join('');
 }
 
-function studentSppCardMarkup(rows) {
-  return `
-    <article class="spp-card">
-      <section class="spp-card-grid spp-card-grid-one-time" aria-label="Pembayaran nonbulanan">
-        ${renderStudentCardGrid(rows.oneTimeRows, [
-          { key: 'date', align: 'date' },
-          { key: 'dpp' },
-          { key: 'dps' },
-          { key: 'giat' },
-          { key: 'admin' },
-          { key: 'ortu', align: 'blank' },
-          { key: 'kkms', align: 'blank' }
-        ])}
-      </section>
-      <section class="spp-card-grid spp-card-grid-monthly" aria-label="Pembayaran per periode">
-        ${renderStudentCardGrid(rows.monthlyRows, [
-          { key: 'date', align: 'date' },
-          { key: 'period', align: 'period' },
-          { key: 'spp' },
-          { key: 'komp' },
-          { key: 'giat' },
-          { key: 'ortu', align: 'blank' },
-          { key: 'kkms', align: 'blank' }
-        ])}
-      </section>
-    </article>`;
+function normalizeStudentCardCalibration(profile = {}) {
+  const calibration = {
+    offsetXmm: Number(profile.offset_x_mm ?? profile.offsetXmm ?? 0),
+    offsetYmm: Number(profile.offset_y_mm ?? profile.offsetYmm ?? 0),
+    scalePercent: Number(profile.scale_percent ?? profile.scalePercent ?? 100)
+  };
+  if (!Number.isFinite(calibration.offsetXmm) || calibration.offsetXmm < -10 || calibration.offsetXmm > 10
+    || !Number.isFinite(calibration.offsetYmm) || calibration.offsetYmm < -10 || calibration.offsetYmm > 10
+    || !Number.isFinite(calibration.scalePercent) || calibration.scalePercent < 95 || calibration.scalePercent > 105) {
+    throw new Error('Nilai kalibrasi kartu di luar batas yang diizinkan.');
+  }
+  return calibration;
 }
 
-function renderStudentSppCard(rows) {
-  ui.studentCardPrintSheet.innerHTML = studentSppCardMarkup(rows);
+function studentSppCardMarkup(rows, profile, preview = false) {
+  const calibration = normalizeStudentCardCalibration(profile);
+  const inkStyle = `--card-offset-x:${calibration.offsetXmm}mm;`
+    + `--card-offset-y:${calibration.offsetYmm}mm;`
+    + `--card-scale:${calibration.scalePercent / 100};`;
+  const card = `
+    <article class="spp-card">
+      ${preview ? `<div class="spp-card-reference">
+        <img src="./assets/student-spp-card-guide.jpeg" alt="Kartu SPP kosong sebagai panduan posisi cetak" />
+      </div>` : ''}
+      <div class="spp-card-ink" style="${inkStyle}">
+        <section class="spp-card-grid spp-card-grid-one-time" aria-label="Pembayaran nonbulanan">
+          ${renderStudentCardGrid(rows.oneTimeRows, [
+            { key: 'date', align: 'date' },
+            { key: 'dpp' },
+            { key: 'dps' },
+            { key: 'giat' },
+            { key: 'admin' },
+            { key: 'ortu', align: 'blank' },
+            { key: 'kkms', align: 'blank' }
+          ])}
+        </section>
+        <section class="spp-card-grid spp-card-grid-monthly" aria-label="Pembayaran per periode">
+          ${renderStudentCardGrid(rows.monthlyRows, [
+            { key: 'date', align: 'date' },
+            { key: 'period', align: 'period' },
+            { key: 'spp' },
+            { key: 'komp' },
+            { key: 'giat' },
+            { key: 'ortu', align: 'blank' },
+            { key: 'kkms', align: 'blank' }
+          ])}
+        </section>
+      </div>
+    </article>`;
+  return preview ? `<div class="spp-card-preview-zoom">${card}</div>` : card;
+}
+
+function renderStudentSppCard(rows, calibration) {
+  ui.studentCardPrintSheet.innerHTML = studentSppCardMarkup(rows, calibration);
   ui.studentCardPrintSheet.hidden = false;
   document.body.classList.add('printing-spp-card');
   window.print();
@@ -2053,7 +2085,7 @@ function studentCardPrintRowKey(section, batchId, period) {
 function studentCardPrintErrorMessage(error) {
   const message = String(error && error.message || '');
   if ((error && error.code === 'PGRST202') || /could not find the function|function .* does not exist/i.test(message)) {
-    return 'Fitur posisi cetak kartu belum tersedia di Supabase. Jalankan migration 020_card_print_tracking.sql dan 021_card_print_cursor.sql, lalu muat ulang aplikasi.';
+    return 'Fitur cetak atau kalibrasi kartu belum tersedia di Supabase. Pastikan migration 020_card_print_tracking.sql, 021_card_print_cursor.sql, dan 034_card_print_calibration_profiles.sql sudah dijalankan.';
   }
   return message || 'Kartu SPP gagal dimuat.';
 }
@@ -2206,7 +2238,7 @@ function updateStudentCardPrintSelectionUi() {
       previewRows[section === 'one_time' ? 'oneTimeRows' : 'monthlyRows'].push({ ...row, rowNumber });
     }
   });
-  ui.studentCardPrintPreview.innerHTML = studentSppCardMarkup(previewRows);
+  ui.studentCardPrintPreview.innerHTML = studentSppCardMarkup(previewRows, context.calibration, true);
   fitStudentCardPreview();
   ui.studentCardPrintPreviewCaption.textContent = selected.length
     ? `${selected.length} pembayaran dipilih · ${counts.one_time} nonperiode · ${counts.monthly} per periode`
@@ -2229,10 +2261,153 @@ function updateStudentCardPrintSelectionUi() {
 
 function fitStudentCardPreview() {
   const viewport = ui.studentCardPrintPreview.closest('.card-print-preview-viewport');
-  const card = ui.studentCardPrintPreview.querySelector('.spp-card');
+  const card = ui.studentCardPrintPreview.querySelector('.spp-card-preview-zoom');
   if (!viewport || !card || !viewport.clientWidth || !card.offsetWidth) return;
-  const scale = Math.min(viewport.clientWidth / card.offsetWidth, 1);
+  const scale = Math.min(viewport.clientWidth / card.offsetWidth, viewport.clientHeight / card.offsetHeight, 1);
   card.style.transform = `scale(${scale})`;
+}
+
+async function loadStudentCardPrintProfiles(student) {
+  const credentials = app.cardPrintCredentials;
+  if (!credentials) throw new Error('Sesi login tidak tersedia untuk memuat profil kalibrasi.');
+  const { data, error } = await app.supabase.rpc('get_spp_card_print_profiles_v1', {
+    p_username: credentials.username,
+    p_password: credentials.password,
+    p_kdsek: student.kdsek
+  });
+  if (error) throw error;
+  if (!Array.isArray(data) || !data.length) {
+    throw new Error('Profil kalibrasi belum tersedia. Pastikan migration 034 sudah dijalankan.');
+  }
+  return data;
+}
+
+function applyStudentCardCalibrationToPreview() {
+  const context = app.studentCardPrintContext;
+  if (!context) return;
+  const ink = ui.studentCardPrintPreview.querySelector('.spp-card-ink');
+  if (ink) {
+    ink.style.setProperty('--card-offset-x', `${context.calibration.offsetXmm}mm`);
+    ink.style.setProperty('--card-offset-y', `${context.calibration.offsetYmm}mm`);
+    ink.style.setProperty('--card-scale', String(context.calibration.scalePercent / 100));
+  }
+  fitStudentCardPreview();
+}
+
+function readStudentCardCalibrationControls() {
+  const controls = [
+    ui.studentCardCalibrationX,
+    ui.studentCardCalibrationY,
+    ui.studentCardCalibrationScale
+  ];
+  if (controls.some((input) => !input.value || !input.checkValidity())) return null;
+  return normalizeStudentCardCalibration({
+    offsetXmm: Number(ui.studentCardCalibrationX.value),
+    offsetYmm: Number(ui.studentCardCalibrationY.value),
+    scalePercent: Number(ui.studentCardCalibrationScale.value)
+  });
+}
+
+function setStudentCardCalibrationProfile(profile) {
+  const context = app.studentCardPrintContext;
+  if (!context || !profile) return;
+  context.calibration = normalizeStudentCardCalibration(profile);
+  context.calibrationProfileName = profile.profile_name;
+  ui.studentCardCalibrationProfile.value = profile.profile_name;
+  ui.studentCardCalibrationName.value = profile.profile_name;
+  ui.studentCardCalibrationX.value = context.calibration.offsetXmm;
+  ui.studentCardCalibrationY.value = context.calibration.offsetYmm;
+  ui.studentCardCalibrationScale.value = context.calibration.scalePercent;
+  applyStudentCardCalibrationToPreview();
+}
+
+function renderStudentCardCalibrationProfiles(profiles, selectedName = '') {
+  const context = app.studentCardPrintContext;
+  if (!context) return;
+  context.calibrationProfiles = profiles;
+  ui.studentCardCalibrationProfile.innerHTML = profiles.map((profile) => (
+    `<option value="${escapeHtml(profile.profile_name)}">${escapeHtml(profile.profile_name)}</option>`
+  )).join('');
+  const selected = profiles.find((profile) => profile.profile_name === selectedName)
+    || profiles.find((profile) => profile.profile_name.toLowerCase() === 'default')
+    || profiles[0];
+  setStudentCardCalibrationProfile(selected);
+  ui.studentCardCalibrationSave.disabled = !app.adminCredentials;
+  ui.studentCardCalibrationStatus.textContent = app.adminCredentials
+    ? 'Kalibrasi pratinjau aktif. Simpan perubahan sebagai profil agar dapat dipakai bersama.'
+    : 'Pilih profil untuk pratinjau. Hanya Admin yang dapat menyimpan perubahan profil.';
+}
+
+function updateStudentCardCalibrationPreview() {
+  const context = app.studentCardPrintContext;
+  if (!context) return;
+  const calibration = readStudentCardCalibrationControls();
+  if (!calibration) {
+    ui.studentCardCalibrationStatus.textContent = 'Periksa nilai kalibrasi: X/Y harus −10 sampai 10 mm dan skala 95–105%.';
+    return;
+  }
+  context.calibration = calibration;
+  applyStudentCardCalibrationToPreview();
+  ui.studentCardCalibrationStatus.textContent = 'Pratinjau diperbarui. Simpan profil untuk menggunakan kalibrasi ini lagi.';
+}
+
+async function saveStudentCardPrintProfile() {
+  const context = app.studentCardPrintContext;
+  if (!context) return;
+  if (!app.adminCredentials) {
+    ui.studentCardCalibrationStatus.textContent = 'Hanya Admin yang dapat menyimpan profil kalibrasi.';
+    return;
+  }
+  const profileName = ui.studentCardCalibrationName.value.trim();
+  if (!profileName) {
+    ui.studentCardCalibrationStatus.textContent = 'Nama profil wajib diisi.';
+    ui.studentCardCalibrationName.focus();
+    return;
+  }
+  if (profileName.length > 60 || !ui.studentCardCalibrationName.checkValidity()) {
+    ui.studentCardCalibrationName.reportValidity();
+    return;
+  }
+  const calibration = readStudentCardCalibrationControls();
+  if (!calibration) {
+    ui.studentCardCalibrationX.reportValidity();
+    ui.studentCardCalibrationY.reportValidity();
+    ui.studentCardCalibrationScale.reportValidity();
+    return;
+  }
+
+  const button = ui.studentCardCalibrationSave;
+  button.disabled = true;
+  button.textContent = 'Menyimpan…';
+  ui.studentCardCalibrationStatus.textContent = 'Menyimpan profil ke database…';
+  try {
+    const { data, error } = await app.supabase.rpc('save_spp_card_print_profile_v1', {
+      p_username: app.adminCredentials.username,
+      p_password: app.adminCredentials.password,
+      p_profile_name: profileName,
+      p_offset_x_mm: calibration.offsetXmm,
+      p_offset_y_mm: calibration.offsetYmm,
+      p_scale_percent: calibration.scalePercent
+    });
+    if (error) throw error;
+    if (!Array.isArray(data) || !data[0]) {
+      throw new Error('Database tidak mengembalikan profil kalibrasi yang tersimpan.');
+    }
+    const profiles = [
+      ...context.calibrationProfiles.filter((profile) => (
+        profile.profile_name.toLowerCase() !== data[0].profile_name.toLowerCase()
+      )),
+      data[0]
+    ].sort((a, b) => a.profile_name.localeCompare(b.profile_name, 'id'));
+    renderStudentCardCalibrationProfiles(profiles, data[0].profile_name);
+    ui.studentCardCalibrationStatus.textContent = `Profil “${data[0].profile_name}” tersimpan dan siap digunakan bersama.`;
+  } catch (error) {
+    console.error('Unable to save SPP card calibration profile:', error);
+    ui.studentCardCalibrationStatus.textContent = studentCardPrintErrorMessage(error);
+  } finally {
+    button.textContent = 'Simpan profil';
+    button.disabled = !app.adminCredentials;
+  }
 }
 
 async function loadStudentCardPrintStatus(student, year) {
@@ -2347,6 +2522,9 @@ async function openStudentCardPrintDialog(candidate) {
   ui.studentCardPrintOptions.innerHTML = '<p class="card-print-loading">Memuat daftar pembayaran…</p>';
   ui.studentCardPrintPreview.replaceChildren();
   ui.studentCardPrintPreviewCaption.textContent = 'Memuat pratinjau kartu…';
+  ui.studentCardCalibrationProfile.innerHTML = '<option value="">Memuat profil…</option>';
+  ui.studentCardCalibrationSave.disabled = true;
+  ui.studentCardCalibrationStatus.textContent = 'Memuat profil kalibrasi printer…';
   ui.studentCardPrintSubmit.disabled = true;
   ui.studentCardPrintSubmit.textContent = 'Memuat…';
   app.studentCardPrintContext = null;
@@ -2354,9 +2532,10 @@ async function openStudentCardPrintDialog(candidate) {
 
   try {
     const range = getStudentCardAcademicYearRange();
-    const [items, printHistory] = await Promise.all([
+    const [items, printHistory, calibrationProfiles] = await Promise.all([
       loadStudentCardTransactions(student, range),
-      loadStudentCardPrintStatus(student, range.year)
+      loadStudentCardPrintStatus(student, range.year),
+      loadStudentCardPrintProfiles(student)
     ]);
     const firstItem = items[0] || {};
     student.nama = student.nama || firstItem.nama || '';
@@ -2370,9 +2549,12 @@ async function openStudentCardPrintDialog(candidate) {
       rows,
       nextRows: { one_time: 1, monthly: 1 },
       statusByKey: new Map(),
+      calibrationProfiles: [],
+      calibration: normalizeStudentCardCalibration(),
       unallocatedCount: rowGroups.unallocatedCount
     };
 
+    renderStudentCardCalibrationProfiles(calibrationProfiles);
     renderStudentCardPrintOptions(app.studentCardPrintContext, printHistory);
   } catch (error) {
     console.error('Unable to load SPP card print options:', error);
@@ -2380,6 +2562,7 @@ async function openStudentCardPrintDialog(candidate) {
     ui.studentCardPrintStatus.className = 'card-print-status is-error';
     ui.studentCardPrintPreviewCaption.textContent = 'Pratinjau tersedia setelah transaksi dan posisi cetak berhasil dimuat.';
     ui.studentCardPrintOptions.replaceChildren();
+    ui.studentCardCalibrationStatus.textContent = error.message || 'Profil kalibrasi gagal dimuat.';
     ui.studentCardPrintSubmit.disabled = true;
     ui.studentCardPrintSubmit.textContent = 'Cetak pilihan';
   }
@@ -2462,7 +2645,7 @@ async function submitStudentCardPrint() {
       context.statusByKey.set(key, { count, lastRow: rowNumber });
       context.nextRows[row.section] = Math.max(context.nextRows[row.section], rowNumber + 1);
     });
-    renderStudentSppCard(printedRows);
+    renderStudentSppCard(printedRows, context.calibration);
   } catch (error) {
     console.error('Unable to reserve SPP card print rows:', error);
     ui.studentCardPrintStatus.textContent = studentCardPrintErrorMessage(error);
@@ -8913,6 +9096,22 @@ function setupEvents() {
     if (event.target === ui.studentDialog) closeStudentDialog();
   });
   ui.studentCardPrintOptions.addEventListener('change', updateStudentCardPrintSelectionUi);
+  ui.studentCardCalibrationProfile.addEventListener('change', () => {
+    const context = app.studentCardPrintContext;
+    if (!context) return;
+    const selected = context.calibrationProfiles.find((profile) => (
+      profile.profile_name === ui.studentCardCalibrationProfile.value
+    ));
+    if (!selected) return;
+    setStudentCardCalibrationProfile(selected);
+    ui.studentCardCalibrationStatus.textContent = `Pratinjau memakai profil “${selected.profile_name}”.`;
+  });
+  [
+    ui.studentCardCalibrationX,
+    ui.studentCardCalibrationY,
+    ui.studentCardCalibrationScale
+  ].forEach((input) => input.addEventListener('input', updateStudentCardCalibrationPreview));
+  ui.studentCardCalibrationSave.addEventListener('click', saveStudentCardPrintProfile);
   ui.studentCardPrintOptions.addEventListener('click', (event) => {
     const selectionButton = event.target.closest('[data-card-selection]');
     if (selectionButton) {
