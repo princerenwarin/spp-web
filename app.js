@@ -148,6 +148,8 @@ const ui = {
   studentCardPrintStudent: document.getElementById('studentCardPrintStudent'),
   studentCardPrintStatus: document.getElementById('studentCardPrintStatus'),
   studentCardPrintOptions: document.getElementById('studentCardPrintOptions'),
+  studentCardPrintSelectionSummary: document.getElementById('studentCardPrintSelectionSummary'),
+  studentCardPrintSelectedCount: document.getElementById('studentCardPrintSelectedCount'),
   studentCardPrintPreview: document.getElementById('studentCardPrintPreview'),
   studentCardPrintPreviewCaption: document.getElementById('studentCardPrintPreviewCaption'),
   studentCardCalibrationProfile: document.getElementById('studentCardCalibrationProfile'),
@@ -2033,16 +2035,85 @@ function normalizeStudentCardCalibration(profile = {}) {
   return calibration;
 }
 
-function studentSppCardMarkup(rows, profile, preview = false) {
+function renderStudentCardPreviewTable(items, fields, section) {
+  const rowsByNumber = new Map(items.map((row) => [Number(row.rowNumber), row]));
+  const headings = fields.map(([, label]) => `<span>${escapeHtml(label)}</span>`).join('');
+  const tableHeadings = section === 'monthly'
+    ? `<div class="spp-card-mock-row spp-card-mock-group-head">
+        <span>Cetak</span><span>Brs</span><span>Bln/Tgl</span><span>Periode</span>
+        <span class="spp-card-mock-payment-group">Pembayaran</span>
+        <span class="spp-card-mock-signature-group">Tanda tangan</span>
+      </div>
+      <div class="spp-card-mock-row spp-card-mock-head">
+        <span></span><span></span><span></span><span></span>${fields.slice(2).map(([, label]) => `<span>${escapeHtml(label)}</span>`).join('')}
+      </div>`
+    : `<div class="spp-card-mock-row spp-card-mock-head">
+        <span>Cetak</span><span>Brs</span>${headings}
+      </div>`;
+  const rows = Array.from({ length: STUDENT_CARD_ROW_COUNT }, (_, index) => {
+    const rowNumber = index + 1;
+    const row = rowsByNumber.get(rowNumber);
+    const selected = !!(row && row.previewSelected);
+    const values = fields.map(([key]) => {
+      if (key === 'date' || key === 'period') return row ? row[key] || '' : '';
+      return row ? formatStudentCardAmount(row[key]) : '';
+    });
+    const checkbox = row
+      ? `<input type="checkbox" data-card-preview-index="${row.optionIndex}"${selected ? ' checked' : ''} aria-label="${selected ? 'Batalkan pilihan' : 'Pilih'} pembayaran ${escapeHtml(row.date || row.period || '')} pada baris ${rowNumber}">`
+      : '';
+    return `<div class="spp-card-mock-row${selected ? ' is-selected' : row ? ' is-available' : ''}">
+      <span class="spp-card-mock-check">${checkbox}</span>
+      <span class="spp-card-mock-number">${rowNumber}</span>
+      ${values.map((value) => `<span>${escapeHtml(value || '')}</span>`).join('')}
+    </div>`;
+  }).join('');
+  return `<section class="spp-card-mock-table spp-card-mock-${section}">${tableHeadings}${rows}</section>`;
+}
+
+function studentSppCardMarkup(rows, profile, preview = false, student = null) {
   const calibration = normalizeStudentCardCalibration(profile);
   const inkStyle = `--card-offset-x:${calibration.offsetXmm}mm;`
     + `--card-offset-y:${calibration.offsetYmm}mm;`
     + `--card-scale:${calibration.scalePercent / 100};`;
+  if (preview) {
+    const identity = [
+      student && student.nama,
+      student && student.nospp ? `NIS: ${student.nospp}` : '',
+      student && student.kdsek,
+      student && student.kdkls ? `Kelas ${student.kdkls}` : ''
+    ].filter(Boolean).map(escapeHtml).join(' · ');
+    return `<div class="spp-card-preview-zoom">
+      <article class="spp-card spp-card-mock">
+        <div class="spp-card-ink spp-card-mock-spread" style="${inkStyle}">
+          <section class="spp-card-mock-page">
+            <header class="spp-card-mock-heading">
+              <h4>Kartu SPP · bentangan kiri & kanan</h4>
+              <span>1 kartu terbuka · 21,4 × 16,2 cm</span>
+            </header>
+            <div class="spp-card-mock-identity">${identity || 'Identitas siswa'}</div>
+            ${renderStudentCardPreviewTable(
+              rows.oneTimeRows,
+              [
+                ['date', 'Tgl'], ['dpp', 'DPP'], ['dps', 'DPS'], ['giat', 'Kegiatan'],
+                ['admin', 'Seragam & Adm.'], ['ortu', 'Ortu'], ['kkms', 'KKMS']
+              ],
+              'one-time'
+            )}
+            ${renderStudentCardPreviewTable(
+              rows.monthlyRows,
+              [
+                ['date', 'Bln/Tgl'], ['period', 'Periode'], ['spp', 'SPP'],
+                ['komp', 'Komputer'], ['giat', 'Kegiatan'], ['ortu', 'Ortu'], ['kkms', 'KKMS']
+              ],
+              'monthly'
+            )}
+          </section>
+        </div>
+      </article>
+    </div>`;
+  }
   const card = `
     <article class="spp-card">
-      ${preview ? `<div class="spp-card-reference">
-        <img src="./assets/student-spp-card-guide.jpeg" alt="Kartu SPP kosong sebagai panduan posisi cetak" />
-      </div>` : ''}
       <div class="spp-card-ink" style="${inkStyle}">
         <section class="spp-card-grid spp-card-grid-one-time" aria-label="Pembayaran nonbulanan">
           ${renderStudentCardGrid(rows.oneTimeRows, [
@@ -2068,7 +2139,7 @@ function studentSppCardMarkup(rows, profile, preview = false) {
         </section>
       </div>
     </article>`;
-  return preview ? `<div class="spp-card-preview-zoom">${card}</div>` : card;
+  return card;
 }
 
 function renderStudentSppCard(rows, calibration) {
@@ -2174,13 +2245,6 @@ function renderStudentCardPrintOptions(context, printHistory, preserveSelection 
   const oneTimeRows = context.rows.filter((row) => row.section === 'one_time');
   const monthlyRows = context.rows.filter((row) => row.section === 'monthly');
   ui.studentCardPrintOptions.innerHTML = [
-    `<div class="card-print-selection-toolbar">
-      <p>Pilih semua juga mencakup transaksi yang sudah pernah dicetak.</p>
-      <div class="card-print-selection-actions">
-        <button type="button" class="secondary-button small-button" data-card-selection="all"${context.rows.length ? '' : ' disabled'}>Pilih semua</button>
-        <button type="button" class="secondary-button small-button" data-card-selection="none"${context.rows.length ? '' : ' disabled'}>Kosongkan pilihan</button>
-      </div>
-    </div>`,
     renderStudentCardPrintGroup(
       'Pembayaran nonperiode',
       'one_time',
@@ -2208,7 +2272,7 @@ function updateStudentCardPrintSelectionUi() {
   const selected = [...ui.studentCardPrintOptions.querySelectorAll('[data-card-print-index]:checked')]
     .map((input) => context.rows[Number(input.dataset.cardPrintIndex)])
     .filter(Boolean);
-  ui.studentCardPrintOptions.querySelectorAll('[data-card-selection]').forEach((button) => {
+  ui.studentCardPrintDialog.querySelectorAll('[data-card-selection]').forEach((button) => {
     button.disabled = !context.rows.length;
   });
   const counts = { one_time: 0, monthly: 0 };
@@ -2230,19 +2294,42 @@ function updateStudentCardPrintSelectionUi() {
   ));
   const previewRows = { oneTimeRows: [], monthlyRows: [] };
   const previewCounts = { one_time: 0, monthly: 0 };
+  const selectedIndexes = new Set(selected.map((row) => row.optionIndex));
   selected.forEach((row) => {
     const section = row.section;
     const rowNumber = context.nextRows[section] + previewCounts[section];
     previewCounts[section] += 1;
     if (rowNumber <= STUDENT_CARD_ROW_COUNT) {
-      previewRows[section === 'one_time' ? 'oneTimeRows' : 'monthlyRows'].push({ ...row, rowNumber });
+      previewRows[section === 'one_time' ? 'oneTimeRows' : 'monthlyRows'].push({
+        ...row,
+        rowNumber,
+        previewSelected: true
+      });
     }
   });
-  ui.studentCardPrintPreview.innerHTML = studentSppCardMarkup(previewRows, context.calibration, true);
+  const availableCounts = { one_time: 0, monthly: 0 };
+  context.rows.forEach((row) => {
+    if (selectedIndexes.has(row.optionIndex)) return;
+    const section = row.section;
+    const rowNumber = context.nextRows[section] + previewCounts[section] + availableCounts[section];
+    availableCounts[section] += 1;
+    if (rowNumber <= STUDENT_CARD_ROW_COUNT) {
+      previewRows[section === 'one_time' ? 'oneTimeRows' : 'monthlyRows'].push({
+        ...row,
+        rowNumber,
+        previewSelected: false
+      });
+    }
+  });
+  ui.studentCardPrintPreview.innerHTML = studentSppCardMarkup(previewRows, context.calibration, true, context.student);
   fitStudentCardPreview();
-  ui.studentCardPrintPreviewCaption.textContent = selected.length
+  ui.studentCardPrintSelectionSummary.textContent = selected.length
     ? `${selected.length} pembayaran dipilih · ${counts.one_time} nonperiode · ${counts.monthly} per periode`
-    : 'Pilih pembayaran untuk melihat hasil cetak.';
+    : 'Pilih transaksi pada kartu atau daftar pembayaran.';
+  ui.studentCardPrintSelectedCount.textContent = `${selected.length} dipilih dari ${context.rows.length}`;
+  ui.studentCardPrintPreviewCaption.textContent = selected.length
+    ? 'Baris berwarna siap dicetak; baris abu-abu belum dipilih.'
+    : 'Pilih transaksi langsung pada kotak di dalam baris kartu.';
   ui.studentCardPrintSubmit.disabled = !selected.length || overCapacity;
   ui.studentCardPrintSubmit.textContent = `Cetak pilihan (${selected.length})`;
   if (overCapacity) {
@@ -2520,6 +2607,10 @@ async function openStudentCardPrintDialog(candidate) {
   ui.studentCardPrintStatus.textContent = 'Memuat transaksi dan posisi cetak bersama…';
   ui.studentCardPrintStatus.className = 'card-print-status';
   ui.studentCardPrintOptions.innerHTML = '<p class="card-print-loading">Memuat daftar pembayaran…</p>';
+  ui.studentCardPrintSelectionSummary.textContent = 'Memuat pilihan pembayaran…';
+  ui.studentCardPrintSelectedCount.textContent = 'Memuat transaksi…';
+  const transactionList = ui.studentCardPrintOptions.closest('details');
+  if (transactionList) transactionList.open = false;
   ui.studentCardPrintPreview.replaceChildren();
   ui.studentCardPrintPreviewCaption.textContent = 'Memuat pratinjau kartu…';
   ui.studentCardCalibrationProfile.innerHTML = '<option value="">Memuat profil…</option>';
@@ -9096,6 +9187,16 @@ function setupEvents() {
     if (event.target === ui.studentDialog) closeStudentDialog();
   });
   ui.studentCardPrintOptions.addEventListener('change', updateStudentCardPrintSelectionUi);
+  ui.studentCardPrintPreview.addEventListener('change', (event) => {
+    const previewInput = event.target.closest('[data-card-preview-index]');
+    if (!previewInput) return;
+    const optionIndex = Number(previewInput.dataset.cardPreviewIndex);
+    const optionInput = [...ui.studentCardPrintOptions.querySelectorAll('[data-card-print-index]')]
+      .find((input) => Number(input.dataset.cardPrintIndex) === optionIndex);
+    if (!optionInput) return;
+    optionInput.checked = previewInput.checked;
+    updateStudentCardPrintSelectionUi();
+  });
   ui.studentCardCalibrationProfile.addEventListener('change', () => {
     const context = app.studentCardPrintContext;
     if (!context) return;
@@ -9113,6 +9214,10 @@ function setupEvents() {
   ].forEach((input) => input.addEventListener('input', updateStudentCardCalibrationPreview));
   ui.studentCardCalibrationSave.addEventListener('click', saveStudentCardPrintProfile);
   ui.studentCardPrintOptions.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-card-reset]');
+    if (button) resetStudentCardPrintPosition(button.dataset.cardReset);
+  });
+  ui.studentCardPrintDialog.addEventListener('click', (event) => {
     const selectionButton = event.target.closest('[data-card-selection]');
     if (selectionButton) {
       const checked = selectionButton.dataset.cardSelection === 'all';
@@ -9123,8 +9228,13 @@ function setupEvents() {
       return;
     }
 
-    const button = event.target.closest('[data-card-reset]');
-    if (button) resetStudentCardPrintPosition(button.dataset.cardReset);
+    const nudgeButton = event.target.closest('[data-card-nudge]');
+    if (!nudgeButton) return;
+    const input = document.getElementById(nudgeButton.dataset.cardTarget);
+    if (!input) return;
+    const next = Math.max(Number(input.min), Math.min(Number(input.max), Number(input.value || 0) + Number(nudgeButton.dataset.cardNudge)));
+    input.value = next.toFixed(1);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
   });
   ui.studentCardPrintSubmit.addEventListener('click', submitStudentCardPrint);
   ui.studentCardPrintClose.addEventListener('click', () => ui.studentCardPrintDialog.close());

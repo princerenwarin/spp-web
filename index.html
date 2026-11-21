@@ -1073,62 +1073,98 @@
       <form method="dialog">
         <div class="card-print-dialog-heading">
           <div>
-            <h2>Cetak Kartu SPP</h2>
+            <div class="card-print-title">
+              <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22">
+                <path d="M7 8V3h10v5M7 17H5a2 2 0 0 1-2-2v-4a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M17.5 11.5h.01" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+              </svg>
+              <h2>Cetak Buku Kartu SPP Siswa</h2>
+            </div>
             <p id="studentCardPrintStudent" class="muted-copy"></p>
           </div>
           <button type="button" class="modal-close" id="studentCardPrintClose" aria-label="Tutup">&times;</button>
         </div>
         <p id="studentCardPrintStatus" class="card-print-status" role="status" aria-live="polite"></p>
-        <p class="card-print-note">Pilih pembayaran untuk melihat posisi cetaknya pada pratinjau. Posisi dikunci sebelum perintah cetak; jika posisi berubah karena proses lain, pratinjau diperbarui sebelum cetak dilanjutkan. Jika cetak dibatalkan setelah posisi dikunci, pilih transaksi yang sama untuk dicetak ulang pada baris berikutnya.</p>
-        <div class="card-print-workspace">
+        <div class="card-print-position-bar" aria-label="Pengaturan posisi cetak">
+          <div class="card-print-position-copy">
+            <strong>Setel posisi cetak kertas</strong>
+            <span>Geser langsung, pratinjau kartu ikut berubah.</span>
+          </div>
+          <div class="card-print-position-controls">
+            <label>
+              <span>Geser kiri/kanan</span>
+              <span class="card-print-number-control">
+                <button type="button" class="card-print-nudge" data-card-nudge="-0.1" data-card-target="studentCardCalibrationX" aria-label="Geser 0,1 mm ke kiri">−</button>
+                <input id="studentCardCalibrationX" type="number" min="-10" max="10" step="0.1" value="0" required aria-label="Geser kiri atau kanan dalam milimeter" />
+                <button type="button" class="card-print-nudge" data-card-nudge="0.1" data-card-target="studentCardCalibrationX" aria-label="Geser 0,1 mm ke kanan">+</button>
+                <span>mm</span>
+              </span>
+            </label>
+            <label>
+              <span>Geser naik/turun</span>
+              <span class="card-print-number-control">
+                <button type="button" class="card-print-nudge" data-card-nudge="-0.1" data-card-target="studentCardCalibrationY" aria-label="Geser 0,1 mm ke atas">−</button>
+                <input id="studentCardCalibrationY" type="number" min="-10" max="10" step="0.1" value="0" required aria-label="Geser naik atau turun dalam milimeter" />
+                <button type="button" class="card-print-nudge" data-card-nudge="0.1" data-card-target="studentCardCalibrationY" aria-label="Geser 0,1 mm ke bawah">+</button>
+                <span>mm</span>
+              </span>
+            </label>
+            <label class="card-print-scale-control">
+              <span>Skala</span>
+              <span class="card-print-number-control">
+                <input id="studentCardCalibrationScale" type="number" min="95" max="105" step="0.1" value="100" required aria-label="Skala cetak dalam persen" />
+                <span>%</span>
+              </span>
+            </label>
+          </div>
+        </div>
+        <div class="card-print-selection-toolbar">
+          <p id="studentCardPrintSelectionSummary">Pilih transaksi pada kartu atau daftar pembayaran.</p>
+          <div class="card-print-selection-actions">
+            <button type="button" class="secondary-button small-button" data-card-selection="all">Pilih semua</button>
+            <button type="button" class="secondary-button small-button" data-card-selection="none">Kosongkan pilihan</button>
+          </div>
+        </div>
+        <details class="card-print-transaction-list">
+          <summary>
+            <span>Daftar transaksi</span>
+            <span id="studentCardPrintSelectedCount">Memuat transaksi…</span>
+          </summary>
           <div id="studentCardPrintOptions" class="card-print-groups"></div>
+        </details>
+        <div class="card-print-workspace">
           <aside class="card-print-preview-panel" aria-labelledby="studentCardPrintPreviewTitle">
             <div class="card-print-preview-heading">
               <div>
                 <h3 id="studentCardPrintPreviewTitle">Pratinjau kartu</h3>
-                <p class="card-print-preview-guide">Foto kartu hanya panduan layar dan tidak ikut tercetak.</p>
+                <p class="card-print-preview-guide">Bidang berwarna menandai transaksi terpilih.</p>
               </div>
-              <span>214 × 162 mm</span>
+              <span>1 kartu terbuka · 21,4 × 16,2 cm</span>
             </div>
             <div class="card-print-preview-viewport">
               <div id="studentCardPrintPreview" class="card-print-preview-stage" aria-live="polite"></div>
             </div>
             <p id="studentCardPrintPreviewCaption" class="card-print-preview-caption">Pilih pembayaran untuk melihat hasil cetak.</p>
-            <p class="card-print-preview-columns">Nonperiode: tanggal, DPP, DPS, kegiatan, administrasi/seragam. Per periode: tanggal, periode, SPP setelah dikurangi BOS, komputer, kegiatan.</p>
-            <section class="card-print-calibration" aria-labelledby="studentCardCalibrationHeading">
-              <div>
-                <h4 id="studentCardCalibrationHeading">Kalibrasi printer</h4>
-                <p class="card-print-preview-guide">Simpan pengaturan sebagai profil printer agar dapat dipakai bersama.</p>
+            <details class="card-print-profile">
+              <summary id="studentCardCalibrationHeading">Simpan pengaturan printer</summary>
+              <div class="card-print-profile-content">
+                <p class="card-print-preview-guide">Profil dapat dipakai bersama untuk printer yang sama.</p>
+                <div class="card-print-calibration-profiles">
+                  <label>
+                    <span>Pilih profil</span>
+                    <select id="studentCardCalibrationProfile" aria-label="Profil kalibrasi printer"></select>
+                  </label>
+                  <label>
+                    <span>Nama profil</span>
+                    <input id="studentCardCalibrationName" type="text" maxlength="60" required placeholder="Contoh: Printer kantor" />
+                  </label>
+                </div>
+                <div class="card-print-calibration-actions">
+                  <button type="button" class="secondary-button small-button" id="studentCardCalibrationSave" disabled>Simpan profil</button>
+                  <p id="studentCardCalibrationStatus" role="status" aria-live="polite">Memuat profil printer…</p>
+                </div>
               </div>
-              <div class="card-print-calibration-profiles">
-                <label>
-                  <span>Pilih profil</span>
-                  <select id="studentCardCalibrationProfile" aria-label="Profil kalibrasi printer"></select>
-                </label>
-                <label>
-                  <span>Nama profil</span>
-                  <input id="studentCardCalibrationName" type="text" maxlength="60" required placeholder="Contoh: Printer kantor" />
-                </label>
-              </div>
-              <div class="card-print-calibration-fields">
-                <label>
-                  <span>Geser horizontal (mm)</span>
-                  <input id="studentCardCalibrationX" type="number" min="-10" max="10" step="0.1" value="0" required />
-                </label>
-                <label>
-                  <span>Geser vertikal (mm)</span>
-                  <input id="studentCardCalibrationY" type="number" min="-10" max="10" step="0.1" value="0" required />
-                </label>
-                <label>
-                  <span>Skala (%)</span>
-                  <input id="studentCardCalibrationScale" type="number" min="95" max="105" step="0.1" value="100" required />
-                </label>
-              </div>
-              <div class="card-print-calibration-actions">
-                <button type="button" class="secondary-button small-button" id="studentCardCalibrationSave" disabled>Simpan profil</button>
-                <p id="studentCardCalibrationStatus" role="status" aria-live="polite">Memuat profil printer…</p>
-              </div>
-            </section>
+            </details>
           </aside>
         </div>
         <div class="form-actions">
