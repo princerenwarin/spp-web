@@ -157,6 +157,7 @@ const ui = {
   studentCardCalibrationX: document.getElementById('studentCardCalibrationX'),
   studentCardCalibrationY: document.getElementById('studentCardCalibrationY'),
   studentCardCalibrationScale: document.getElementById('studentCardCalibrationScale'),
+  studentCardPrintFontSize: document.getElementById('studentCardPrintFontSize'),
   studentCardCalibrationSave: document.getElementById('studentCardCalibrationSave'),
   studentCardCalibrationStatus: document.getElementById('studentCardCalibrationStatus'),
   studentCardPrintSubmit: document.getElementById('studentCardPrintSubmit'),
@@ -1887,7 +1888,7 @@ async function loadStudentCardTransactions(student, range) {
 
 function formatStudentCardDate(value) {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ''));
-  return match ? `${match[3]}/${match[2]}` : '';
+  return match ? `${match[3]}/${match[2]}/${match[1].slice(-2)}` : '';
 }
 
 function formatStudentCardPeriod(value) {
@@ -1900,6 +1901,7 @@ function formatStudentCardPeriod(value) {
 function buildStudentCardRows(items) {
   const oneTimeRows = new Map();
   const monthlyRows = new Map();
+  const bosByKey = new Map();
   let unallocatedCount = 0;
 
   items.forEach((item, index) => {
@@ -1917,8 +1919,16 @@ function buildStudentCardRows(items) {
     const itemKey = `${batchId}|${period || 'once'}`;
 
     let monthlyColumn = '';
-    if (component === 'spp_bos') return;
-    if (['spp', 'spp_tl'].includes(component)) monthlyColumn = 'spp';
+    if (component === 'spp_bos') {
+      if (period) {
+        bosByKey.set(itemKey, (bosByKey.get(itemKey) || 0) + amount);
+      }
+      return;
+    }
+    if (component === 'spp') monthlyColumn = 'spp';
+    if (component === 'spp_tl') {
+      monthlyColumn = '';
+    }
     if (['komp', 'komp_tl'].includes(component)) monthlyColumn = 'komp';
     if (component === 'giat' && period) monthlyColumn = 'giat';
 
@@ -1953,7 +1963,9 @@ function buildStudentCardRows(items) {
     let oneTimeColumn = '';
     if (component === 'dpp' || component === 'dpp_tl') oneTimeColumn = 'dpp';
     if (component === 'dsp') oneTimeColumn = 'dps';
-    if (component === 'giat' || component === 'seragam' || component === 'lainnya') {
+    if (component === 'giat' || component === 'giat_tl') oneTimeColumn = 'giat';
+    if (component === 'spp_tl') oneTimeColumn = 'admin';
+    if (component === 'seragam' || component === 'lainnya') {
       oneTimeColumn = component === 'giat' ? 'giat' : 'admin';
     }
     if (!oneTimeColumn) {
@@ -1982,6 +1994,10 @@ function buildStudentCardRows(items) {
       row.sortDate = sortDate;
       row.date = date;
     }
+  });
+
+  monthlyRows.forEach((row, key) => {
+    row.spp = Math.max(0, Number(row.spp || 0) - Number(bosByKey.get(key) || 0));
   });
 
   const compareDateThenId = (a, b) => (
@@ -2095,7 +2111,7 @@ function studentSppCardMarkup(rows, profile, preview = false, student = null) {
               rows.oneTimeRows,
               [
                 ['date', 'Tgl'], ['dpp', 'DPP'], ['dps', 'DPS'], ['giat', 'Kegiatan'],
-                ['admin', 'Seragam & Adm.'], ['ortu', 'Ortu'], ['kkms', 'KKMS']
+                ['admin', 'Seragam/SPP TL'], ['ortu', 'Ortu'], ['kkms', 'KKMS']
               ],
               'one-time'
             )}
@@ -2103,7 +2119,7 @@ function studentSppCardMarkup(rows, profile, preview = false, student = null) {
               rows.monthlyRows,
               [
                 ['date', 'Bln/Tgl'], ['period', 'Periode'], ['spp', 'SPP'],
-                ['komp', 'Komputer'], ['giat', 'Kegiatan'], ['ortu', 'Ortu'], ['kkms', 'KKMS']
+                ['komp', 'Komp'], ['giat', 'Keg'], ['ortu', 'Ortu'], ['kkms', 'KKMS']
               ],
               'monthly'
             )}
@@ -2325,8 +2341,10 @@ function updateStudentCardPrintSelectionUi() {
   fitStudentCardPreview();
   ui.studentCardPrintSelectionSummary.textContent = selected.length
     ? `${selected.length} pembayaran dipilih · ${counts.one_time} nonperiode · ${counts.monthly} per periode`
-    : 'Pilih transaksi pada kartu atau daftar pembayaran.';
-  ui.studentCardPrintSelectedCount.textContent = `${selected.length} dipilih dari ${context.rows.length}`;
+    : 'Pilih transaksi langsung pada pratinjau kartu.';
+  if (ui.studentCardPrintSelectedCount) {
+    ui.studentCardPrintSelectedCount.textContent = `${selected.length} dipilih dari ${context.rows.length}`;
+  }
   ui.studentCardPrintPreviewCaption.textContent = selected.length
     ? 'Baris berwarna siap dicetak; baris abu-abu belum dipilih.'
     : 'Pilih transaksi langsung pada kotak di dalam baris kartu.';
@@ -2350,8 +2368,7 @@ function fitStudentCardPreview() {
   const viewport = ui.studentCardPrintPreview.closest('.card-print-preview-viewport');
   const card = ui.studentCardPrintPreview.querySelector('.spp-card-preview-zoom');
   if (!viewport || !card || !viewport.clientWidth || !card.offsetWidth) return;
-  const scale = Math.min(viewport.clientWidth / card.offsetWidth, viewport.clientHeight / card.offsetHeight, 1);
-  card.style.transform = `scale(${scale})`;
+  card.style.transform = 'none';
 }
 
 async function loadStudentCardPrintProfiles(student) {
@@ -2608,9 +2625,7 @@ async function openStudentCardPrintDialog(candidate) {
   ui.studentCardPrintStatus.className = 'card-print-status';
   ui.studentCardPrintOptions.innerHTML = '<p class="card-print-loading">Memuat daftar pembayaran…</p>';
   ui.studentCardPrintSelectionSummary.textContent = 'Memuat pilihan pembayaran…';
-  ui.studentCardPrintSelectedCount.textContent = 'Memuat transaksi…';
-  const transactionList = ui.studentCardPrintOptions.closest('details');
-  if (transactionList) transactionList.open = false;
+  if (ui.studentCardPrintSelectedCount) ui.studentCardPrintSelectedCount.textContent = 'Memuat transaksi…';
   ui.studentCardPrintPreview.replaceChildren();
   ui.studentCardPrintPreviewCaption.textContent = 'Memuat pratinjau kartu…';
   ui.studentCardCalibrationProfile.innerHTML = '<option value="">Memuat profil…</option>';
@@ -8694,6 +8709,11 @@ async function handlePaymentSubmit(event) {
     return;
   }
 
+  const paymentMethodArgs = {
+    p_payment_method: cashierPaymentMethod,
+    p_settlement_reference: cashierPaymentMethod === 'cash' ? '' : ui.paymentDigitalReference.value.trim()
+  };
+
   if (app.server) {
     let batchId;
     try {
@@ -8701,33 +8721,25 @@ async function handlePaymentSubmit(event) {
       const selectedYear = app.paymentBilling?.tahun_ajaran || app.selectedPaymentStudent.tahunAjaran;
       if (app.provisionalEnrollmentReady) {
         if (!selectedYear) throw new Error('Tahun ajaran pendaftaran siswa tidak ditemukan.');
-        const digitalPaymentArgs = cashierPaymentMethod === 'cash' ? {} : {
-          p_payment_method: cashierPaymentMethod,
-          p_settlement_reference: ui.paymentDigitalReference.value.trim()
-        };
         const { data, error } = await app.supabase.rpc('save_payment_batch_v2', {
           ...credentials,
           p_id_siswa: idSiswa,
           p_tahun_ajaran: selectedYear,
           p_tglbyr: paymentDate,
           p_items: items,
-          ...digitalPaymentArgs
+          ...paymentMethodArgs
         });
         if (error) throw error;
         batchId = String(data);
       } else {
         const nospp = app.selectedPaymentStudent.nospp;
         if (!nospp) throw new Error('Migration pendaftaran sementara belum dipasang. Tentukan kelas dan No. SPP terlebih dahulu.');
-        const digitalPaymentArgs = cashierPaymentMethod === 'cash' ? {} : {
-          p_payment_method: cashierPaymentMethod,
-          p_settlement_reference: ui.paymentDigitalReference.value.trim()
-        };
         const { data, error } = await app.supabase.rpc('save_payment_batch_v1', {
           ...credentials,
           p_nospp: nospp,
           p_tglbyr: paymentDate,
           p_items: items,
-          ...digitalPaymentArgs
+          ...paymentMethodArgs
         });
         if (error) throw error;
         batchId = String(data);
@@ -9212,6 +9224,11 @@ function setupEvents() {
     ui.studentCardCalibrationY,
     ui.studentCardCalibrationScale
   ].forEach((input) => input.addEventListener('input', updateStudentCardCalibrationPreview));
+  ui.studentCardPrintFontSize.addEventListener('change', () => {
+    const scale = Number(ui.studentCardPrintFontSize.value || 1);
+    ui.studentCardPrintPreview.style.setProperty('--card-mock-font-scale', String(scale));
+  });
+  ui.studentCardPrintPreview.style.setProperty('--card-mock-font-scale', '1');
   ui.studentCardCalibrationSave.addEventListener('click', saveStudentCardPrintProfile);
   ui.studentCardPrintOptions.addEventListener('click', (event) => {
     const button = event.target.closest('[data-card-reset]');

@@ -1116,23 +1116,25 @@
                 <span>%</span>
               </span>
             </label>
+            <label class="card-print-font-control">
+              <span>Ukuran font pratinjau</span>
+              <select id="studentCardPrintFontSize" aria-label="Ukuran font pratinjau kartu">
+                <option value="0.88">Kecil</option>
+                <option value="1" selected>Sedang</option>
+                <option value="1.12">Besar</option>
+              </select>
+            </label>
           </div>
         </div>
         <div class="card-print-selection-toolbar">
-          <p id="studentCardPrintSelectionSummary">Pilih transaksi pada kartu atau daftar pembayaran.</p>
+          <p id="studentCardPrintSelectionSummary">Pilih transaksi langsung pada pratinjau kartu.</p>
           <div class="card-print-selection-actions">
             <button type="button" class="secondary-button small-button" data-card-selection="all">Pilih semua</button>
             <button type="button" class="secondary-button small-button" data-card-selection="none">Kosongkan pilihan</button>
           </div>
         </div>
-        <details class="card-print-transaction-list">
-          <summary>
-            <span>Daftar transaksi</span>
-            <span id="studentCardPrintSelectedCount">Memuat transaksi…</span>
-          </summary>
-          <div id="studentCardPrintOptions" class="card-print-groups"></div>
-        </details>
         <div class="card-print-workspace">
+          <div id="studentCardPrintOptions" hidden></div>
           <aside class="card-print-preview-panel" aria-labelledby="studentCardPrintPreviewTitle">
             <div class="card-print-preview-heading">
               <div>
