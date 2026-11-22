@@ -204,7 +204,7 @@
               </div>
               <div class="daily-payment-breakdown">
                 <h3>Rincian per kuitansi</h3>
-                <p class="muted-copy">Satu baris per kuitansi dan siswa. Geser tabel ke samping untuk melihat seluruh komponen.</p>
+                <p class="muted-copy">Satu baris per kuitansi dan siswa. Geser tabel ke samping untuk melihat seluruh tagihan.</p>
                 <div class="table-wrap">
                   <table class="daily-payment-detail-table">
                     <thead>
@@ -228,7 +228,7 @@
             <div class="panel prior-year-panel">
               <div class="panel-header">
                 <div>
-                  <h2>Rekap Komponen Tahun Lalu</h2>
+                  <h2>Rekap Tagihan Tahun Lalu</h2>
                   <p class="muted-copy">Perbandingan tagihan lama dan pembayaran pada tahun ajaran ini.</p>
                 </div>
               </div>
@@ -439,13 +439,13 @@
             </dialog>
 
             <details class="fold admin-only" id="studentTools" hidden>
-              <summary>Impor CSV &amp; log perubahan</summary>
+              <summary>Impor Excel / CSV &amp; log perubahan</summary>
               <div class="fold-body">
                 <div class="form-actions">
-                  <button type="button" class="secondary-button" id="templateBtn">Unduh Template CSV</button>
+                  <button type="button" class="secondary-button" id="templateBtn">Unduh Template Siswa</button>
                   <label class="secondary-button">
-                    Upload CSV
-                    <input id="importFile" type="file" accept=".csv" hidden />
+                    Upload Excel / CSV
+                    <input id="importFile" type="file" accept=".xlsx,.xls,.csv" hidden />
                   </label>
                   <button type="button" class="secondary-button" id="logBtn">Lihat Log Perubahan</button>
                 </div>
@@ -608,15 +608,15 @@
                         </div>
                       </div>
                     </section>
-                    <section class="payment-allocation-section" aria-label="Komponen lainnya">
-                      <h4>Komponen lainnya</h4>
+                    <section class="payment-allocation-section" aria-label="Tagihan lainnya">
+                      <h4>Tagihan lainnya</h4>
                       <div id="paymentOneTimeRows"></div>
                     </section>
                   </div>
                   <div class="payment-allocation-footer">
                     <div class="payment-add-actions">
                       <button type="button" class="secondary-button small-button" id="addPaymentComponent" disabled>Tambah periode berikutnya</button>
-                      <button type="button" class="secondary-button small-button" id="addOneTimePaymentComponent">Tambah komponen lain</button>
+                      <button type="button" class="secondary-button small-button" id="addOneTimePaymentComponent">Tambah tagihan lain</button>
                     </div>
                   </div>
                 </fieldset>
@@ -630,14 +630,14 @@
               <section class="panel payment-summary-panel" aria-labelledby="paymentSummaryHeading">
                 <div class="payment-summary-heading">
                   <h3 id="paymentSummaryHeading">Ringkasan Pembayaran</h3>
-                  <span class="payment-component-count" id="paymentComponentCount">0 komponen</span>
+                  <span class="payment-component-count" id="paymentComponentCount">0 tagihan</span>
                 </div>
                 <div class="payment-summary-total">
                   <span>Total yang harus dibayar (Orang Tua)</span>
                   <strong id="paymentAllocationTotal">Rp 0</strong>
                 </div>
                 <div class="payment-summary-breakdown">
-                  <div><span>Total kotor SPP &amp; komponen</span><strong id="paymentGrossTotal">Rp 0</strong></div>
+                  <div><span>Total kotor SPP &amp; tagihan</span><strong id="paymentGrossTotal">Rp 0</strong></div>
                   <div><span>Subsidi BOS · pengurang</span><strong>(−) <span id="paymentBosTotal">Rp 0</span></strong></div>
                 </div>
               </section>
@@ -739,7 +739,7 @@
                     <th>No. Kwitansi</th>
                     <th>Waktu</th>
                     <th>Nama Siswa &amp; Kelas</th>
-                    <th>Komponen Dibayar</th>
+                    <th>Tagihan Dibayar</th>
                     <th>Total Bayar</th>
                     <th>Metode</th>
                     <th>Settlement / dana masuk</th>
@@ -847,7 +847,7 @@
                 <strong class="arrears-summary-value" id="arrearsSummaryTotalDue">—</strong>
                 <small class="arrears-summary-caption">Pembayaran lama belum dialokasikan tidak termasuk.</small>
                 <div class="arrears-summary-breakdown">
-                  <h3>Rincian komponen</h3>
+                  <h3>Rincian tagihan</h3>
                   <ul id="arrearsSummaryComponentList"><li>Memuat...</li></ul>
                 </div>
               </article>
@@ -878,7 +878,7 @@
               <span id="arrearsExportStatus" role="status" aria-live="polite"></span>
             </div>
             <p class="legacy-payment-note" id="legacyPaymentNote" hidden>
-              Ada pembayaran lama yang belum dialokasikan ke komponen. Jumlah tersebut tidak dihitung sebagai pelunasan dan belum boleh dijadikan dasar penagihan sampai direkonsiliasi.
+              Ada pembayaran lama yang belum dialokasikan ke tagihan. Jumlah tersebut tidak dihitung sebagai pelunasan dan belum boleh dijadikan dasar penagihan sampai direkonsiliasi.
             </p>
             <div class="table-wrap report-table-wrap">
               <table>
@@ -1224,7 +1224,7 @@
           <p class="muted-copy">Nominal tagihan dibandingkan dengan pembayaran yang sudah dialokasikan.</p>
           <div class="table-wrap">
             <table class="payment-history-table payment-history-one-time-table">
-              <thead><tr><th>Komponen</th><th>Tagihan</th><th>Terbayar</th><th>Sisa</th><th>Status</th></tr></thead>
+              <thead><tr><th>Tagihan</th><th>Nominal</th><th>Terbayar</th><th>Sisa</th><th>Status</th></tr></thead>
               <tbody id="paymentOneTimeHistory">
                 <tr><td colspan="5" class="empty-state">Memuat rincian pembayaran...</td></tr>
               </tbody>
@@ -1345,7 +1345,7 @@
         <header class="payment-settlement-header">
           <div>
             <h2 id="paymentImportTitle">Impor Pembayaran</h2>
-            <p>Unggah pembayaran baru, lalu tinjau siswa, komponen, periode, dan tanggal sebelum menyimpan.</p>
+            <p>Unggah pembayaran baru, lalu tinjau siswa, tagihan, periode, dan tanggal sebelum menyimpan.</p>
           </div>
           <button type="button" class="modal-close" id="paymentImportClose" aria-label="Tutup impor pembayaran">&times;</button>
         </header>
@@ -1365,7 +1365,7 @@
                   <tr>
                     <th>Nama dari file</th>
                     <th>Siswa</th>
-                    <th>Komponen</th>
+                    <th>Tagihan</th>
                     <th>Periode mulai</th>
                     <th>Tanggal pembayaran</th>
                     <th>Nominal</th>

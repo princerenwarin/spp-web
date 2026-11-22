@@ -1312,10 +1312,10 @@ function billBreakdownMarkup(row, arrearsTotal) {
        <div class="bill-arrears-list" data-arrears-for="${escapeHtml(row.id)}"><span class="student-sub">Memuat rincian...</span></div>`
     : '';
   if (!feeRows.length && !arrears) return '<span class="student-sub">Belum ada tagihan.</span>';
-  const summary = feeRows.length ? `${feeRows.length} komponen` : 'Tunggakan tahun lalu';
+  const summary = feeRows.length ? `${feeRows.length} tagihan` : 'Tunggakan tahun lalu';
   return `<details class="bill-detail">
     <summary><span>Rincian tagihan</span><strong>${summary}</strong></summary>
-    <div class="bill-lines" aria-label="Rincian tagihan per komponen">${lines}${arrears}</div>
+    <div class="bill-lines" aria-label="Rincian tagihan">${lines}${arrears}</div>
   </details>`;
 }
 
@@ -2452,8 +2452,8 @@ function updateStudentCardPrintSelectionUi() {
     ui.studentCardPrintStatus.className = 'card-print-status';
   } else {
     ui.studentCardPrintStatus.textContent = context.rows.length
-      ? `Pilih pembayaran yang ingin dicetak. Pembayaran yang belum pernah dicetak sudah dipilih.${context.unallocatedCount ? ` ${context.unallocatedCount} transaksi lama tanpa rincian komponen tidak dapat dicetak.` : ''}`
-      : `Tidak ada pembayaran dengan rincian komponen yang dapat dicetak pada tahun ajaran ini.${context.unallocatedCount ? ` ${context.unallocatedCount} transaksi lama tanpa rincian komponen tidak dapat dicetak.` : ''}`;
+      ? `Pilih pembayaran yang ingin dicetak. Pembayaran yang belum pernah dicetak sudah dipilih.${context.unallocatedCount ? ` ${context.unallocatedCount} transaksi lama tanpa rincian tagihan tidak dapat dicetak.` : ''}`
+      : `Tidak ada pembayaran dengan rincian tagihan yang dapat dicetak pada tahun ajaran ini.${context.unallocatedCount ? ` ${context.unallocatedCount} transaksi lama tanpa rincian tagihan tidak dapat dicetak.` : ''}`;
     ui.studentCardPrintStatus.className = 'card-print-status';
   }
 }
@@ -4671,6 +4671,10 @@ const ARREARS_EXPORT_COMPONENTS = [
 
 function arrearsExportValues(row) {
   const billing = row.billing || {};
+  const virtualAccounts = getStudentVirtualAccounts({
+    id: row.id_siswa,
+    kdsek: row.kdsek
+  }).map((account) => `${account.bankName}: ${account.number}`).join('; ');
   const periods = billing.periode_bulanan || [];
   const monthlySpp = periods.reduce((sum, item) => sum + Number(item.spp?.sisa || 0), 0);
   const monthlyComputer = periods.reduce((sum, item) => sum + Number(item.komp?.sisa || 0), 0);
@@ -4704,6 +4708,7 @@ function arrearsExportValues(row) {
   return [
     row.nospp || '',
     row.nama || '',
+    virtualAccounts,
     getSchoolName(row.kdsek),
     row.kdkls || '',
     row.tahun_ajaran || '',
@@ -4719,7 +4724,7 @@ function arrearsExportValues(row) {
 
 function createArrearsExport(rows) {
   const headers = [
-    'No. SPP', 'Nama', 'Sekolah', 'Kelas', 'Tahun ajaran', 'Periode sampai',
+    'No. SPP', 'Nama', 'Virtual Account', 'Sekolah', 'Kelas', 'Tahun ajaran', 'Periode sampai',
     'Rincian periode tunggakan', 'SPP sisa', 'Komputer sisa', 'DPP sisa',
     'DPP tahun lalu sisa', 'DPS sisa', 'Seragam sisa', 'Kegiatan sisa',
     'SPP tahun lalu sisa', 'Komputer tahun lalu sisa', 'Lainnya sisa',
@@ -4728,7 +4733,7 @@ function createArrearsExport(rows) {
   const values = rows.map(arrearsExportValues);
   if (values.length) {
     const total = values[0].map((value, index) => (
-      index >= 7 && typeof value === 'number'
+      index >= 8 && typeof value === 'number'
         ? values.reduce((sum, row) => sum + Number(row[index] || 0), 0)
         : ''
     ));
@@ -4782,7 +4787,7 @@ async function downloadArrearsRows(rows, scopeName) {
     'Tunggakan',
     headers,
     values,
-    [16, 28, 26, 12, 16, 20, 54, 18, 18, 18, 22, 18, 18, 18, 22, 24, 18, 22, 22],
+    [16, 28, 38, 26, 12, 16, 20, 54, 18, 18, 18, 22, 18, 18, 18, 22, 24, 18, 22, 22],
     `tunggakan-${fileNamePart(scopeName)}-${year}-${period}.xlsx`
   );
   setArrearsExportStatus(`${rows.length.toLocaleString('id-ID')} siswa berhasil diunduh. Akumulasi sisa tagihan dan pembayaran belum dialokasikan dipisahkan.`);
@@ -5107,7 +5112,7 @@ function arrearsDetailMarkup(billing, component = '') {
     }).join('');
     sections.push(`
       <section class="arrears-detail-section">
-        <h3>Komponen lainnya</h3>
+        <h3>Tagihan lainnya</h3>
         <div class="arrears-detail-items">${rows}</div>
       </section>`);
   }
@@ -5391,9 +5396,9 @@ function renderArrearsSummary() {
 
   const exportedRows = rows.map(arrearsExportValues);
   const componentDefinitions = [
-    ['SPP berjalan', 7],
-    ['Komputer berjalan', 8],
-    ...ARREARS_EXPORT_COMPONENTS.map(([, label], index) => [label, index + 9])
+    ['SPP berjalan', 8],
+    ['Komputer berjalan', 9],
+    ...ARREARS_EXPORT_COMPONENTS.map(([, label], index) => [label, index + 10])
   ];
   const componentItems = componentDefinitions
     .map(([label, index]) => [
@@ -5474,7 +5479,7 @@ async function fetchArrearsReport(append = false) {
   }
   ui.reportPeriod.textContent = formatPeriodLabel(ui.reportPeriodFilter.value);
   if (!app.server) {
-    ui.arrearsReportCount.textContent = 'Laporan per komponen membutuhkan backend Supabase dan migration 016.';
+    ui.arrearsReportCount.textContent = 'Laporan per tagihan membutuhkan backend Supabase dan migration 016.';
     ui.arrearsReportTable.innerHTML = '<tr><td colspan="6" class="empty-state">Hubungkan Supabase dan jalankan migration 016 untuk menghitung cicilan dan sisa per periode secara akurat.</td></tr>';
     ui.loadMoreArrears.hidden = true;
     app.arrearsSummary = { status: 'error', message: 'Ringkasan membutuhkan backend Supabase.' };
@@ -5565,7 +5570,7 @@ function printArrearsLetter(studentId) {
       <p>Kepada orang tua/wali dari:</p>
       <p><strong>${escapeHtml(row.nama)}</strong><br>Kelas: ${escapeHtml(row.kdkls)} &middot; ${escapeHtml(getSchoolName(row.kdsek))}</p>
       <p>Berdasarkan catatan pembayaran sampai ${escapeHtml(formatPeriodLabel(billing.periode_aktif))}, terdapat rincian sisa tagihan berikut:</p>
-      <table><thead><tr><th>Periode / komponen</th><th>Sisa SPP</th><th>Sisa Komputer</th></tr></thead><tbody>${periods || ''}${components || ''}</tbody></table>
+      <table><thead><tr><th>Periode / tagihan</th><th>Sisa SPP</th><th>Sisa Komputer</th></tr></thead><tbody>${periods || ''}${components || ''}</tbody></table>
       <p><strong>Total sisa terhitung: ${formatRupiah(billing.sisa_total)}</strong></p>
       <p>Mohon melakukan konfirmasi kepada tata usaha unit. Jika pembayaran telah dilakukan, silakan menyampaikan bukti agar data dapat diperbarui.</p>
       <p class="print-date">${escapeHtml(new Date().toLocaleDateString('id-ID', { dateStyle: 'long' }))}</p>
@@ -6155,10 +6160,36 @@ async function backupData() {
 
 function downloadImportTemplate() {
   const year = currentAcademicYear();
+  const rows = [
+    ['ID', 'KELAS', 'NAMA SISWA', 'SPP', 'KOMPUTER', 'TOTAL', 'KEGIATAN'],
+    ['1215', 'PG', 'BENAYA NOAH CHRISTIANTO', 400000, 20000, 420000, 0],
+    ['1216', 'PG', 'CLAIRE VALIENTE MUEL', 400000, 20000, 420000, 0],
+    ['1217', 'PG', 'JESSICA CERE EVANINGGING', 400000, 20000, 420000, 0],
+    ['1218', 'A1', 'ABIGAIL JOANNA IRENA LIMBONG', 173000, 20000, 1148000, 955000],
+    ['1219', 'A1', 'ALCHEYSIA GITANA HUJU', 350000, 20000, 1325000, 955000],
+    ['1220', 'A1', 'ARINKA CLARITIVA UNTAVIDJA', 400000, 20000, 1375000, 955000],
+    ['1221', 'A1', 'CAITLYN FERISHA ARRESTI', 400000, 20000, 1375000, 955000]
+  ];
+  if (window.XLSX) {
+    const workbook = window.XLSX.utils.book_new();
+    const sheet = window.XLSX.utils.aoa_to_sheet(rows);
+    sheet['!cols'] = [
+      { wch: 10 }, { wch: 12 }, { wch: 32 }, { wch: 14 }, { wch: 14 },
+      { wch: 14 }, { wch: 14 }
+    ];
+    window.XLSX.utils.book_append_sheet(workbook, sheet, 'Data Siswa');
+    window.XLSX.writeFile(workbook, `template_data_siswa_${year}.xlsx`);
+    return;
+  }
   const lines = [
-    IMPORT_COLUMNS.join(','),
-    `baru,${year},,Contoh Siswa Baru,08123456789,M,1A,082026,1000000,500000,300000,100000,400000,50000`,
-    `naik,${year},12,,,M,2A,,,,,100000,450000,50000`
+    ['ID', 'KELAS', 'NAMA SISWA', 'SPP', 'KOMPUTER', 'TOTAL', 'KEGIATAN'].join(','),
+    '1215,PG,BENAYA NOAH CHRISTIANTO,400000,20000,420000,0',
+    '1216,PG,CLAIRE VALIENTE MUEL,400000,20000,420000,0',
+    '1217,PG,JESSICA CERE EVANINGGING,400000,20000,420000,0',
+    '1218,A1,ABIGAIL JOANNA IRENA LIMBONG,173000,20000,1148000,955000',
+    '1219,A1,ALCHEYSIA GITANA HUJU,350000,20000,1325000,955000',
+    '1220,A1,ARINKA CLARITIVA UNTAVIDJA,400000,20000,1375000,955000',
+    '1221,A1,CAITLYN FERISHA ARRESTI,400000,20000,1375000,955000'
   ];
   const blob = new Blob([`\uFEFF${lines.join('\r\n')}\r\n`], { type: 'text/csv;charset=utf-8' });
   const link = document.createElement('a');
@@ -6381,7 +6412,7 @@ function parseDesktopPaymentRecords(table, header) {
       { component: 'seragam', periode: '', nominal: amounts.uniform, sourceLabel: 'Seragam' },
       { component: 'lainnya', periode: '', nominal: amounts.fine, sourceLabel: 'Denda' }
     ].filter((item) => item.nominal > 0);
-    if (!importItems.length) errors.push(`Baris ${index + 2}: tidak ada nominal komponen untuk diimpor.`);
+    if (!importItems.length) errors.push(`Baris ${index + 2}: tidak ada nominal tagihan untuk diimpor.`);
 
     const expectedCash = amounts.dpp + amounts.dps + parentSpp + amounts.computer
       + amounts.activity + amounts.uniform + amounts.fine;
@@ -6638,9 +6669,9 @@ function renderPaymentImportRows() {
       ? formatPeriodLabel(row.period)
       : (row.billing ? 'Pilih periode' : (row.billingError ? 'Tagihan tidak tersedia' : 'Memuat...'));
     const componentControl = isDesktop
-      ? `<span>${escapeHtml(row.itemsSummary || 'Tidak ada komponen')}</span>`
+      ? `<span>${escapeHtml(row.itemsSummary || 'Tidak ada tagihan')}</span>`
         + (row.validationError ? `<small class="payment-import-row-error">${escapeHtml(row.validationError)}</small>` : '')
-      : `<select data-import-component aria-label="Pilih komponen pada baris ${row.sourceRow}"><option value="">Pilih komponen</option>${componentOptions}</select>`;
+      : `<select data-import-component aria-label="Pilih tagihan pada baris ${row.sourceRow}"><option value="">Pilih tagihan</option>${componentOptions}</select>`;
     const periodControl = isDesktop
       ? `<span>${escapeHtml(row.period ? formatPeriodLabel(row.period) : 'Periode tidak valid')}</span><small>${escapeHtml(row.tahunAjaran || 'Tahun ajaran tidak dapat ditentukan')}</small>`
       : `<select data-import-period aria-label="Pilih periode mulai pada baris ${row.sourceRow}" ${row.component === 'spp' || row.component === 'komp' ? '' : 'disabled'}>
@@ -6752,7 +6783,7 @@ function downloadPaymentTemplate() {
     ['Ekspor desktop: TGL = tanggal pembayaran; Periode wajib berformat MMYYYY; DSP dipetakan sebagai DPS.'],
     ['Ekspor desktop: pertahankan tanggal pada sumber (tanggal Excel atau DD/MM/YYYY); jangan ganti dengan tanggal unggah.'],
     ['Ekspor desktop: SPP adalah total sebelum BOS; BOS dipisahkan; Kas adalah pembayaran wali.'],
-    ['Ekspor desktop: Kas harus sama dengan jumlah komponen yang dibayar wali. Selisih perlu diperbaiki sebelum dikonfirmasi.'],
+    ['Ekspor desktop: Kas harus sama dengan jumlah tagihan yang dibayar wali. Selisih perlu diperbaiki sebelum dikonfirmasi.'],
     ['Ekspor desktop: ID lama dicocokkan otomatis bila cocok; selain itu pilih siswa dari kandidat. Siswa yang belum terdaftar tidak dapat diimpor.'],
     ['Ekspor desktop: DENDA disimpan sebagai Lainnya dan dicatat pada keterangan transaksi.'],
     ['Setiap siswa dan rincian transaksi dikonfirmasi setelah file dibaca.'],
@@ -6823,7 +6854,7 @@ function downloadSettlementTemplate(workflow) {
       : 'Jika tanggal dana masuk belum diketahui, biarkan tanggal_settlement kosong; status transfer akan menunggu settlement.'],
     ['Waktu pencatatan/unggah di aplikasi diisi otomatis dan tidak perlu menjadi kolom file.'],
     ['Jika tanggal settlement belum diketahui, biarkan kosong; jangan menebaknya.'],
-    ['tujuan_penerimaan: isi komponen yang sesuai; TINJAU_MANUAL dapat dikosongkan untuk ditentukan admin.'],
+    ['tujuan_penerimaan: isi tagihan yang sesuai; TINJAU_MANUAL dapat dikosongkan untuk ditentukan admin.'],
     [isDigital
       ? 'Referensi, nominal, metode, dan tanggal pembayaran harus sesuai dengan transaksi yang dipilih.'
       : 'Transfer baru harus dipilih siswanya dan ditinjau sebelum disimpan; saran alokasi dimulai dari tagihan bulanan tertua yang masih memiliki saldo.']
@@ -7300,7 +7331,7 @@ function renderPaymentSettlementRows(workflow) {
         <p class="payment-settlement-student-details">${selectedStudentDetails}</p>
         <label class="field"><span>Tujuan pembayaran</span>
           <select data-settlement-component aria-label="Pilih tujuan pembayaran pada baris ${row.sourceRow}">
-            <option value="">Pilih komponen</option>${componentOptions}</select></label>
+            <option value="">Pilih tagihan</option>${componentOptions}</select></label>
         <label class="field"><span>Mulai alokasi dari</span>
           <select data-settlement-period aria-label="Pilih periode mulai pada baris ${row.sourceRow}" ${(row.component === 'spp' || row.component === 'komp') ? '' : 'disabled'}>
             <option value="">Pilih periode</option>${periodOptions}</select></label>
@@ -7790,19 +7821,145 @@ async function handlePaymentImportChange(event) {
 async function importStudentsFile(file) {
   try {
     const credentials = requireStudentRules();
-    const table = parseCsv(await file.text());
-    const header = (table.shift() || []).map((item) => item.trim().toLowerCase());
-    if (!IMPORT_COLUMNS.every((column) => header.includes(column))) {
-      throw new Error(`Kolom template tidak sesuai. Gunakan: ${IMPORT_COLUMNS.join(', ')}`);
+    const extension = file.name.split('.').pop().toLowerCase();
+    let table;
+    if (extension === 'csv') {
+      table = parseCsv(await file.text());
+    } else if (window.XLSX) {
+      const workbook = window.XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+      const sheetName = workbook.SheetNames[0];
+      if (!sheetName) throw new Error('File Excel tidak memiliki lembar kerja.');
+      table = window.XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: true, defval: '' });
+    } else {
+      throw new Error('Pembaca Excel tidak tersedia. Gunakan file CSV atau muat ulang aplikasi.');
     }
-    const rows = table.map((cells) => {
-      const record = {};
-      header.forEach((column, index) => { record[column] = (cells[index] || '').trim(); });
-      const row = buildStudentRow(record);
-      if (row.jenis === 'baru' && !row.periode_masuk && /^(\d{4})-\d{4}$/.test(row.tahun_ajaran)) {
-        row.periode_masuk = `07${row.tahun_ajaran.slice(0, 4)}`;
-      }
-      return row;
+
+    const rawHeader = (table.shift() || []);
+    const header = rawHeader.map(normalizeImportHeader);
+    const isLegacyStudentFormat = [
+      'jenis', 'tahunajaran', 'idsiswa', 'nama', 'nowa', 'kdsek', 'kdkls',
+      'periodemasuk', 'dpp', 'dsp', 'seragam', 'giat', 'spp', 'komp'
+    ].every((name) => header.includes(name));
+    if (isLegacyStudentFormat) {
+      const legacyFind = (...aliases) => header.findIndex((item) => aliases.includes(item));
+      const legacy = {
+        jenis: legacyFind('jenis'),
+        year: legacyFind('tahunajaran'),
+        id: legacyFind('idsiswa'),
+        nama: legacyFind('nama'),
+        wa: legacyFind('nowa'),
+        school: legacyFind('kdsek'),
+        className: legacyFind('kdkls'),
+        period: legacyFind('periodemasuk', 'permasuk', 'permasukan'),
+        dpp: legacyFind('dpp'),
+        dsp: legacyFind('dsp'),
+        seragam: legacyFind('seragam'),
+        giat: legacyFind('giat'),
+        spp: legacyFind('spp'),
+        komp: legacyFind('komp')
+      };
+      const rows = table.map((cells, index) => {
+        const value = (key) => key < 0 ? '' : (cells[key] ?? '');
+        const year = String(value(legacy.year) || currentAcademicYear()).trim();
+        const record = {
+          jenis: String(value(legacy.jenis) || 'baru').trim().toLowerCase(),
+          tahun_ajaran: year,
+          id_siswa: String(value(legacy.id) || '').trim(),
+          nama: titleCase(String(value(legacy.nama) || '').trim()),
+          no_wa: String(value(legacy.wa) || '').trim(),
+          kdsek: String(value(legacy.school) || '').trim(),
+          kdkls: String(value(legacy.className) || '').trim(),
+          periode_masuk: normalizeStudentEntryPeriod(value(legacy.period), year),
+          dpp: parseImportedAmount(value(legacy.dpp)),
+          dsp: parseImportedAmount(value(legacy.dsp)),
+          seragam: parseImportedAmount(value(legacy.seragam)),
+          giat: parseImportedAmount(value(legacy.giat)),
+          spp: parseImportedAmount(value(legacy.spp)),
+          komp: parseImportedAmount(value(legacy.komp))
+        };
+        if (!record.nama || !record.kdsek || !record.kdkls) {
+          throw new Error(`Baris ${index + 2}: Nama, unit, dan kelas wajib diisi.`);
+        }
+        const row = buildStudentRow(record);
+        if (row.jenis === 'baru' && !row.periode_masuk) {
+          row.periode_masuk = `07${year.slice(0, 4)}`;
+        }
+        return row;
+      });
+      if (!rows.length) throw new Error('File tidak berisi data.');
+      if (!window.confirm(`Import ${rows.length} baris? Jika ada satu baris salah, semuanya dibatalkan.`)) return;
+      const { error } = await app.supabase.rpc('import_students_v1', { ...credentials, p_rows: rows });
+      if (error) throw error;
+      await reloadStudentData();
+      alert(`${rows.length} baris berhasil diimport.`);
+      return;
+    }
+    const findColumn = (...aliases) => header.findIndex((item) => aliases.includes(item));
+    const column = {
+      id: findColumn('id', 'idsiswa', 'idsiswalama', 'nomorinduk'),
+      kelas: findColumn('kelas', 'kdkls'),
+      nama: findColumn('namasiswa', 'nama'),
+      spp: findColumn('spp'),
+      komputer: findColumn('komputer', 'komp'),
+      kegiatan: findColumn('kegiatan', 'giat'),
+      sekolah: findColumn('sekolah', 'unit', 'kdsek', 'namasekolah'),
+      tahun: findColumn('tahunajaran', 'tahun'),
+      periode: findColumn('permasuk', 'permasukan', 'periodemasuk', 'bulanmasuk'),
+      wa: findColumn('nowa', 'whatsapp', 'nohpp', 'nomorwa')
+    };
+    if (column.nama < 0 || column.kelas < 0 || column.spp < 0) {
+      throw new Error('Format siswa wajib memiliki kolom KELAS, NAMA SISWA, dan SPP.');
+    }
+
+    const activeSchoolScope = currentSchoolScope();
+    const activeSchools = app.state.schools.filter((school) => school.active);
+    const inferSchool = () => {
+      if (activeSchoolScope) return activeSchoolScope;
+      if (activeSchools.length === 1) return activeSchools[0].kdsek;
+      return '';
+    };
+    const resolveSchool = (value) => {
+      const raw = String(value || '').trim();
+      if (!raw) return inferSchool();
+      const direct = app.state.schools.find((school) =>
+        school.kdsek.toLowerCase() === raw.toLowerCase()
+        || normalizeImportHeader(school.nmsek) === normalizeImportHeader(raw)
+      );
+      return direct?.kdsek || '';
+    };
+
+    const rows = table.map((cells, index) => {
+      const value = (key) => key < 0 ? '' : (cells[key] ?? '');
+      const id = String(value(column.id) || '').trim();
+      const name = titleCase(String(value(column.nama) || '').trim());
+      const className = String(value(column.kelas) || '').trim();
+      const year = String(value(column.tahun) || currentYearScope() || currentAcademicYear()).trim();
+      const school = resolveSchool(value(column.sekolah));
+      if (!name || !className) throw new Error(`Baris ${index + 2}: Nama dan kelas wajib diisi.`);
+      if (!school) throw new Error(`Baris ${index + 2}: Pilih unit/kolom sekolah sebelum mengunggah.`);
+
+      const existing = id
+        ? app.state.siswa.find((student) => String(student.id) === id)
+        : null;
+      const normalizedPeriod = normalizeStudentEntryPeriod(value(column.periode), year);
+      const period = normalizedPeriod || `07${year.slice(0, 4)}`;
+      const record = {
+        jenis: id ? 'naik' : 'baru',
+        tahun_ajaran: year,
+        id_siswa: id,
+        nama: name,
+        no_wa: String(value(column.wa) || existing?.noWa || '').trim(),
+        kdsek: school,
+        kdkls: className,
+        periode_masuk: period,
+        dpp: 0,
+        dsp: 0,
+        seragam: 0,
+        giat: parseImportedAmount(value(column.kegiatan)),
+        spp: parseImportedAmount(value(column.spp)),
+        komp: parseImportedAmount(value(column.komputer))
+      };
+      return buildStudentRow(record);
     });
     if (!rows.length) throw new Error('File tidak berisi data.');
     if (!window.confirm(`Import ${rows.length} baris? Jika ada satu baris salah, semuanya dibatalkan.`)) return;
@@ -8408,10 +8565,10 @@ function renderPaymentBillingStatus() {
           <div class="payment-billing-line"><span>Komputer</span><b>${formatRupiah(billing.sisa_komp || 0)}</b></div>
         </section>
         <section class="payment-billing-group">
-          <strong>Komponen lainnya</strong>
-          ${oneTimeBreakdown || '<div class="payment-billing-empty">Tidak ada sisa komponen lainnya.</div>'}
+          <strong>Tagihan lainnya</strong>
+          ${oneTimeBreakdown || '<div class="payment-billing-empty">Tidak ada sisa tagihan lainnya.</div>'}
           <div class="payment-billing-line payment-billing-subtotal">
-            <span>Total komponen</span>
+            <span>Total tagihan</span>
             <b>${formatRupiah(billing.sisa_satu_kali || 0)}</b>
           </div>
         </section>
@@ -8554,14 +8711,14 @@ function makeOneTimePaymentRow() {
   wrapper.dataset.paymentRow = 'one-time';
   wrapper.innerHTML = `
     <label>
-      <span>Komponen</span>
-      <select class="payment-component" aria-label="Komponen pembayaran">${options}</select>
+      <span>Tagihan</span>
+      <select class="payment-component" aria-label="Tagihan pembayaran">${options}</select>
     </label>
     <label>
       <span>Nominal</span>
       <input class="money-input payment-component-amount payment-one-time-amount" type="text" inputmode="numeric" required />
     </label>
-    <button type="button" class="action-btn delete payment-remove" aria-label="Hapus komponen" title="Hapus komponen">
+    <button type="button" class="action-btn delete payment-remove" aria-label="Hapus tagihan" title="Hapus tagihan">
       <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>`;
   return wrapper;
@@ -8590,7 +8747,7 @@ function updatePaymentAllocationTotal() {
   ui.paymentAllocationTotal.textContent = formatRupiah(cashierPaymentAmountDue);
   ui.paymentSaveAmount.textContent = formatRupiah(cashierPaymentAmountDue);
   ui.paymentExactAmount.textContent = formatRupiah(cashierPaymentAmountDue);
-  ui.paymentComponentCount.textContent = `${componentTypes.size} komponen dialokasikan`;
+  ui.paymentComponentCount.textContent = `${componentTypes.size} tagihan dialokasikan`;
   updateCashierPaymentPreview(cashierPaymentAmountDue);
 }
 
@@ -8813,7 +8970,7 @@ async function collectPaymentItems() {
   const monthlyRows = [...ui.paymentComponentRows.querySelectorAll('.payment-monthly-row')];
   const oneTimeRows = [...ui.paymentComponentRows.querySelectorAll('.payment-one-time-row')];
   if (monthlyRows.length > 12 || oneTimeRows.length > 12) {
-    throw new Error('Satu penerimaan maksimal 12 periode bulanan dan 12 komponen lainnya.');
+    throw new Error('Satu penerimaan maksimal 12 periode bulanan dan 12 tagihan lainnya.');
   }
 
   const items = [];
@@ -8854,10 +9011,10 @@ async function collectPaymentItems() {
   for (const row of oneTimeRows) {
     const component = row.querySelector('.payment-component').value;
     const amount = parseMoney(row.querySelector('.payment-component-amount').value);
-    if (amount <= 0) throw new Error('Nominal setiap komponen harus lebih dari 0.');
+    if (amount <= 0) throw new Error('Nominal setiap tagihan harus lebih dari 0.');
     items.push({ component, periode: '', nominal: amount });
   }
-  if (!items.length) throw new Error('Isi nominal pembayaran SPP, Komputer, atau komponen lainnya.');
+  if (!items.length) throw new Error('Isi nominal pembayaran SPP, Komputer, atau tagihan lainnya.');
   if (items.length > 36) throw new Error('Alokasi pembayaran melebihi 36 rincian. Pisahkan penerimaan menjadi dua transaksi.');
   const merged = new Map();
   items.forEach((item) => {
@@ -9613,7 +9770,7 @@ function setupEvents() {
   ui.addOneTimePaymentComponent.addEventListener('click', () => {
     const rowCount = ui.paymentComponentRows.querySelectorAll('.payment-one-time-row').length;
     if (rowCount >= 12) {
-      alert('Satu penerimaan maksimal 12 komponen lainnya.');
+      alert('Satu penerimaan maksimal 12 tagihan lainnya.');
       return;
     }
     ui.paymentOneTimeRows.append(makeOneTimePaymentRow());
