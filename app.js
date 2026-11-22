@@ -210,6 +210,8 @@ const ui = {
   studentExisting: document.getElementById('studentExisting'),
   studentWa: document.getElementById('studentWa'),
   studentPeriode: document.getElementById('studentPeriode'),
+  studentEntryType: document.getElementById('studentEntryType'),
+  studentStaffStatus: document.getElementById('studentStaffStatus'),
   studentDpp: document.getElementById('studentDpp'),
   studentDsp: document.getElementById('studentDsp'),
   studentSeragam: document.getElementById('studentSeragam'),
@@ -1308,6 +1310,7 @@ function normalizeOverviewRow(row) {
     dsp: Number(row.dsp || 0),
     seragam: Number(row.seragam || 0),
     periodeMasuk: row.periode_masuk || '',
+    entryType: row.entry_type || '',
     tahunAjaran: row.tahun_ajaran,
     noWa: row.no_wa || '',
     isStaffChild: row.is_staff_child === true,
@@ -6007,6 +6010,10 @@ async function changeStudentSpp(nospp) {
   ui.studentKomp.value = formatRupiah(row.komp || 0);
   const [start] = row.tahunAjaran.split('-').map(Number);
   ui.studentPeriode.value = dashboardPeriodKey(row.periodeMasuk) || `${start}-07`;
+  ui.studentEntryType.value = row.entryType === 'naik' ? 'naik' : 'baru';
+  ui.studentStaffStatus.value = row.isStaffChild
+    ? (row.showInBilling === false ? 'staff-hide' : 'staff-show')
+    : 'regular';
   ui.studentEffective.value = `${start}-07`;
   ui.studentEditSummary.innerHTML = `
     <strong>${escapeHtml(row.nama)}</strong>
@@ -6045,6 +6052,22 @@ async function saveEnrollmentFees() {
       p_entry_period: entryPeriod
     });
     if (error) throw error;
+    const entryTypeError = await app.supabase.rpc('update_student_entry_status_v1', {
+      ...credentials,
+      p_id_siswa: row.id,
+      p_tahun_ajaran: row.tahunAjaran,
+      p_entry_type: ui.studentEntryType.value,
+      p_entry_period: entryPeriod
+    });
+    if (entryTypeError.error) throw entryTypeError.error;
+    const staffMode = ui.studentStaffStatus.value;
+    const staffError = await app.supabase.rpc('bulk_set_staff_child_v1', {
+      ...credentials,
+      p_ids: [row.id],
+      p_is_staff_child: staffMode !== 'regular',
+      p_show_in_billing: staffMode !== 'staff-hide'
+    });
+    if (staffError.error) throw staffError.error;
     closeStudentDialog();
     await reloadStudentData();
   } catch (error) {
@@ -7009,6 +7032,48 @@ function desktopPaymentCorrectionFields(row) {
     <summary>Koreksi data file</summary>
     <div class="payment-import-correction-grid">${controls}</div>
   </details>`;
+}
+
+function setPaymentImportBulkSelection(mode) {
+  app.paymentImportRows.forEach((row) => {
+    if (mode === 'check') {
+      const validPaymentDate = Boolean(row.tglbyr && row.tglbyr <= localDateInputValue());
+      const isDesktop = row.sourceFormat === 'desktop';
+      const hasItems = isDesktop
+        ? row.importItems?.length > 0 && !(row.validationErrors || []).length
+        : Boolean(row.component && row.nominal > 0);
+      const canConfirm = Boolean(validPaymentDate && row.selectedStudent?.nospp && hasItems
+        && !(row.validationErrors || []).length
+        && (!isDesktop || row.tahunAjaran));
+      row.confirmed = canConfirm && !row.databaseDuplicate;
+      row.skipped = !row.confirmed;
+      row.skipTouched = true;
+    } else if (mode === 'uncheck') {
+      row.confirmed = false;
+      row.skipped = true;
+      row.skipTouched = true;
+    } else {
+      row.confirmed = false;
+      row.skipped = false;
+      row.skipTouched = true;
+    }
+  });
+  renderPaymentImportRows();
+}
+
+function setPaymentSettlementBulkSelection(workflow, mode) {
+  workflow.state.rows.forEach((row) => {
+    if (mode === 'check') {
+      row.confirmed = canConfirmPaymentSettlementRow(workflow, row) && !row.skipped;
+    } else if (mode === 'uncheck') {
+      row.confirmed = false;
+      row.skipped = true;
+    } else {
+      row.confirmed = false;
+      row.skipped = false;
+    }
+  });
+  renderPaymentSettlementRows(workflow);
 }
 
 function renderPaymentImportRows() {
@@ -11059,6 +11124,16 @@ function setupEvents() {
   ui.downloadPaymentTemplate.addEventListener('click', downloadPaymentTemplate);
   ui.paymentImportRetryDuplicates.addEventListener('click', refreshPaymentImportDuplicateWarnings);
   ui.importPaymentsBtn.addEventListener('click', submitPaymentImport);
+  document.getElementById('paymentImportCheckAll').addEventListener('click', () => setPaymentImportBulkSelection('check'));
+  document.getElementById('paymentImportUncheckAll').addEventListener('click', () => setPaymentImportBulkSelection('uncheck'));
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-settlement-select-all], [data-settlement-uncheck-all]');
+    if (!button) return;
+    const isCheck = Boolean(button.dataset.settlementSelectAll);
+    const kind = button.dataset.settlementSelectAll || button.dataset.settlementUncheckAll;
+    const workflow = paymentSettlementFlows[kind];
+    if (workflow) setPaymentSettlementBulkSelection(workflow, isCheck ? 'check' : 'uncheck');
+  });
   ui.paymentImportOpenBtn.addEventListener('click', () => ui.paymentImportDialog.showModal());
   ui.paymentImportClose.addEventListener('click', () => ui.paymentImportDialog.close());
   ui.paymentImportCancel.addEventListener('click', () => ui.paymentImportDialog.close());

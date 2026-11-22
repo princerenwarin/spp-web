@@ -821,8 +821,6 @@ BEGIN
         WHEN period.bulan < v_july THEN 0
         WHEN e.periode_masuk IS NOT NULL
           AND period.bulan < to_date(e.periode_masuk, 'MMYYYY') THEN 0
-        WHEN e.entry_type = 'baru' AND e.periode_masuk IS NOT NULL
-          AND period.bulan = to_date(e.periode_masuk, 'MMYYYY') THEN 0
         ELSE COALESCE(rate.spp, e.spp) + COALESCE(rate.komp, e.komp)
       END) AS target_spp_komp,
       sum(CASE
@@ -904,11 +902,6 @@ BEGIN
         AND (
           payment.periode_masuk IS NULL
           OR payment.bulan >= to_date(payment.periode_masuk, 'MMYYYY')
-        )
-        AND NOT (
-          payment.entry_type = 'baru'
-          AND payment.periode_masuk IS NOT NULL
-          AND payment.bulan = to_date(payment.periode_masuk, 'MMYYYY')
         )
         AND (
           (payment.component = 'spp' AND payment.spp_rate > 0)

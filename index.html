@@ -305,9 +305,9 @@
                   <button type="button" class="secondary-button small-button" id="bulkGiatBtn">Terapkan Kegiatan</button>
                 </div>
                 <div class="selection-action">
-                  <select id="bulkStaffMode" aria-label="Status anak guru">
-                    <option value="staff-hide">Anak guru - sembunyikan dari tagihan</option>
-                    <option value="staff-show">Anak guru - tetap tampil di tagihan</option>
+                  <select id="bulkStaffMode" aria-label="Status anak guru/karyawan">
+                    <option value="staff-hide">Anak guru/karyawan - sembunyikan dari tagihan</option>
+                    <option value="staff-show">Anak guru/karyawan - tetap tampil di tagihan</option>
                     <option value="regular">Kembalikan ke siswa biasa</option>
                   </select>
                   <button type="button" class="secondary-button small-button" id="bulkStaffBtn">Terapkan Status</button>
@@ -400,6 +400,22 @@
                   <span>Periode masuk (awal tagihan SPP)</span>
                   <select id="studentPeriode" required></select>
                   <small class="field-hint">Periode ini menentukan awal tagihan SPP dan Komputer. Bulan sebelumnya tidak ditagih; memilih bulan lebih awal dapat menambah tagihan.</small>
+                </label>
+                <label data-for="ubah">
+                  <span>Status pendaftaran</span>
+                  <select id="studentEntryType">
+                    <option value="baru">Siswa baru</option>
+                    <option value="naik">Naik/pindah kelas</option>
+                  </select>
+                  <small class="field-hint">Status siswa baru memastikan periode masuk dihitung sebagai awal tagihan pada laporan tunggakan.</small>
+                </label>
+                <label data-for="ubah">
+                  <span>Status anak guru/karyawan</span>
+                  <select id="studentStaffStatus">
+                    <option value="regular">Siswa biasa</option>
+                    <option value="staff-hide">Anak guru/karyawan - sembunyikan dari tagihan</option>
+                    <option value="staff-show">Anak guru/karyawan - tetap tampil di tagihan</option>
+                  </select>
                 </label>
                 <label data-for="baru ubah">
                   <span>Nominal DPP</span>
@@ -1407,6 +1423,10 @@
           </div>
           <section id="paymentImportReview" class="payment-import-review" hidden aria-label="Pratinjau impor pembayaran">
             <p id="paymentImportStatus" class="muted-copy" role="status" aria-live="polite"></p>
+            <div class="form-actions">
+              <button type="button" class="secondary-button small-button" id="paymentImportCheckAll">Konfirmasi semua</button>
+              <button type="button" class="secondary-button small-button" id="paymentImportUncheckAll">Lewati semua</button>
+            </div>
             <div class="table-wrap payment-import-table-wrap">
               <table>
                 <thead>
@@ -1497,7 +1517,11 @@
                 <h3 id="paymentDigitalReviewTitle">Tinjau baris file</h3>
                 <p>Koreksi baris yang tidak cocok atau duplikat, lalu konfirmasi transaksi yang benar dan lewati sisanya.</p>
               </div>
-              <span id="paymentDigitalReviewCount" class="payment-settlement-count">0 baris</span>
+              <div class="payment-settlement-review-actions">
+                <button type="button" class="secondary-button small-button" data-settlement-select-all="digital">Konfirmasi semua</button>
+                <button type="button" class="secondary-button small-button" data-settlement-uncheck-all="digital">Lewati semua</button>
+                <span id="paymentDigitalReviewCount" class="payment-settlement-count">0 baris</span>
+              </div>
             </div>
             <div id="paymentDigitalRows" class="payment-settlement-rows"></div>
           </section>
@@ -1572,7 +1596,11 @@
                 <h3 id="paymentTransferReviewTitle">Tinjau transfer baru</h3>
                 <p>Pilih siswa secara eksplisit; saran tagihan membantu crosscheck dan tidak menggantikan keputusan admin.</p>
               </div>
-              <span id="paymentTransferReviewCount" class="payment-settlement-count">0 baris</span>
+              <div class="payment-settlement-review-actions">
+                <button type="button" class="secondary-button small-button" data-settlement-select-all="transfer">Konfirmasi semua</button>
+                <button type="button" class="secondary-button small-button" data-settlement-uncheck-all="transfer">Lewati semua</button>
+                <span id="paymentTransferReviewCount" class="payment-settlement-count">0 baris</span>
+              </div>
             </div>
             <div id="paymentTransferRows" class="payment-settlement-rows"></div>
           </section>
