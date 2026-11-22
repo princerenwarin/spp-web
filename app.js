@@ -8369,7 +8369,9 @@ function makePaymentComponentRow(period = '') {
       <span>Komputer</span>
       <input class="money-input payment-component-amount payment-komp-amount" type="text" inputmode="numeric" aria-label="Nominal Komputer" disabled />
     </label>
-    <button type="button" class="action-btn delete payment-remove" aria-label="Hapus periode">Hapus</button>`;
+    <button type="button" class="action-btn delete payment-remove" aria-label="Hapus periode" title="Hapus periode">
+      <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>`;
   if (period) wrapper.dataset.initialPeriod = period;
   return wrapper;
 }
@@ -8392,7 +8394,9 @@ function makeOneTimePaymentRow() {
       <span>Nominal</span>
       <input class="money-input payment-component-amount payment-one-time-amount" type="text" inputmode="numeric" required />
     </label>
-    <button type="button" class="action-btn delete payment-remove" aria-label="Hapus komponen">Hapus</button>`;
+    <button type="button" class="action-btn delete payment-remove" aria-label="Hapus komponen" title="Hapus komponen">
+      <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>`;
   return wrapper;
 }
 
