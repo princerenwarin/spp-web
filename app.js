@@ -1403,6 +1403,8 @@ function createStudentOverviewQuery(includeCount = false) {
   const keyword = cleanKeyword(ui.searchStudent.value);
   if (year) query = query.eq('tahun_ajaran', year);
   if (school) query = query.eq('kdsek', school);
+  const className = currentDashboardClassScope();
+  if (className) query = query.eq('kdkls', className);
   if (keyword) {
     const schoolCodes = matchingSchoolCodes(keyword).map((code) => `kdsek.eq.${code}`);
     query = query.or([
@@ -1558,15 +1560,16 @@ async function fetchStudentPage() {
 const refreshStudentsSoon = debounce(() => fetchStudentPage(), 300);
 
 function getFilteredStudents() {
-  if (app.server) return app.state.siswa;
   const schoolFilter = app.user && app.user.role === 'unit' ? app.user.unit : ui.schoolFilter.value;
   const keyword = ui.searchStudent.value.trim().toLowerCase();
+  const className = currentDashboardClassScope();
 
   return sortStudentRows(app.state.siswa.filter((row) => {
     const matchSchool = schoolFilter === 'all' || row.kdsek === schoolFilter;
+    const matchClass = !className || row.kdkls === className;
     const haystack = `${row.nospp || ''} ${row.nama || ''} ${row.kdkls || ''} ${row.id || ''} ${row.kdsek || ''} ${getSchoolName(row.kdsek)}`.toLowerCase();
     const matchKeyword = !keyword || haystack.includes(keyword);
-    return matchSchool && matchKeyword;
+    return matchSchool && matchClass && matchKeyword;
   }));
 }
 
@@ -1615,7 +1618,9 @@ function drawStudentTable() {
     return `
       <tr class="${selected ? 'is-selected' : ''}">
         <td class="admin-only col-check" ${admin ? '' : 'hidden'}>${selectable ? `<input type="checkbox" data-select-id="${escapeHtml(row.id)}" ${selected ? 'checked' : ''} aria-label="Pilih ${escapeHtml(row.nama)}" />` : ''}</td>
-        <td data-label="Siswa"><div class="student-name">${escapeHtml(row.nama)}</div><div class="student-sub">${row.nospp ? escapeHtml(row.nospp) : 'Menunggu kelas untuk No. SPP'}${row.tahunAjaran ? ` &middot; ${escapeHtml(row.tahunAjaran)}` : ''}${row.isStaffChild ? ' &middot; <span class="badge-staff">Anak guru</span>' : ''}</div></td>
+        <td data-label="Siswa"><div class="student-name">${escapeHtml(row.nama)}</div><div class="student-sub">${row.nospp ? escapeHtml(row.nospp) : 'Menunggu kelas untuk No. SPP'}${row.tahunAjaran ? ` &middot; ${escapeHtml(row.tahunAjaran)}` : ''}${row.isStaffChild ? ' &middot; <span class="badge-staff">Anak guru</span>' : ''}</div>
+          ${admin && row.tahunAjaran ? `<button type="button" class="action-btn edit student-status-action" data-action="student-status" data-id="${escapeHtml(row.id)}" data-year="${escapeHtml(row.tahunAjaran)}">Ubah status siswa</button>` : ''}
+        </td>
         <td data-label="Sekolah / Kelas"><div>${escapeHtml(getSchoolName(row.kdsek))}</div><div class="student-sub">${row.kdkls ? `Kelas ${escapeHtml(row.kdkls)}` : 'Kelas belum ditentukan'}</div></td>
         <td data-label="Virtual Account">${virtualAccountMarkup}</td>
         <td data-label="Rincian tagihan">${row.isStaffChild && row.showInBilling === false ? 'Tidak ditagih' : billBreakdownMarkup(row, arrearsTotal)}</td>
@@ -5630,6 +5635,7 @@ function updateStudentFormMode() {
   const mode = ui.studentType.value;
   const isNew = mode === 'baru';
   const isEdit = mode === 'ubah';
+  const isStatus = mode === 'status';
   const isPlacement = mode === 'penempatan';
   document.querySelectorAll('#studentForm [data-for]').forEach((item) => {
     item.hidden = !item.dataset.for.split(' ').includes(mode);
@@ -5637,15 +5643,15 @@ function updateStudentFormMode() {
   document.querySelectorAll('#studentForm [data-hide]').forEach((item) => {
     item.hidden = item.dataset.hide.split(' ').includes(mode);
   });
-  ui.studentEditSummary.hidden = !isEdit;
+  ui.studentEditSummary.hidden = !isEdit && !isStatus;
   ui.studentNama.required = isNew;
   ui.studentWa.required = isNew;
-  ui.studentPeriode.required = isNew || isEdit;
+  ui.studentPeriode.required = isNew || isEdit || isStatus;
   ui.studentGiat.required = mode === 'baru' || mode === 'naik';
   ui.studentSpp.required = mode === 'baru' || mode === 'naik';
   ui.studentKomp.required = mode === 'baru' || mode === 'naik';
   ui.studentExisting.required = mode === 'naik' || isPlacement;
-  ui.studentSekolah.required = !isEdit;
+  ui.studentSekolah.required = !isEdit && !isStatus;
   ui.studentSekolah.disabled = isPlacement;
   ui.studentKelas.required = mode === 'naik' || isPlacement
     || isNew && !app.provisionalEnrollmentReady;
@@ -5656,13 +5662,15 @@ function updateStudentFormMode() {
     baru: ['Siswa baru', 'Tambah Siswa Baru'],
     naik: ['Tahun ajaran baru', 'Naik / Pindah Kelas'],
     penempatan: ['Lengkapi pendaftaran', 'Tentukan Kelas Siswa'],
-    ubah: ['Tagihan siswa', 'Ubah Tagihan']
+    ubah: ['Tagihan siswa', 'Ubah Tagihan'],
+    status: ['Status siswa', 'Ubah Status Siswa']
   };
   ui.studentModalEyebrow.textContent = titles[mode][0];
   ui.studentModalTitle.textContent = titles[mode][1];
   ui.studentSubmitBtn.textContent = isPlacement
     ? 'Simpan Kelas dan Buat No. SPP'
-    : isEdit ? 'Simpan Perubahan' : 'Simpan Siswa';
+    : isStatus ? 'Simpan Status'
+      : isEdit ? 'Simpan Perubahan' : 'Simpan Siswa';
 }
 
 function openStudentDialog(mode = 'baru') {
@@ -5684,6 +5692,27 @@ function openPlacementDialog(row) {
     <strong>${escapeHtml(row.nama)}</strong>
     <span>${escapeHtml(getSchoolName(row.kdsek))} · ID ${escapeHtml(formatStudentId(row.id))}</span>
     <span class="student-sub">No. SPP dibuat setelah kelas disimpan.</span>`;
+}
+
+function openStudentStatusDialog(row) {
+  if (!row || !row.tahunAjaran) return;
+  resetStudentForm();
+  app.editingEnrollment = row;
+  ui.studentType.value = 'status';
+  populateStudentYearOptions(row.tahunAjaran);
+  const [start] = row.tahunAjaran.split('-').map(Number);
+  ui.studentPeriode.value = dashboardPeriodKey(row.periodeMasuk) || `${start}-07`;
+  ui.studentEntryType.value = row.entryType === 'naik' ? 'naik' : 'baru';
+  ui.studentStaffStatus.value = row.isStaffChild
+    ? (row.showInBilling === false ? 'staff-hide' : 'staff-show')
+    : 'regular';
+  updateStudentFormMode();
+  ui.studentEditSummary.innerHTML = `
+    <strong>${escapeHtml(row.nama)}</strong>
+    <span>${escapeHtml(getSchoolName(row.kdsek))} · Kelas ${escapeHtml(row.kdkls || 'belum ditentukan')} · TA ${escapeHtml(row.tahunAjaran)}</span>
+    <span class="student-sub">${escapeHtml(row.nospp || 'No. SPP belum dibuat')}</span>`;
+  if (!ui.studentDialog.open) ui.studentDialog.showModal();
+  requestAnimationFrame(() => ui.studentEntryType.focus());
 }
 
 function closeStudentDialog() {
@@ -5954,6 +5983,10 @@ async function reloadStudentData() {
 
 async function addOrUpdateStudent(event) {
   event.preventDefault();
+  if (ui.studentType.value === 'status') {
+    await saveStudentStatus();
+    return;
+  }
   if (ui.studentType.value === 'ubah') {
     await saveEnrollmentFees();
     return;
@@ -5993,6 +6026,38 @@ async function addOrUpdateStudent(event) {
   }
 }
 
+async function saveStudentStatus() {
+  const row = app.editingEnrollment;
+  if (!row) {
+    alert('Data pendaftaran siswa tidak ditemukan. Tutup lalu buka kembali status siswa.');
+    return;
+  }
+  const entryPeriod = toPeriode(ui.studentPeriode.value);
+  const [start] = row.tahunAjaran.split('-').map(Number);
+  const previousEntryPeriod = String(row.periodeMasuk || '').trim() || `07${start}`;
+  if (entryPeriod !== previousEntryPeriod && !window.confirm(
+    `Periode masuk akan berubah dari ${formatAcademicMonth(dashboardPeriodKey(previousEntryPeriod))} ke ${formatAcademicMonth(ui.studentPeriode.value)}. Perubahan ini dapat mengubah laporan tagihan. Lanjutkan?`
+  )) return;
+  try {
+    const credentials = requireStudentRules();
+    const staffMode = ui.studentStaffStatus.value;
+    const { error } = await app.supabase.rpc('save_student_status_v1', {
+      ...credentials,
+      p_id_siswa: row.id,
+      p_tahun_ajaran: row.tahunAjaran,
+      p_entry_type: ui.studentEntryType.value,
+      p_entry_period: entryPeriod,
+      p_is_staff_child: staffMode !== 'regular',
+      p_show_in_billing: staffMode !== 'staff-hide'
+    });
+    if (error) throw error;
+    closeStudentDialog();
+    await reloadStudentData();
+  } catch (error) {
+    alert(error.message || 'Status siswa gagal disimpan. Pastikan migration 040 sudah dijalankan.');
+  }
+}
+
 async function changeStudentSpp(nospp) {
   const row = app.state.siswa.find((item) => item.nospp === nospp);
   if (!row || !row.tahunAjaran) {
@@ -6010,10 +6075,6 @@ async function changeStudentSpp(nospp) {
   ui.studentKomp.value = formatRupiah(row.komp || 0);
   const [start] = row.tahunAjaran.split('-').map(Number);
   ui.studentPeriode.value = dashboardPeriodKey(row.periodeMasuk) || `${start}-07`;
-  ui.studentEntryType.value = row.entryType === 'naik' ? 'naik' : 'baru';
-  ui.studentStaffStatus.value = row.isStaffChild
-    ? (row.showInBilling === false ? 'staff-hide' : 'staff-show')
-    : 'regular';
   ui.studentEffective.value = `${start}-07`;
   ui.studentEditSummary.innerHTML = `
     <strong>${escapeHtml(row.nama)}</strong>
@@ -6052,22 +6113,6 @@ async function saveEnrollmentFees() {
       p_entry_period: entryPeriod
     });
     if (error) throw error;
-    const entryTypeError = await app.supabase.rpc('update_student_entry_status_v1', {
-      ...credentials,
-      p_id_siswa: row.id,
-      p_tahun_ajaran: row.tahunAjaran,
-      p_entry_type: ui.studentEntryType.value,
-      p_entry_period: entryPeriod
-    });
-    if (entryTypeError.error) throw entryTypeError.error;
-    const staffMode = ui.studentStaffStatus.value;
-    const staffError = await app.supabase.rpc('bulk_set_staff_child_v1', {
-      ...credentials,
-      p_ids: [row.id],
-      p_is_staff_child: staffMode !== 'regular',
-      p_show_in_billing: staffMode !== 'staff-hide'
-    });
-    if (staffError.error) throw staffError.error;
     closeStudentDialog();
     await reloadStudentData();
   } catch (error) {
@@ -10812,6 +10857,9 @@ function setupEvents() {
   ui.schoolFilter.addEventListener('change', handleScopeChange);
   ui.yearFilter.addEventListener('change', handleScopeChange);
   ui.dashboardClassFilter.addEventListener('change', () => {
+    app.paging.students = 0;
+    if (app.server) fetchStudentPage();
+    else drawStudentTable();
     if (app.server) fetchDashboard();
   });
   ui.reportYearFilter.addEventListener('change', () => {
@@ -10953,6 +11001,15 @@ function setupEvents() {
   document.getElementById('bulkGiatBtn').addEventListener('click', applyBulkActivity);
   document.getElementById('bulkStaffBtn').addEventListener('click', applyBulkStaff);
   document.getElementById('bulkDeleteBtn').addEventListener('click', applyBulkDelete);
+  document.querySelector('[data-open-student-status-guide]').addEventListener('click', () => {
+    const opened = ui.selectionBar.classList.toggle('is-status-mode');
+    if (opened) {
+      ui.selectionBar.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => {
+        (app.selectedStudents.size ? ui.bulkStaffMode : ui.selectAllStudents).focus();
+      }, 200);
+    }
+  });
   document.addEventListener('click', (event) => {
     const button = event.target.closest('[data-rename-id]');
     if (button) renameStudent(button.dataset.renameId, button.dataset.renameName);
@@ -11465,6 +11522,16 @@ function setupEvents() {
     }
     if (action === 'edit-student') {
       changeStudentSpp(nospp);
+    }
+    if (action === 'student-status') {
+      const student = app.state.siswa.find((row) => (
+        String(row.id) === String(id) && String(row.tahunAjaran || '') === String(target.dataset.year || '')
+      ));
+      if (!student) {
+        alert('Data siswa sudah berubah. Muat ulang daftar siswa lalu coba kembali.');
+        return;
+      }
+      openStudentStatusDialog(student);
     }
     if (action === 'place-student') {
       const student = app.state.siswa.find((row) => String(row.id) === String(id));

@@ -286,6 +286,7 @@
               </div>
               <div class="toolbar-actions admin-only" hidden>
                 <button type="button" class="primary-button small-button" id="openStudentFormBtn">+ Siswa / Naik Kelas</button>
+                <button type="button" class="secondary-button small-button" data-open-student-status-guide>Status anak guru/karyawan</button>
                 <button type="button" class="secondary-button small-button" data-open="arrearsTools">Tagihan Tahun Lalu</button>
                 <button type="button" class="secondary-button small-button" data-open="studentTools">Impor &amp; Log</button>
               </div>
@@ -297,6 +298,7 @@
                   <strong><span id="selectedCount">0</span> siswa dipilih</strong>
                   <button type="button" class="link-button" id="clearSelectionBtn">Kosongkan</button>
                 </div>
+                <p class="selection-help">Centang siswa di kolom kiri, lalu pilih status anak guru/karyawan untuk mengatur apakah mereka ditagih.</p>
                 <div class="chip-list" id="selectedChips"></div>
               </div>
               <div class="selection-actions">
@@ -356,16 +358,17 @@
               </header>
               <div class="edit-summary" id="studentEditSummary" hidden></div>
               <div class="student-form-grid">
-                <label data-hide="ubah">
+                <label data-hide="ubah status">
                   <span>Jenis</span>
                   <select id="studentType">
                     <option value="baru">Siswa baru masuk</option>
                     <option value="naik">Naik / pindah kelas</option>
                     <option value="penempatan" hidden>Menentukan kelas siswa baru</option>
                     <option value="ubah" hidden>Ubah tagihan</option>
+                    <option value="status" hidden>Ubah status siswa</option>
                   </select>
                 </label>
-                <label data-hide="ubah">
+                <label data-hide="ubah status">
                   <span>Tahun Ajaran</span>
                   <select id="studentTahun" required></select>
                 </label>
@@ -377,31 +380,31 @@
                     <div class="picker-results" hidden></div>
                   </div>
                 </div>
-                <label data-hide="ubah penempatan">
+                <label data-hide="ubah penempatan status">
                   <span>Nama Siswa</span>
                   <input id="studentNama" class="name-input" type="text" placeholder="Nama lengkap" />
                 </label>
-                <label data-hide="ubah penempatan">
+                <label data-hide="ubah penempatan status">
                   <span>WhatsApp</span>
                   <input id="studentWa" type="tel" placeholder="08xxxxxxxxxx" />
                 </label>
-                <label data-hide="ubah">
+                <label data-hide="ubah status">
                   <span>Sekolah</span>
                   <select id="studentSekolah" required></select>
                 </label>
-                <label data-hide="ubah">
+                <label data-hide="ubah status">
                   <span>Kelas <small>(boleh ditentukan belakangan untuk siswa baru)</small></span>
                   <select id="studentKelas" disabled>
                     <option value="">Pilih sekolah terlebih dahulu</option>
                   </select>
                 </label>
                 <p class="field-hint student-placement-hint" data-for="baru">Sekolah anak baru dicatat sekarang. Jika kelasnya belum pasti, No. SPP final dibuat setelah kelas ditentukan.</p>
-                <label data-for="baru ubah">
+                <label data-for="baru ubah status">
                   <span>Periode masuk (awal tagihan SPP)</span>
                   <select id="studentPeriode" required></select>
                   <small class="field-hint">Periode ini menentukan awal tagihan SPP dan Komputer. Bulan sebelumnya tidak ditagih; memilih bulan lebih awal dapat menambah tagihan.</small>
                 </label>
-                <label data-for="ubah">
+                <label data-for="status">
                   <span>Status pendaftaran</span>
                   <select id="studentEntryType">
                     <option value="baru">Siswa baru</option>
@@ -409,7 +412,7 @@
                   </select>
                   <small class="field-hint">Status siswa baru memastikan periode masuk dihitung sebagai awal tagihan pada laporan tunggakan.</small>
                 </label>
-                <label data-for="ubah">
+                <label data-for="status">
                   <span>Status anak guru/karyawan</span>
                   <select id="studentStaffStatus">
                     <option value="regular">Siswa biasa</option>

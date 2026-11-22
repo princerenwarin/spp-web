@@ -1275,10 +1275,12 @@ label {
 }
 
 .selection-bar.has-selection:not([hidden]) { display: flex; }
+.selection-bar.is-status-mode:not([hidden]) { display: flex; }
 @keyframes sel-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 
 .selection-info { flex: 1 1 320px; min-width: 0; }
 .selection-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; color: var(--primary); }
+.selection-help { color: var(--muted); font-size: 0.82rem; margin: 0 0 10px; max-width: 58ch; }
 
 .link-button {
   border: none;
@@ -1356,6 +1358,7 @@ label {
 
 .student-name { font-weight: 700; color: var(--text); }
 .student-sub { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+.student-status-action { display: inline-block; margin-top: 7px; }
 .badge-staff {
   background: rgba(241, 174, 54, 0.16);
   color: #9a6e06;
