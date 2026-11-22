@@ -8879,7 +8879,7 @@ function renderStudentImportReview() {
            <option value="baru" ${row.fields.entryType === 'baru' ? 'selected' : ''}>Baru</option>
            <option value="naik" ${row.fields.entryType === 'naik' ? 'selected' : ''}>Naik kelas</option>
          </select>`
-      : `<span>${row.fields.id ? 'Naik kelas' : 'Baru'}</span>`;
+      : `<span>${row.fields.id ? 'ID dari file' : 'Baru'}</span>`;
     const amountInput = (field, label) => studentImportFieldInput(row, index, field, label, 'decimal');
     return `<tr${rowClass} data-student-import-row="${index}">
       <td><label class="student-import-review-select">
@@ -8919,7 +8919,7 @@ async function refreshStudentImportDuplicates() {
   try {
     state.existingRows = await fetchStudentImportExistingRows(state.rows);
     analyzeStudentImportDuplicates(state.rows, state.existingRows);
-    state.message = 'Periksa baris bermasalah dan duplikat. Baris valid yang dipilih akan diproses setelah Anda melanjutkan.';
+    state.message = 'ID dari file dipertahankan: ID yang sudah dikenal diproses sebagai naik kelas; ID yang belum dikenal dibuat sebagai siswa baru. Periksa ID dengan teliti.';
   } catch (error) {
     state.loadError = error.message || 'Pemeriksaan duplikat gagal.';
     state.message = `Tidak dapat memeriksa duplikat di database. ${state.loadError}`;
