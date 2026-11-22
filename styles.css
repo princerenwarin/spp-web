@@ -1322,6 +1322,7 @@ label {
 
 .selection-actions { display: grid; gap: 8px; flex: 0 1 460px; min-width: 0; }
 .selection-action { display: flex; gap: 8px; min-width: 0; }
+.bulk-entry-period-action[hidden] { display: none; }
 .selection-action input,
 .selection-action select {
   flex: 1;

@@ -298,7 +298,7 @@
                   <strong><span id="selectedCount">0</span> siswa dipilih</strong>
                   <button type="button" class="link-button" id="clearSelectionBtn">Kosongkan</button>
                 </div>
-                <p class="selection-help">Centang siswa di kolom kiri. Ubah satu atau kedua status sekaligus; status pendaftaran mengikuti Tahun Ajaran pada filter di atas, dan periode masuk tetap.</p>
+                <p class="selection-help">Centang siswa di kolom kiri. Status pendaftaran mengikuti Tahun Ajaran pada filter; saat memilih Siswa baru, satu periode masuk berlaku untuk semua siswa terpilih.</p>
                 <div class="chip-list" id="selectedChips"></div>
               </div>
               <div class="selection-actions">
@@ -320,6 +320,11 @@
                   </select>
                   <button type="button" class="secondary-button small-button" id="bulkStatusBtn">Terapkan status</button>
                   <button type="button" class="secondary-button small-button danger-button" id="bulkDeleteBtn">Hapus Terpilih</button>
+                </div>
+                <div class="selection-action bulk-entry-period-action" id="bulkEntryPeriodAction" hidden>
+                  <select id="bulkEntryPeriod" aria-label="Periode masuk untuk semua siswa terpilih" required>
+                    <option value="">Pilih periode masuk</option>
+                  </select>
                 </div>
               </div>
             </div>

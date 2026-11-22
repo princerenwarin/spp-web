@@ -239,6 +239,8 @@ const ui = {
   selectAllStudents: document.getElementById('selectAllStudents'),
   bulkGiat: document.getElementById('bulkGiat'),
   bulkEntryType: document.getElementById('bulkEntryType'),
+  bulkEntryPeriodAction: document.getElementById('bulkEntryPeriodAction'),
+  bulkEntryPeriod: document.getElementById('bulkEntryPeriod'),
   bulkStaffMode: document.getElementById('bulkStaffMode'),
   importFile: document.getElementById('importFile'),
   studentImportReviewDialog: document.getElementById('studentImportReviewDialog'),
@@ -4078,6 +4080,27 @@ function populateStudentPeriodOptions() {
   populate(ui.studentEffective, '', months[0].key);
 }
 
+function populateBulkEntryPeriodOptions() {
+  const year = currentYearScope() || currentAcademicYear();
+  const previous = ui.bulkEntryPeriod.value;
+  const months = academicMonths(year);
+  ui.bulkEntryPeriod.innerHTML = [
+    '<option value="">Pilih periode masuk</option>',
+    ...months.map((month) => (
+      `<option value="${month.key}">${escapeHtml(formatAcademicMonth(month.key))}</option>`
+    ))
+  ].join('');
+  ui.bulkEntryPeriod.value = months.some((month) => month.key === previous) ? previous : '';
+}
+
+function updateBulkEntryPeriodVisibility() {
+  const isNewStudent = ui.bulkEntryType.value === 'baru';
+  ui.bulkEntryPeriodAction.hidden = !isNewStudent;
+  ui.bulkEntryPeriod.required = isNewStudent;
+  if (isNewStudent) populateBulkEntryPeriodOptions();
+  else ui.bulkEntryPeriod.value = '';
+}
+
 function localMonthInputValue(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
@@ -6154,8 +6177,15 @@ async function applyBulkStudentStatus() {
   }
   const entryType = ui.bulkEntryType.value || null;
   const staffMode = ui.bulkStaffMode.value || null;
+  const entryPeriodValue = entryType === 'baru' ? ui.bulkEntryPeriod.value : '';
+  const entryPeriod = entryPeriodValue ? toPeriode(entryPeriodValue) : null;
   if (!entryType && !staffMode) {
     alert('Pilih setidaknya satu status yang akan diubah.');
+    return;
+  }
+  if (entryType === 'baru' && !entryPeriod) {
+    alert('Pilih periode masuk untuk siswa baru.');
+    ui.bulkEntryPeriod.focus();
     return;
   }
   const year = entryType ? currentYearScope() : null;
@@ -6165,6 +6195,9 @@ async function applyBulkStudentStatus() {
   }
   const changes = [];
   if (entryType) changes.push(`status pendaftaran menjadi ${entryType === 'baru' ? 'Siswa baru' : 'Naik/pindah kelas'} untuk ${year}`);
+  if (entryType === 'baru') {
+    changes.push(`periode masuk ${formatAcademicMonth(entryPeriodValue)} untuk seluruh siswa terpilih`);
+  }
   if (staffMode) {
     changes.push(`status anak guru/karyawan menjadi ${
       staffMode === 'regular' ? 'siswa biasa'
@@ -6172,24 +6205,30 @@ async function applyBulkStudentStatus() {
           : 'tetap tampil di tagihan'
     }`);
   }
-  if (!window.confirm(`Terapkan ${changes.join(' dan ')} ke ${ids.length} siswa terpilih?`)) return;
+  const periodWarning = entryType === 'baru'
+    ? 'Periode yang dipilih dapat mengubah awal tagihan SPP/Komputer. '
+    : '';
+  if (!window.confirm(`${periodWarning}Terapkan ${changes.join(' dan ')} ke ${ids.length} siswa terpilih?`)) return;
   try {
     const credentials = requireStudentRules();
-    const { data, error } = await app.supabase.rpc('bulk_save_student_status_v1', {
+    const { data, error } = await app.supabase.rpc('bulk_save_student_status_v2', {
       ...credentials,
       p_ids: ids,
       p_tahun_ajaran: year,
       p_entry_type: entryType,
+      p_entry_period: entryPeriod,
       p_is_staff_child: staffMode ? staffMode !== 'regular' : null,
       p_show_in_billing: staffMode ? staffMode === 'staff-show' : null
     });
     if (error) throw error;
     ui.bulkEntryType.value = '';
+    ui.bulkEntryPeriod.value = '';
+    updateBulkEntryPeriodVisibility();
     ui.bulkStaffMode.value = '';
     await reloadStudentData();
     alert(`${data || ids.length} siswa terpilih berhasil diproses.`);
   } catch (error) {
-    alert(error.message || 'Status siswa gagal diubah. Pastikan migration 041 sudah dijalankan.');
+    alert(error.message || 'Status siswa gagal diubah. Pastikan migration 043 sudah dijalankan setelah 042.');
   }
 }
 
@@ -10870,6 +10909,7 @@ function setupEvents() {
   const handleScopeChange = () => {
     app.paging.students = 0;
     app.paging.payments = 0;
+    if (ui.bulkEntryType.value === 'baru') populateBulkEntryPeriodOptions();
     populateDashboardClassFilter();
     renderStudentTable();
     if (app.server) {
@@ -11023,6 +11063,7 @@ function setupEvents() {
   document.getElementById('openStudentFormBtn').addEventListener('click', () => openStudentDialog('baru'));
   ui.studentType.addEventListener('change', updateStudentFormMode);
   document.getElementById('bulkGiatBtn').addEventListener('click', applyBulkActivity);
+  ui.bulkEntryType.addEventListener('change', updateBulkEntryPeriodVisibility);
   document.getElementById('bulkStatusBtn').addEventListener('click', applyBulkStudentStatus);
   document.getElementById('bulkDeleteBtn').addEventListener('click', applyBulkDelete);
   document.querySelector('[data-open-student-status-guide]').addEventListener('click', () => {
