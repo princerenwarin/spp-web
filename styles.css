@@ -4786,8 +4786,8 @@ input[type='radio'] {
 }
 
 @page payment-receipt {
-  margin: 8mm;
-  size: A4 landscape;
+  margin: 0;
+  size: 210mm 99mm;
 }
 
 @page cash-ledger {
@@ -4813,7 +4813,7 @@ input[type='radio'] {
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 18px 48px rgba(30, 27, 47, 0.28);
-  height: min(520px, calc(100vh - 24px));
+  height: min(620px, calc(100vh - 24px));
   max-height: calc(100vh - 24px);
   max-width: min(1120px, calc(100vw - 24px));
   padding: 0;
@@ -4856,12 +4856,13 @@ input[type='radio'] {
 }
 
 .payment-receipt-preview-content {
+  aspect-ratio: 210 / 99;
   background: #fff;
   border: 1px solid #d7dde6;
   margin: 0 auto;
   max-width: 900px;
-  min-height: 260px;
-  padding: 18px 22px;
+  min-height: 0;
+  padding: 12px 14px;
 }
 
 .payment-receipt-preview-footer {
@@ -5049,8 +5050,8 @@ input[type='radio'] {
 
 .payment-allocation-sections {
   display: grid;
-  gap: 10px;
-  grid-template-columns: minmax(0, 1.18fr) minmax(320px, 0.82fr);
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .payment-allocation-section {
@@ -5065,19 +5066,6 @@ input[type='radio'] {
   font-size: 0.82rem;
 }
 
-@container (max-width: 760px) {
-  .payment-allocation-sections {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .payment-component-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .payment-component-row .payment-remove {
-    justify-self: start;
-  }
-}
 
 .payment-billing-layout {
   display: grid;
@@ -6126,9 +6114,22 @@ table {
 
 .payment-secondary-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
-  justify-content: flex-start;
+  justify-content: space-between;
+}
+
+.payment-secondary-actions > button {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 40px;
+  width: calc(50% - 4px);
+}
+
+.payment-reset-button {
+  color: #a33d45;
+  gap: 6px;
 }
 
 .payment-mockup-status {
@@ -6604,11 +6605,14 @@ body.payment-mockup #pembayaranPage #paymentMockupTimestamp {
 
   .payment-receipt {
     color: #151515;
-    font: 9pt/1.35 Arial, sans-serif;
+    font: 7.5pt/1.15 Arial, sans-serif;
+    height: 99mm;
     margin: 0 auto;
     max-width: none;
+    overflow: hidden;
+    padding: 4mm 5mm;
     page: payment-receipt;
-    width: 100%;
+    width: 210mm;
   }
 
   .payment-receipt-page-break {

@@ -73,6 +73,7 @@ const app = {
   usedSchools: new Set(),
   selectedPaymentStudent: null,
   pendingReceiptCardStudent: null,
+  pendingReceiptPrintMarkup: '',
   pendingPaymentCorrection: null,
   paymentBilling: null,
   paymentBillingError: '',
@@ -328,6 +329,12 @@ const ui = {
   paymentCashChange: document.getElementById('paymentCashChange'),
   paymentSettlementStatus: document.getElementById('paymentSettlementStatus'),
   paymentSaveAmount: document.getElementById('paymentSaveAmount'),
+  paymentReceiptPreviewDialog: document.getElementById('paymentReceiptPreviewDialog'),
+  paymentReceiptPreviewContent: document.getElementById('paymentReceiptPreviewContent'),
+  paymentReceiptPreviewNote: document.getElementById('paymentReceiptPreviewNote'),
+  paymentReceiptPreviewClose: document.getElementById('paymentReceiptPreviewClose'),
+  paymentReceiptPreviewCancel: document.getElementById('paymentReceiptPreviewCancel'),
+  paymentReceiptPreviewPrint: document.getElementById('paymentReceiptPreviewPrint'),
   paymentMockupStatus: document.getElementById('paymentMockupStatus'),
   paymentMockupTimestamp: document.getElementById('paymentMockupTimestamp'),
   paymentMockupList: document.getElementById('paymentMockupList'),
@@ -3682,9 +3689,7 @@ async function printPaymentBatch(batchId, correction) {
   }
   if (!batch || !items.length) throw new Error('Rincian slip tidak tersedia.');
   if (correction && !batch.correction_no) throw new Error('Nomor slip koreksi belum tersedia.');
-  ui.paymentPrintSheet.innerHTML = renderPaymentReceipt(batch, items, correction);
-  document.body.classList.add('printing-payment');
-  window.print();
+  openPaymentReceiptPreview(renderPaymentReceipt(batch, items, correction));
 }
 
 async function printPaymentBatches(batchIds) {
@@ -3738,10 +3743,23 @@ async function printPaymentBatches(batchIds) {
     });
   }
 
-  ui.paymentPrintSheet.innerHTML = receipts.map(({ batch, items }, index) => (
+  openPaymentReceiptPreview(receipts.map(({ batch, items }, index) => (
     renderPaymentReceipt(batch, items, false, index < receipts.length - 1)
-  )).join('');
+  )).join(''));
+}
+
+function openPaymentReceiptPreview(markup) {
+  app.pendingReceiptPrintMarkup = markup;
+  ui.paymentReceiptPreviewContent.innerHTML = markup;
+  ui.paymentReceiptPreviewNote.textContent = 'Pratinjau ukuran slip 210 × 99 mm · 1/3 F4 landscape.';
+  if (!ui.paymentReceiptPreviewDialog.open) ui.paymentReceiptPreviewDialog.showModal();
+}
+
+function printPendingPaymentReceipt() {
+  if (!app.pendingReceiptPrintMarkup) return;
+  ui.paymentPrintSheet.innerHTML = app.pendingReceiptPrintMarkup;
   document.body.classList.add('printing-payment');
+  ui.paymentReceiptPreviewDialog.close();
   window.print();
 }
 
@@ -9500,7 +9518,36 @@ function setupEvents() {
     }
   });
   ui.paymentResetBtn.addEventListener('click', () => {
-    if (PAYMENT_MOCKUP_MODE) initializePaymentMockup();
+    if (PAYMENT_MOCKUP_MODE) {
+      initializePaymentMockup();
+      return;
+    }
+    ui.paymentForm.reset();
+    ui.paymentDate.value = localDateInputValue();
+    setPickerValue('paymentNospp', '');
+    resetPaymentAllocationForm();
+    renderPaymentStudentVA(null);
+    app.paymentBilling = null;
+    app.selectedPaymentStudent = null;
+    app.pendingReceiptCardStudent = null;
+    cashierPaymentMethod = 'cash';
+    ui.paymentCashReceived.value = '';
+    ui.paymentDigitalReference.value = '';
+    ui.paymentMethodOptions.querySelectorAll('[data-payment-method]').forEach((button) => {
+      const selected = button.dataset.paymentMethod === 'cash';
+      button.classList.toggle('is-selected', selected);
+      button.setAttribute('aria-pressed', String(selected));
+    });
+    updatePaymentAllocationRows();
+    ui.paymentSettlementStatus.textContent = 'Tunai · siap menerima pembayaran';
+  });
+  [
+    ui.paymentReceiptPreviewClose,
+    ui.paymentReceiptPreviewCancel
+  ].forEach((button) => button.addEventListener('click', () => ui.paymentReceiptPreviewDialog.close()));
+  ui.paymentReceiptPreviewPrint.addEventListener('click', printPendingPaymentReceipt);
+  ui.paymentReceiptPreviewDialog.addEventListener('click', (event) => {
+    if (event.target === ui.paymentReceiptPreviewDialog) ui.paymentReceiptPreviewDialog.close();
   });
   Object.values(paymentSettlementFlows).forEach((workflow) => {
     const elements = workflow.ui;
