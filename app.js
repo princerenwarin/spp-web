@@ -5722,6 +5722,22 @@ function resetStudentForm() {
   app.editingEnrollment = null;
 }
 
+function normalizeStudentEntryPeriod(value, academicYear = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  let period = '';
+  const yearMonth = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(raw);
+  if (yearMonth) period = `${yearMonth[2]}${yearMonth[1]}`;
+  const separated = /^(0[1-9]|1[0-2])[-/](\d{4})$/.exec(raw);
+  if (separated) period = `${separated[1]}${separated[2]}`;
+  if (/^(0[1-9]|1[0-2])\d{4}$/.test(raw)) period = raw;
+  if (!period) return raw;
+  const year = Number(period.slice(2));
+  const yearMatch = /^(\d{4})-(\d{4})$/.exec(String(academicYear || '').trim());
+  if (yearMatch && year !== Number(yearMatch[1]) && year !== Number(yearMatch[2])) return raw;
+  return period;
+}
+
 function buildStudentRow(source) {
   return {
     jenis: source.jenis,
@@ -5731,7 +5747,7 @@ function buildStudentRow(source) {
     no_wa: source.no_wa || '',
     kdsek: source.kdsek,
     kdkls: source.kdkls,
-    periode_masuk: source.periode_masuk || '',
+    periode_masuk: normalizeStudentEntryPeriod(source.periode_masuk || '', source.tahun_ajaran),
     dpp: source.dpp || 0,
     dsp: source.dsp || 0,
     seragam: source.seragam || 0,
@@ -7654,7 +7670,11 @@ async function importStudentsFile(file) {
     const rows = table.map((cells) => {
       const record = {};
       header.forEach((column, index) => { record[column] = (cells[index] || '').trim(); });
-      return buildStudentRow(record);
+      const row = buildStudentRow(record);
+      if (row.jenis === 'baru' && !row.periode_masuk && /^(\d{4})-\d{4}$/.test(row.tahun_ajaran)) {
+        row.periode_masuk = `07${row.tahun_ajaran.slice(0, 4)}`;
+      }
+      return row;
     });
     if (!rows.length) throw new Error('File tidak berisi data.');
     if (!window.confirm(`Import ${rows.length} baris? Jika ada satu baris salah, semuanya dibatalkan.`)) return;
@@ -7837,7 +7857,8 @@ async function appendFuturePaymentPeriods(student, billing) {
   const lastCurrentPeriod = currentPeriods[currentPeriods.length - 1]?.periode || billing.periode_aktif;
   const sequenceEnd = paymentPeriodSequence(lastCurrentPeriod);
   const academicPeriods = academicMonths(billing.tahun_ajaran).map((month) => toPeriode(month.key));
-  const billingEnd = paymentPeriodSequence(toPeriode(paymentBillingCutoff(billing.tahun_ajaran)));
+  const academicEnd = academicPeriods[academicPeriods.length - 1];
+  const billingEnd = paymentPeriodSequence(academicEnd);
   let futurePeriods = academicPeriods.filter((period) => (
     paymentPeriodSequence(period) > sequenceEnd && paymentPeriodSequence(period) <= billingEnd
   ));
