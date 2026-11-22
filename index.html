@@ -551,7 +551,6 @@
               <div class="panel-header">
                 <h3>Input Pembayaran</h3>
               </div>
-              <p class="bank-payment-note">Bank VA aktif: <strong id="paymentBankName">Belum diatur</strong>. Nomor VA setiap siswa ditampilkan pada data siswa.</p>
               <form id="paymentForm">
                 <div class="form-grid payment-student-grid">
                   <div class="field">
@@ -560,6 +559,11 @@
                       <input type="search" class="picker-input" placeholder="Ketik nama siswa" autocomplete="off" />
                       <input type="hidden" id="paymentNospp" name="id_siswa" required />
                       <div class="picker-results" hidden></div>
+                    </div>
+                    <div id="paymentStudentVa" class="payment-student-va" hidden>
+                      <span>Nomor VA</span>
+                      <strong id="paymentStudentVaNumber"></strong>
+                      <button type="button" class="payment-va-copy" id="paymentStudentVaCopy" aria-label="Salin nomor VA">Salin</button>
                     </div>
                     <small class="field-hint">Pilih siswa dan tahun ajaran yang akan menerima pembayaran.</small>
                   </div>
@@ -573,8 +577,11 @@
                 <fieldset class="payment-allocation">
                   <legend>Alokasi pembayaran</legend>
                   <p class="muted-copy">Isi nominal per periode. Subsidi BOS mengurangi total yang diterima dari orang tua.</p>
-                  <div id="paymentComponentRows">
-                    <div class="payment-component-row payment-monthly-row" data-payment-row="monthly">
+                  <div id="paymentComponentRows" class="payment-allocation-sections">
+                    <section class="payment-allocation-section" aria-label="Periode SPP">
+                      <h4>Periode SPP</h4>
+                      <div id="paymentMonthlyRows">
+                        <div class="payment-component-row payment-monthly-row" data-payment-row="monthly">
                       <label>
                         <span>Periode</span>
                         <select class="payment-period" aria-label="Periode tagihan" disabled>
@@ -594,7 +601,13 @@
                         <input class="money-input payment-component-amount payment-komp-amount" type="text" inputmode="numeric" aria-label="Nominal Komputer" disabled />
                       </label>
                       <button type="button" class="action-btn delete payment-remove" aria-label="Hapus periode" disabled>Hapus</button>
-                    </div>
+                        </div>
+                      </div>
+                    </section>
+                    <section class="payment-allocation-section" aria-label="Komponen lainnya">
+                      <h4>Komponen lainnya</h4>
+                      <div id="paymentOneTimeRows"></div>
+                    </section>
                   </div>
                   <div class="payment-allocation-footer">
                     <div class="payment-add-actions">

@@ -72,6 +72,7 @@ const app = {
   years: [],
   usedSchools: new Set(),
   selectedPaymentStudent: null,
+  pendingReceiptCardStudent: null,
   pendingPaymentCorrection: null,
   paymentBilling: null,
   paymentBillingError: '',
@@ -277,7 +278,6 @@ const ui = {
   activityYearStatus: document.getElementById('activityYearStatus'),
   priorYearChart: document.getElementById('priorYearChart'),
   priorYearRevenueBody: document.getElementById('priorYearRevenueBody'),
-  paymentBankName: document.getElementById('paymentBankName'),
   searchStudent: document.getElementById('searchStudent'),
   paymentForm: document.getElementById('paymentForm'),
   paymentNospp: document.getElementById('paymentNospp'),
@@ -307,6 +307,11 @@ const ui = {
   userPasswordClose: document.getElementById('userPasswordClose'),
   userPasswordCancel: document.getElementById('userPasswordCancel'),
   paymentComponentRows: document.getElementById('paymentComponentRows'),
+  paymentMonthlyRows: document.getElementById('paymentMonthlyRows'),
+  paymentOneTimeRows: document.getElementById('paymentOneTimeRows'),
+  paymentStudentVa: document.getElementById('paymentStudentVa'),
+  paymentStudentVaNumber: document.getElementById('paymentStudentVaNumber'),
+  paymentStudentVaCopy: document.getElementById('paymentStudentVaCopy'),
   paymentBosTotal: document.getElementById('paymentBosTotal'),
   paymentAllocationTotal: document.getElementById('paymentAllocationTotal'),
   paymentGrossTotal: document.getElementById('paymentGrossTotal'),
@@ -809,8 +814,6 @@ function renderSettings() {
   `).join('');
   renderSchoolClassSettings();
   renderBankVASettings();
-  const activeBanks = app.state.vaSettings.filter((item) => item.active).map((item) => item.bankName);
-  ui.paymentBankName.textContent = activeBanks.length ? activeBanks.join(', ') : 'Belum diatur';
   ui.schoolSettingsForm.querySelectorAll('input, button').forEach((control) => {
     control.disabled = !canSave;
   });
@@ -888,6 +891,21 @@ function getStudentVirtualAccounts(student) {
     bankName: bank.bankName,
     number: `${bank.vaPrefix}${school.vaCode}${String(student.id).padStart(4, '0')}`
   }));
+}
+
+function renderPaymentStudentVA(student) {
+  const accounts = student ? getStudentVirtualAccounts(student) : [];
+  ui.paymentStudentVa.hidden = !accounts.length;
+  if (!accounts.length) {
+    ui.paymentStudentVaNumber.textContent = '';
+    ui.paymentStudentVaCopy.disabled = true;
+    return;
+  }
+  ui.paymentStudentVaNumber.textContent = accounts
+    .map((account) => `${account.bankName}: ${account.number}`)
+    .join(' · ');
+  ui.paymentStudentVaCopy.disabled = false;
+  ui.paymentStudentVaCopy.dataset.vaNumber = accounts.map((account) => account.number).join(' · ');
 }
 
 function renderSchoolClassSettings() {
@@ -3823,6 +3841,23 @@ function formatLongDate(value) {
 window.addEventListener('afterprint', () => {
   document.body.classList.remove('printing-payment');
   if (ui.paymentPrintSheet) ui.paymentPrintSheet.replaceChildren();
+  const student = app.pendingReceiptCardStudent;
+  app.pendingReceiptCardStudent = null;
+  if (student) {
+    const openCard = window.confirm('Cetak buku kartu SPP untuk siswa ini?');
+    if (openCard) {
+      openStudentCardPrintDialog(student);
+    } else {
+      ui.paymentForm.reset();
+      ui.paymentDate.value = localDateInputValue();
+      setPickerValue('paymentNospp', '');
+      resetPaymentAllocationForm();
+      renderPaymentStudentVA(null);
+      renderPaymentList();
+      renderDashboard();
+      renderReport();
+    }
+  }
 });
 
 window.addEventListener('afterprint', () => {
@@ -5569,6 +5604,7 @@ function setPickerValue(hiddenId, id) {
   wrap.querySelector('.picker-results').hidden = true;
   if (wrap.dataset.picker === 'paymentStudent') {
     app.selectedPaymentStudent = student;
+    renderPaymentStudentVA(student);
     app.paymentBilling = null;
     app.paymentBillingError = '';
     paymentBillingRequest += 1;
@@ -5631,6 +5667,7 @@ function setupStudentPickers() {
       hidden.value = '';
       if (wrap.dataset.picker === 'paymentStudent') {
         app.selectedPaymentStudent = null;
+        renderPaymentStudentVA(null);
         app.paymentBilling = null;
         app.paymentBillingError = '';
         paymentBillingRequest += 1;
@@ -8467,7 +8504,8 @@ function initializePaymentMockup() {
   ui.paymentDate.value = localDateInputValue();
   ui.paymentForm.querySelector('#paymentNotes').value = '';
   ui.paymentBillingStatus.textContent = 'Data siswa, tagihan, dan transaksi di layar ini hanya contoh.';
-  ui.paymentComponentRows.replaceChildren();
+  ui.paymentMonthlyRows.replaceChildren();
+  ui.paymentOneTimeRows.replaceChildren();
 
   [
     { period: '2026-11', label: 'November 2026', spp: 350000, komputer: 50000, bos: 100000 },
@@ -8487,7 +8525,7 @@ function initializePaymentMockup() {
     row.querySelectorAll('.payment-component-amount, .payment-bos-amount').forEach((input) => {
       input.disabled = false;
     });
-    ui.paymentComponentRows.append(row);
+    ui.paymentMonthlyRows.append(row);
   });
 
   [
@@ -8497,7 +8535,7 @@ function initializePaymentMockup() {
     const row = makeOneTimePaymentRow();
     row.querySelector('.payment-component').value = item.component;
     row.querySelector('.payment-one-time-amount').value = formatRupiah(item.amount);
-    ui.paymentComponentRows.append(row);
+    ui.paymentOneTimeRows.append(row);
   });
 
   const today = new Date();
@@ -8538,7 +8576,8 @@ function initializePaymentMockup() {
 }
 
 function resetPaymentAllocationForm() {
-  ui.paymentComponentRows.replaceChildren(makePaymentComponentRow());
+  ui.paymentMonthlyRows.replaceChildren(makePaymentComponentRow());
+  ui.paymentOneTimeRows.replaceChildren();
   updatePaymentAllocationRows();
 }
 
@@ -8744,10 +8783,7 @@ async function handlePaymentSubmit(event) {
         if (error) throw error;
         batchId = String(data);
       }
-      form.reset();
-      ui.paymentDate.value = localDateInputValue();
-      setPickerValue('paymentNospp', '');
-      resetPaymentAllocationForm();
+      app.pendingReceiptCardStudent = app.selectedPaymentStudent;
       app.paging.payments = 0;
       try {
         await printPaymentBatch(batchId, false);
@@ -8796,10 +8832,7 @@ async function handlePaymentSubmit(event) {
     });
   });
   saveLocalData();
-  event.currentTarget.reset();
-  ui.paymentDate.value = localDateInputValue();
-  setPickerValue('paymentNospp', '');
-  resetPaymentAllocationForm();
+  app.pendingReceiptCardStudent = app.selectedPaymentStudent;
   renderDashboard();
   renderPaymentList();
   renderReport();
@@ -9343,6 +9376,17 @@ function setupEvents() {
   });
   formatAllMoneyInputs();
   updatePaymentAllocationRows();
+  ui.paymentStudentVaCopy.addEventListener('click', async () => {
+    const value = ui.paymentStudentVaCopy.dataset.vaNumber || '';
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      ui.paymentStudentVaCopy.textContent = 'Tersalin';
+      setTimeout(() => { ui.paymentStudentVaCopy.textContent = 'Salin'; }, 1200);
+    } catch {
+      window.prompt('Salin nomor Virtual Account:', value);
+    }
+  });
   ui.addPaymentComponent.addEventListener('click', () => {
     const monthlyRows = [...ui.paymentComponentRows.querySelectorAll('.payment-monthly-row')];
     if (monthlyRows.length >= 12) {
@@ -9356,7 +9400,7 @@ function setupEvents() {
       alert('Tidak ada periode berikutnya pada tahun ajaran ini.');
       return;
     }
-    ui.paymentComponentRows.append(makePaymentComponentRow(nextPeriod));
+    ui.paymentMonthlyRows.append(makePaymentComponentRow(nextPeriod));
     updatePaymentAllocationRows();
   });
   ui.addOneTimePaymentComponent.addEventListener('click', () => {
@@ -9365,7 +9409,7 @@ function setupEvents() {
       alert('Satu penerimaan maksimal 12 komponen lainnya.');
       return;
     }
-    ui.paymentComponentRows.append(makeOneTimePaymentRow());
+    ui.paymentOneTimeRows.append(makeOneTimePaymentRow());
     updatePaymentAllocationRows();
   });
   ui.paymentComponentRows.addEventListener('change', (event) => {
