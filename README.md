@@ -32,6 +32,7 @@ Aplikasi ini adalah starter web yang menggunakan Supabase sebagai backend untuk 
 - Jalankan `./supabase/010_student_rules.sql` setelah 009 (backup dulu). Migration ini menyimpan data siswa (baru/naik kelas, no. SPP otomatis, riwayat SPP, log, import CSV) lewat RPC khusus Admin. Data siswa tetap terbaca dengan anon key.
 - Jalankan `./supabase/011_student_selection_arrears.sql` setelah 010. Uang kegiatan/anak guru kini berlaku untuk siswa yang dicentang, dan ada input manual tagihan tahun lalu (tunggakan).
 - Form siswa, Ubah SPP, kegiatan massal, anak guru, dan import CSV (bukan .xlsx) hanya untuk Admin dan ditulis ke Supabase. Login ulang sebagai Admin setelah deploy.
+- Template impor siswa memuat kolom `SEKOLAH` setelah `ID`; isi nama atau kode sekolah agar siswa dengan nama sama dapat dibedakan. Template contoh memakai nama sekolah aktif.
 - Jalankan `./supabase/012_scalability.sql` setelah 011. Data dipaginasi 25 per halaman, dicari & dihitung di database (siap 5000+ siswa, 100rb transaksi), ada filter tahun ajaran.
 - Pembayaran disimpan di Supabase (`spp_app_payments`) setelah migration 012; tanpa 012 hanya di browser.
 - Jalankan `./supabase/013_student_edit_delete.sql` setelah 012: ubah nama siswa dan hapus massal data SPP siswa terpilih (ditolak jika masih ada pembayaran).

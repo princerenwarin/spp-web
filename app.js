@@ -6160,37 +6160,38 @@ async function backupData() {
 
 function downloadImportTemplate() {
   const year = currentAcademicYear();
+  const schoolScope = currentSchoolScope();
+  const templateSchools = app.state.schools
+    .filter((school) => school.active && (!schoolScope || school.kdsek === schoolScope));
+  const schoolForRow = (index) => templateSchools.length
+    ? templateSchools[index % templateSchools.length].nmsek
+    : '';
   const rows = [
-    ['ID', 'KELAS', 'NAMA SISWA', 'SPP', 'KOMPUTER', 'TOTAL', 'KEGIATAN'],
-    ['1215', 'PG', 'BENAYA NOAH CHRISTIANTO', 400000, 20000, 420000, 0],
-    ['1216', 'PG', 'CLAIRE VALIENTE MUEL', 400000, 20000, 420000, 0],
-    ['1217', 'PG', 'JESSICA CERE EVANINGGING', 400000, 20000, 420000, 0],
-    ['1218', 'A1', 'ABIGAIL JOANNA IRENA LIMBONG', 173000, 20000, 1148000, 955000],
-    ['1219', 'A1', 'ALCHEYSIA GITANA HUJU', 350000, 20000, 1325000, 955000],
-    ['1220', 'A1', 'ARINKA CLARITIVA UNTAVIDJA', 400000, 20000, 1375000, 955000],
-    ['1221', 'A1', 'CAITLYN FERISHA ARRESTI', 400000, 20000, 1375000, 955000]
+    ['ID', 'SEKOLAH', 'KELAS', 'NAMA SISWA', 'SPP', 'KOMPUTER', 'TOTAL', 'KEGIATAN'],
+    ['1215', schoolForRow(0), 'PG', 'BENAYA NOAH CHRISTIANTO', 400000, 20000, 420000, 0],
+    ['1216', schoolForRow(1), 'PG', 'CLAIRE VALIENTE MUEL', 400000, 20000, 420000, 0],
+    ['1217', schoolForRow(2), 'PG', 'JESSICA CERE EVANINGGING', 400000, 20000, 420000, 0],
+    ['1218', schoolForRow(3), 'A1', 'ABIGAIL JOANNA IRENA LIMBONG', 173000, 20000, 1148000, 955000],
+    ['1219', schoolForRow(4), 'A1', 'ALCHEYSIA GITANA HUJU', 350000, 20000, 1325000, 955000],
+    ['1220', schoolForRow(5), 'A1', 'ARINKA CLARITIVA UNTAVIDJA', 400000, 20000, 1375000, 955000],
+    ['1221', schoolForRow(6), 'A1', 'CAITLYN FERISHA ARRESTI', 400000, 20000, 1375000, 955000]
   ];
   if (window.XLSX) {
     const workbook = window.XLSX.utils.book_new();
     const sheet = window.XLSX.utils.aoa_to_sheet(rows);
     sheet['!cols'] = [
-      { wch: 10 }, { wch: 12 }, { wch: 32 }, { wch: 14 }, { wch: 14 },
-      { wch: 14 }, { wch: 14 }
+      { wch: 10 }, { wch: 24 }, { wch: 12 }, { wch: 32 }, { wch: 14 },
+      { wch: 14 }, { wch: 14 }, { wch: 14 }
     ];
     window.XLSX.utils.book_append_sheet(workbook, sheet, 'Data Siswa');
     window.XLSX.writeFile(workbook, `template_data_siswa_${year}.xlsx`);
     return;
   }
-  const lines = [
-    ['ID', 'KELAS', 'NAMA SISWA', 'SPP', 'KOMPUTER', 'TOTAL', 'KEGIATAN'].join(','),
-    '1215,PG,BENAYA NOAH CHRISTIANTO,400000,20000,420000,0',
-    '1216,PG,CLAIRE VALIENTE MUEL,400000,20000,420000,0',
-    '1217,PG,JESSICA CERE EVANINGGING,400000,20000,420000,0',
-    '1218,A1,ABIGAIL JOANNA IRENA LIMBONG,173000,20000,1148000,955000',
-    '1219,A1,ALCHEYSIA GITANA HUJU,350000,20000,1325000,955000',
-    '1220,A1,ARINKA CLARITIVA UNTAVIDJA,400000,20000,1375000,955000',
-    '1221,A1,CAITLYN FERISHA ARRESTI,400000,20000,1375000,955000'
-  ];
+  const escapeCsvCell = (value) => {
+    const text = String(value ?? '');
+    return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  const lines = rows.map((row) => row.map(escapeCsvCell).join(','));
   const blob = new Blob([`\uFEFF${lines.join('\r\n')}\r\n`], { type: 'text/csv;charset=utf-8' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
@@ -7936,7 +7937,7 @@ async function importStudentsFile(file) {
       const year = String(value(column.tahun) || currentYearScope() || currentAcademicYear()).trim();
       const school = resolveSchool(value(column.sekolah));
       if (!name || !className) throw new Error(`Baris ${index + 2}: Nama dan kelas wajib diisi.`);
-      if (!school) throw new Error(`Baris ${index + 2}: Pilih unit/kolom sekolah sebelum mengunggah.`);
+      if (!school) throw new Error(`Baris ${index + 2}: Sekolah wajib diisi dengan nama atau kode sekolah terdaftar.`);
 
       const existing = id
         ? app.state.siswa.find((student) => String(student.id) === id)
