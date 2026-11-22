@@ -329,6 +329,15 @@ const ui = {
   paymentCashChange: document.getElementById('paymentCashChange'),
   paymentSettlementStatus: document.getElementById('paymentSettlementStatus'),
   paymentSaveAmount: document.getElementById('paymentSaveAmount'),
+  paymentNextReceipt: document.getElementById('paymentNextReceipt'),
+  paymentCashDrawerToday: document.getElementById('paymentCashDrawerToday'),
+  paymentCashDrawerCount: document.getElementById('paymentCashDrawerCount'),
+  paymentStudentSearchDialog: document.getElementById('paymentStudentSearchDialog'),
+  paymentStudentSearchClose: document.getElementById('paymentStudentSearchClose'),
+  paymentStudentSearchInput: document.getElementById('paymentStudentSearchInput'),
+  paymentStudentSearchSchool: document.getElementById('paymentStudentSearchSchool'),
+  paymentStudentSearchClass: document.getElementById('paymentStudentSearchClass'),
+  paymentStudentSearchResults: document.getElementById('paymentStudentSearchResults'),
   paymentReceiptPreviewDialog: document.getElementById('paymentReceiptPreviewDialog'),
   paymentReceiptPreviewContent: document.getElementById('paymentReceiptPreviewContent'),
   paymentReceiptPreviewNote: document.getElementById('paymentReceiptPreviewNote'),
@@ -1082,8 +1091,68 @@ function updateCourseIndicator() {
 window.addEventListener('resize', updateCourseIndicator);
 document.fonts.ready.then(updateCourseIndicator);
 
+async function updatePaymentCashierStats() {
+  const today = localDateInputValue();
+  let latest = null;
+  let todayRows = [];
+  if (app.server) {
+    try {
+      const [latestResult, todayResult] = await Promise.all([
+        app.supabase.from('spp_app_payment_batch_list')
+          .select('receipt_no,id')
+          .is('voided_at', null)
+          .order('id', { ascending: false })
+          .limit(1),
+        app.supabase.from('spp_app_payment_batch_list')
+          .select('id,receipt_no,nominal,parent_nominal,payment_method')
+          .is('voided_at', null)
+          .eq('tglbyr', today)
+      ]);
+      latest = latestResult.data?.[0] || null;
+      todayRows = todayResult.data || [];
+    } catch (error) {
+      console.error('Unable to load cashier stats:', error);
+    }
+  } else {
+    latest = [...(app.state.transaksi || [])].sort((left, right) =>
+      String(right.created_at || right.tglbyr || '').localeCompare(String(left.created_at || left.tglbyr || ''))
+    )[0] || null;
+    todayRows = (app.state.transaksi || []).filter((row) => row.tglbyr === today);
+  }
+
+  const match = /(\d{4})-(\d+)$/.exec(String(latest?.receipt_no || '').trim());
+  if (match) {
+    const next = Number(match[2]) + 1;
+    ui.paymentNextReceipt.textContent = `SPP-${match[1]}-${String(next).padStart(match[2].length, '0')}`;
+  } else {
+    ui.paymentNextReceipt.textContent = `SPP-${today.slice(0, 4)}-00000001`;
+  }
+
+  const uniqueRows = new Map(todayRows.map((row) => [String(row.id || row.receipt_no || row), row]));
+  const totals = { cash: 0, edc: 0, qris: 0 };
+  const counts = { cash: 0, edc: 0, qris: 0 };
+  [...uniqueRows.values()].forEach((row) => {
+    const method = ['edc', 'qris'].includes(String(row.payment_method || '').toLowerCase())
+      ? String(row.payment_method).toLowerCase()
+      : 'cash';
+    const amount = Number(row.parent_nominal ?? row.nominal ?? 0);
+    totals[method] += amount;
+    counts[method] += 1;
+  });
+
+  ui.paymentCashDrawerToday.textContent = formatRupiah(totals.cash);
+  const breakdown = [];
+  if (counts.cash > 0) breakdown.push(`Tunai ${counts.cash} · ${formatRupiah(totals.cash)}`);
+  if (counts.edc > 0) breakdown.push(`EDC ${counts.edc} · ${formatRupiah(totals.edc)}`);
+  if (counts.qris > 0) breakdown.push(`QRIS ${counts.qris} · ${formatRupiah(totals.qris)}`);
+  ui.paymentCashDrawerCount.textContent = breakdown.length
+    ? `${breakdown.join(' · ')} transaksi`
+    : 'Belum ada transaksi hari ini';
+}
+
 function applyUserAccess() {
   ui.paymentCashierName.textContent = ui.userName.textContent || app.user?.email || 'Petugas aktif';
+  updatePaymentCashierStats();
   const paymentNav = document.querySelector('.nav[data-page="pembayaran"]');
   if (paymentNav) {
     paymentNav.hidden = !canAccessPayment();
@@ -5603,7 +5672,7 @@ function populateExistingStudents() {
 
 function studentPickerLabel(item, wrap) {
   if (wrap.dataset.picker === 'paymentStudent') {
-    return `${item.nama} · ${getSchoolName(item.kdsek)} · ${item.kdkls ? `Kelas ${item.kdkls}` : 'Kelas belum ditentukan'} · TA ${item.tahunAjaran || '-'}${item.nospp ? ` · No. SPP ${item.nospp}` : ''}`;
+    return `${item.nama} · ${getSchoolName(item.kdsek)} · ${item.kdkls ? `Kelas ${item.kdkls}` : 'Kelas belum ditentukan'} · TA ${item.tahunAjaran || '-'}`;
   }
   return `${item.nama} · ${getSchoolName(item.kdsek)} · ${item.kdkls ? `Kelas ${item.kdkls}` : 'Kelas belum ditentukan'} · ID ${formatStudentId(item.id)}`;
 }
@@ -5669,10 +5738,68 @@ async function renderPickerResults(wrap) {
     ? matches.map((item) => `
       <button type="button" class="picker-option" data-pick-id="${escapeHtml(item.id)}">
         <strong>${escapeHtml(item.nama)}</strong>
-        <span>${escapeHtml(getSchoolName(item.kdsek))} &middot; ${item.kdkls ? `Kelas ${escapeHtml(item.kdkls)}` : 'Kelas belum ditentukan'} &middot; ID ${escapeHtml(formatStudentId(item.id))}${item.nospp ? ` &middot; ${escapeHtml(item.nospp)}` : ''}</span>
+        <span>${escapeHtml(getSchoolName(item.kdsek))} &middot; ${item.kdkls ? `Kelas ${escapeHtml(item.kdkls)}` : 'Kelas belum ditentukan'} &middot; TA ${escapeHtml(item.tahunAjaran || '-')}</span>
       </button>`).join('')
     : '<div class="picker-empty">Siswa tidak ditemukan</div>';
   results.hidden = false;
+}
+
+let paymentStudentSearchIndex = -1;
+
+function paymentStudentSearchRows() {
+  return app.state.siswa
+    .filter((student) => (
+      (!ui.paymentStudentSearchSchool.value || student.kdsek === ui.paymentStudentSearchSchool.value)
+      && (!ui.paymentStudentSearchClass.value || student.kdkls === ui.paymentStudentSearchClass.value)
+    ))
+    .filter((student) => {
+      const keyword = ui.paymentStudentSearchInput.value.trim().toLowerCase();
+      if (!keyword) return true;
+      return `${student.nama || ''} ${student.nospp || ''} ${student.id || ''}`.toLowerCase().includes(keyword);
+    })
+    .slice(0, 100);
+}
+
+function renderPaymentStudentSearchResults() {
+  const rows = paymentStudentSearchRows();
+  if (!rows.length) {
+    ui.paymentStudentSearchResults.innerHTML = '<p class="payment-student-search-empty">Siswa tidak ditemukan.</p>';
+    paymentStudentSearchIndex = -1;
+    return;
+  }
+  paymentStudentSearchIndex = Math.max(0, Math.min(paymentStudentSearchIndex, rows.length - 1));
+  ui.paymentStudentSearchResults.innerHTML = rows.map((student, index) => `
+    <button type="button" role="option" class="payment-student-search-row${index === paymentStudentSearchIndex ? ' is-active' : ''}" data-payment-student-id="${escapeHtml(student.id)}">
+      <span class="payment-student-avatar">${escapeHtml(String(student.nama || '?').trim().charAt(0).toUpperCase())}</span>
+      <span class="payment-student-search-copy">
+        <strong>${escapeHtml(student.nama || '-')}</strong>
+        <small>${escapeHtml(getSchoolName(student.kdsek))} · ${escapeHtml(student.kdkls ? `Kelas ${student.kdkls}` : 'Kelas belum ditentukan')} · TA ${escapeHtml(student.tahunAjaran || '-')}</small>
+      </span>
+      <span class="payment-student-search-action">Pilih siswa</span>
+    </button>
+  `).join('');
+}
+
+function openPaymentStudentSearch() {
+  if (!ui.paymentStudentSearchDialog) return;
+  ui.paymentStudentSearchSchool.innerHTML = '<option value="">Semua unit</option>'
+    + app.state.schools.filter((school) => school.active).map((school) =>
+      `<option value="${escapeHtml(school.kdsek)}">${escapeHtml(school.nmsek)}</option>`
+    ).join('');
+  const classes = [...new Set(app.state.siswa.map((student) => student.kdkls).filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right));
+  ui.paymentStudentSearchClass.innerHTML = '<option value="">Semua kelas</option>'
+    + classes.map((className) => `<option value="${escapeHtml(className)}">${escapeHtml(className)}</option>`).join('');
+  ui.paymentStudentSearchInput.value = '';
+  paymentStudentSearchIndex = 0;
+  renderPaymentStudentSearchResults();
+  if (!ui.paymentStudentSearchDialog.open) ui.paymentStudentSearchDialog.showModal();
+  setTimeout(() => ui.paymentStudentSearchInput.focus(), 0);
+}
+
+function selectPaymentStudentFromSearch(id) {
+  setPickerValue('paymentNospp', id);
+  ui.paymentStudentSearchDialog.close();
 }
 
 function setupStudentPickers() {
@@ -5772,6 +5899,7 @@ function requireStudentRules() {
 
 async function reloadStudentData() {
   app.paymentBillingCache.clear();
+  updatePaymentCashierStats();
   if (app.server) {
     const { data } = await app.supabase.rpc('spp_app_years_v1');
     app.years = data || app.years;
@@ -9147,6 +9275,12 @@ async function handleBankSettingsSubmit(event) {
 
 function setupEvents() {
   window.addEventListener('resize', fitStudentCardPreview);
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'F1') {
+      event.preventDefault();
+      openPaymentStudentSearch();
+    }
+  });
   ui.paymentDate.value = localDateInputValue();
   ui.paymentDateFrom.value = localDateInputValue();
   ui.paymentDateTo.value = localDateInputValue();
@@ -9377,6 +9511,36 @@ function setupEvents() {
     updateSelectionUi(getFilteredStudents());
   });
   setupStudentPickers();
+  ui.paymentStudentSearchClose.addEventListener('click', () => ui.paymentStudentSearchDialog.close());
+  ui.paymentStudentSearchDialog.addEventListener('click', (event) => {
+    if (event.target === ui.paymentStudentSearchDialog) ui.paymentStudentSearchDialog.close();
+  });
+  ui.paymentStudentSearchInput.addEventListener('input', () => {
+    paymentStudentSearchIndex = 0;
+    renderPaymentStudentSearchResults();
+  });
+  ui.paymentStudentSearchSchool.addEventListener('change', renderPaymentStudentSearchResults);
+  ui.paymentStudentSearchClass.addEventListener('change', renderPaymentStudentSearchResults);
+  ui.paymentStudentSearchResults.addEventListener('click', (event) => {
+    const row = event.target.closest('[data-payment-student-id]');
+    if (row) selectPaymentStudentFromSearch(row.dataset.paymentStudentId);
+  });
+  ui.paymentStudentSearchInput.addEventListener('keydown', (event) => {
+    const rows = paymentStudentSearchRows();
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      paymentStudentSearchIndex = Math.min(rows.length - 1, paymentStudentSearchIndex + 1);
+      renderPaymentStudentSearchResults();
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      paymentStudentSearchIndex = Math.max(0, paymentStudentSearchIndex - 1);
+      renderPaymentStudentSearchResults();
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      const student = rows[paymentStudentSearchIndex];
+      if (student) selectPaymentStudentFromSearch(student.id);
+    }
+  });
   document.querySelectorAll('[data-open]').forEach((button) => {
     button.addEventListener('click', () => {
       const section = document.getElementById(button.dataset.open);

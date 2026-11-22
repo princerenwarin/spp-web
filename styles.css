@@ -4874,6 +4874,179 @@ input[type='radio'] {
   margin: 0;
 }
 
+.payment-student-search-dialog {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 22px 60px rgba(30, 27, 47, 0.32);
+  height: min(620px, calc(100vh - 32px));
+  max-height: calc(100vh - 32px);
+  max-width: min(820px, calc(100vw - 32px));
+  padding: 0;
+  width: 100%;
+}
+
+.payment-student-search-shell {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  height: 100%;
+}
+
+.payment-student-search-header {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  padding: 16px 18px 12px;
+}
+
+.payment-student-search-header h2,
+.payment-student-search-header p {
+  margin: 0;
+}
+
+.payment-student-search-header h2 {
+  font-size: 1.05rem;
+}
+
+.payment-student-search-header p {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-top: 4px;
+}
+
+.payment-student-search-tools {
+  display: grid;
+  gap: 8px;
+  padding: 12px 18px 8px;
+}
+
+.payment-student-search-box {
+  align-items: center;
+  border: 1.5px solid #4f6eea;
+  border-radius: 8px;
+  display: flex;
+  gap: 8px;
+  padding: 0 10px;
+}
+
+.payment-student-search-box input {
+  border: 0;
+  min-height: 42px;
+  outline: 0;
+  width: 100%;
+}
+
+.payment-student-search-filters {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.payment-student-search-filters label {
+  display: grid;
+  gap: 4px;
+}
+
+.payment-student-search-filters label span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.payment-student-search-filters select {
+  min-height: 36px;
+  width: 100%;
+}
+
+.payment-student-search-results {
+  overflow-y: auto;
+  padding: 4px 18px 12px;
+}
+
+.payment-student-search-row {
+  align-items: center;
+  background: #fff;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  margin: 3px 0;
+  padding: 8px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.payment-student-search-row:hover,
+.payment-student-search-row.is-active {
+  background: #f7f9ff;
+  border-color: #cfd8ff;
+}
+
+.payment-student-avatar {
+  align-items: center;
+  background: #eef2ff;
+  border-radius: 50%;
+  color: #4659a9;
+  display: inline-flex;
+  height: 38px;
+  justify-content: center;
+  width: 38px;
+  font-weight: 800;
+}
+
+.payment-student-search-copy {
+  display: grid;
+  min-width: 0;
+}
+
+.payment-student-search-copy strong {
+  font-size: 0.86rem;
+}
+
+.payment-student-search-copy small,
+.payment-student-search-status {
+  color: var(--muted);
+  font-size: 0.72rem;
+  margin-top: 2px;
+}
+
+.payment-student-search-action {
+  background: #4f6eea;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 7px 9px;
+}
+
+.payment-student-search-empty {
+  color: var(--muted);
+  margin: 16px 4px;
+  text-align: center;
+}
+
+.payment-student-search-footer {
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 8px 18px;
+  font-size: 0.72rem;
+}
+
+.payment-student-search-footer kbd {
+  background: #f1f3f7;
+  border: 1px solid #dfe4ec;
+  border-radius: 4px;
+  padding: 2px 5px;
+}
+
 .receipt-header {
   align-items: start;
   border-bottom: 2px solid #203b63;
@@ -5747,6 +5920,20 @@ table {
   min-width: 0;
 }
 
+#pembayaranPage .payment-student-grid {
+  align-items: start;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+}
+
+#pembayaranPage .payment-student-grid > .field {
+  min-width: 0;
+}
+
+#pembayaranPage .payment-student-grid > .field:first-child {
+  padding-right: 4px;
+}
+
 #pembayaranPage .payment-side-rail {
   align-content: start;
   display: grid;
@@ -5870,7 +6057,7 @@ table {
 .payment-cashier-stats {
   border-bottom: 1px solid var(--border);
   border-top: 1px solid var(--border);
-  display: none;
+  display: grid;
   gap: 18px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin: 0 0 20px;
@@ -6336,6 +6523,19 @@ body.payment-mockup #pembayaranPage #paymentMockupTimestamp {
     align-items: flex-start;
     flex-direction: column;
     gap: 4px;
+  }
+
+  .payment-student-search-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .payment-student-search-row {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+
+  .payment-student-search-action {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .payment-cashier-stats {

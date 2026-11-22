@@ -537,13 +537,13 @@
             </article>
             <article>
               <span>Kwitansi Berikutnya</span>
-              <strong>SPP-2026-00000126</strong>
-              <small>Contoh nomor berikutnya · bukan nomor produksi</small>
+              <strong id="paymentNextReceipt">Memuat nomor…</strong>
+              <small>Siap dipakai pada transaksi berikutnya</small>
             </article>
             <article>
               <span>Kas Laci Hari Ini</span>
-              <strong>Rp 1.425.000</strong>
-              <small>1 transaksi tunai · contoh mockup</small>
+              <strong id="paymentCashDrawerToday">Rp 0</strong>
+              <small id="paymentCashDrawerCount">Memuat transaksi tunai…</small>
             </article>
           </section>
           <div class="payment-workspace">
@@ -556,7 +556,7 @@
                   <div class="field">
                     <span>Nama Siswa</span>
                     <div class="picker" data-picker="paymentStudent" data-value-field="id">
-                      <input type="search" class="picker-input" placeholder="Ketik nama siswa" autocomplete="off" />
+                      <input type="search" class="picker-input" placeholder="Ketik nama siswa · Tekan F1 untuk pencarian" autocomplete="off" />
                       <input type="hidden" id="paymentNospp" name="id_siswa" required />
                       <div class="picker-results" hidden></div>
                     </div>
@@ -1291,6 +1291,33 @@
           <button type="submit" class="primary-button" id="userPasswordSubmit">Simpan password</button>
         </div>
       </form>
+    </dialog>
+    <dialog id="paymentStudentSearchDialog" class="payment-student-search-dialog" aria-labelledby="paymentStudentSearchTitle">
+      <div class="payment-student-search-shell">
+        <header class="payment-student-search-header">
+          <div>
+            <h2 id="paymentStudentSearchTitle">Pencarian Data Siswa</h2>
+            <p>Cari berdasarkan nama atau No. SPP. Tekan F1 untuk membuka lagi.</p>
+          </div>
+          <button type="button" class="modal-close" id="paymentStudentSearchClose" aria-label="Tutup pencarian">&times;</button>
+        </header>
+        <div class="payment-student-search-tools">
+          <label class="payment-student-search-box">
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><circle cx="10.8" cy="10.8" r="6.8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <input id="paymentStudentSearchInput" type="search" autocomplete="off" placeholder="Ketik nama atau No. SPP" />
+          </label>
+          <div class="payment-student-search-filters">
+            <label><span>Sekolah</span><select id="paymentStudentSearchSchool"><option value="">Semua unit</option></select></label>
+            <label><span>Kelas</span><select id="paymentStudentSearchClass"><option value="">Semua kelas</option></select></label>
+          </div>
+        </div>
+        <div id="paymentStudentSearchResults" class="payment-student-search-results" role="listbox" aria-label="Hasil pencarian siswa"></div>
+        <footer class="payment-student-search-footer">
+          <span><kbd>↑</kbd> <kbd>↓</kbd> Pilih baris</span>
+          <span><kbd>Enter</kbd> Pilih siswa</span>
+          <span><kbd>Esc</kbd> Tutup pencarian</span>
+        </footer>
+      </div>
     </dialog>
     <dialog id="paymentReceiptPreviewDialog" class="payment-receipt-preview-dialog" aria-labelledby="paymentReceiptPreviewTitle" aria-describedby="paymentReceiptPreviewNote">
       <div class="payment-receipt-preview-shell">
