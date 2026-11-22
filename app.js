@@ -78,6 +78,7 @@ const app = {
   paymentBilling: null,
   paymentBillingError: '',
   paymentBillingCache: new Map(),
+  paymentBillingRequests: new Map(),
   paymentImportRows: [],
   paymentImportFormat: 'standard',
   paymentImportCheckingDuplicates: false,
@@ -1787,6 +1788,7 @@ async function cutoffAcademicYear() {
     });
     if (error) throw error;
     app.paymentBillingCache.clear();
+    app.paymentBillingRequests.clear();
     await reloadStudentData();
     const result = data || {};
     if (result.already_closed) {
@@ -5928,6 +5930,7 @@ function requireStudentRules() {
 
 async function reloadStudentData() {
   app.paymentBillingCache.clear();
+  app.paymentBillingRequests.clear();
   updatePaymentCashierStats();
   if (app.server) {
     const { data } = await app.supabase.rpc('spp_app_years_v1');
@@ -6588,6 +6591,69 @@ async function searchPaymentStudents(query) {
     }));
 }
 
+function paymentImportStudentFromOverview(row) {
+  return {
+    id: String(row.id_siswa),
+    nama: row.nama,
+    kdsek: row.kdsek,
+    kdkls: row.kdkls,
+    nospp: String(row.nospp || ''),
+    tahunAjaran: row.tahun_ajaran || ''
+  };
+}
+
+function paymentImportStudentLookupKey(column, value) {
+  return column === 'id_siswa'
+    ? normalizeImportHeader(value)
+    : String(value || '').trim().toLowerCase();
+}
+
+async function loadPaymentStudentsByColumn(column, values) {
+  const uniqueValues = [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
+  const studentsByValue = new Map();
+  for (let valueOffset = 0; valueOffset < uniqueValues.length; valueOffset += 100) {
+    const valueChunk = uniqueValues.slice(valueOffset, valueOffset + 100);
+    for (let pageOffset = 0; ; pageOffset += 500) {
+      const { data, error } = await app.supabase.from('spp_app_student_overview')
+        .select('id_siswa,nama,kdsek,kdkls,nospp,tahun_ajaran')
+        .in(column, valueChunk)
+        .order('tahun_ajaran', { ascending: false })
+        .range(pageOffset, pageOffset + 499);
+      if (error) throw error;
+      (data || []).forEach((item) => {
+        const key = paymentImportStudentLookupKey(column, item[column]);
+        const students = studentsByValue.get(key) || [];
+        if (!students.some((student) => student.id === String(item.id_siswa))) {
+          students.push(paymentImportStudentFromOverview(item));
+          studentsByValue.set(key, students);
+        }
+      });
+      if (!data || data.length < 500) break;
+    }
+  }
+  return studentsByValue;
+}
+
+async function loadPaymentImportStudentIndex(records) {
+  const noSppValues = records
+    .filter((record) => record.sourceFormat !== 'desktop')
+    .map((record) => record.sourceNoSpp);
+  const studentIds = records
+    .filter((record) => record.sourceFormat === 'desktop')
+    .map((record) => record.sourceId);
+  const [byNoSpp, byId] = await Promise.all([
+    loadPaymentStudentsByColumn('nospp', noSppValues),
+    loadPaymentStudentsByColumn('id_siswa', studentIds)
+  ]);
+  return { byNoSpp, byId };
+}
+
+function cachedPaymentStudentSearch(query, searchCache) {
+  const key = String(query || '').trim().toLowerCase();
+  if (!searchCache.has(key)) searchCache.set(key, searchPaymentStudents(query));
+  return searchCache.get(key);
+}
+
 async function mapWithConcurrency(items, limit, callback) {
   const results = new Array(items.length);
   let nextIndex = 0;
@@ -6627,14 +6693,15 @@ function importSchoolMatches(student, sourceSchool) {
     || normalizeImportHeader(getSchoolName(student.kdsek)) === normalizeImportHeader(sourceSchool);
 }
 
-async function resolvePaymentImportRecord(record) {
+async function resolvePaymentImportRecord(record, { studentIndex, searchCache } = {}) {
   let candidates = [];
   let searchError = '';
   let selectedStudent = null;
   if (record.sourceFormat === 'desktop') {
     if (record.sourceId) {
       try {
-        const idCandidates = await searchPaymentStudents(record.sourceId);
+        const idCandidates = studentIndex?.byId.get(paymentImportStudentLookupKey('id_siswa', record.sourceId))
+          || await cachedPaymentStudentSearch(record.sourceId, searchCache || new Map());
         selectedStudent = idCandidates.find((student) => (
           normalizeImportHeader(student.id) === normalizeImportHeader(record.sourceId)
           && importSchoolMatches(student, record.sourceSchool)
@@ -6646,7 +6713,7 @@ async function resolvePaymentImportRecord(record) {
     }
     if (!selectedStudent) {
       try {
-        candidates = await searchPaymentStudents(record.sourceName);
+        candidates = await cachedPaymentStudentSearch(record.sourceName, searchCache || new Map());
       } catch (error) {
         searchError = error.message || 'Pencarian siswa gagal.';
       }
@@ -6655,7 +6722,10 @@ async function resolvePaymentImportRecord(record) {
     const query = record.sourceNoSpp || record.sourceName;
     if (query) {
       try {
-        candidates = await searchPaymentStudents(query);
+        candidates = record.sourceNoSpp
+          ? (studentIndex?.byNoSpp.get(paymentImportStudentLookupKey('nospp', record.sourceNoSpp))
+            || await cachedPaymentStudentSearch(query, searchCache || new Map()))
+          : await cachedPaymentStudentSearch(query, searchCache || new Map());
       } catch (error) {
         searchError = error.message || 'Pencarian siswa gagal.';
       }
@@ -6680,8 +6750,15 @@ async function resolvePaymentImportRecord(record) {
     confirmed: false,
     skipped: false
   };
-  if (selectedStudent && record.sourceFormat !== 'desktop') await loadPaymentImportBilling(row);
   return row;
+}
+
+async function resolvePaymentImportRecords(records) {
+  const studentIndex = app.server ? await loadPaymentImportStudentIndex(records) : null;
+  const searchCache = new Map();
+  return mapWithConcurrency(records, 4, (record) => (
+    resolvePaymentImportRecord(record, { studentIndex, searchCache })
+  ));
 }
 
 function paymentImportDuplicateKey(row) {
@@ -6831,18 +6908,40 @@ async function refreshPaymentImportDuplicateWarnings() {
 }
 
 async function loadPaymentImportBilling(row) {
+  const student = row.selectedStudent;
+  if (!student) {
+    row.billing = null;
+    row.billingStudentKey = '';
+    row.billingError = '';
+    row.billingLoading = false;
+    return;
+  }
+  const studentId = String(student.id);
+  const studentKey = `${studentId}|${student.tahunAjaran || ''}`;
+  if (row.billing && row.billingStudentKey === studentKey) return;
+  const requestId = (row.billingRequestId || 0) + 1;
+  row.billingRequestId = requestId;
   row.billing = null;
+  row.billingStudentKey = '';
   row.billingError = '';
-  if (!row.selectedStudent) return;
+  row.billingLoading = true;
   try {
-    row.billing = await getPaymentBilling(row.selectedStudent);
-    const schedule = row.billing.payment_periods || row.billing.periode_bulanan || [];
+    const billing = await getPaymentBilling(student);
+    if (row.billingRequestId !== requestId
+        || `${row.selectedStudent?.id || ''}|${row.selectedStudent?.tahunAjaran || ''}` !== studentKey) return;
+    row.billing = billing;
+    row.billingStudentKey = studentKey;
+    const schedule = billing.payment_periods || billing.periode_bulanan || [];
     const availablePeriods = schedule.map((item) => item.periode);
     if (!availablePeriods.includes(row.period)) {
-      row.period = oldestAnyDuePeriod(row.billing) || availablePeriods[0] || '';
+      row.period = oldestAnyDuePeriod(billing) || availablePeriods[0] || '';
     }
   } catch (error) {
-    row.billingError = error.message || 'Tagihan tidak dapat dimuat.';
+    if (row.billingRequestId === requestId && String(row.selectedStudent?.id) === studentId) {
+      row.billingError = error.message || 'Tagihan tidak dapat dimuat.';
+    }
+  } finally {
+    if (row.billingRequestId === requestId) row.billingLoading = false;
   }
 }
 
@@ -6897,7 +6996,7 @@ function renderPaymentImportRows() {
       ? row.importItems?.length > 0 && !(row.validationErrors || []).length
       : Boolean(row.component && row.nominal > 0
         && ((row.component !== 'spp' && row.component !== 'komp')
-          || (row.billing && !row.billingError && validPeriod
+          || (row.billing && !row.billingLoading && !row.billingError && validPeriod
             && Number(row.billing.belum_dialokasikan || 0) === 0)));
     const canConfirm = Boolean(validPaymentDate && row.selectedStudent?.nospp && hasItems
       && !(row.validationErrors || []).length
@@ -6907,7 +7006,13 @@ function renderPaymentImportRows() {
     )).join('');
     const periodLabel = row.period
       ? formatPeriodLabel(row.period)
-      : (row.billing ? 'Pilih periode' : (row.billingError ? 'Tagihan tidak tersedia' : 'Memuat...'));
+      : (row.billingLoading
+        ? 'Memuat tagihan...'
+        : (row.billing
+          ? 'Pilih periode'
+          : (row.billingError
+            ? 'Tagihan tidak tersedia'
+            : ((row.component === 'spp' || row.component === 'komp') ? 'Pilih periode tagihan' : 'Tagihan tidak diperlukan'))));
     const componentControl = isDesktop
       ? `<span>${escapeHtml(row.itemsSummary || 'Tidak ada tagihan')}</span>`
       : `<select data-import-component aria-label="Pilih tagihan pada baris ${row.sourceRow}"><option value="">Pilih tagihan</option>${componentOptions}</select>`;
@@ -7001,7 +7106,7 @@ async function importPaymentFile(file) {
         ? await paymentImportRowFingerprint(record)
         : ''
     })));
-    app.paymentImportRows = await mapWithConcurrency(records, 4, resolvePaymentImportRecord);
+    app.paymentImportRows = await resolvePaymentImportRecords(records);
     await refreshPaymentImportDuplicateWarnings();
   } catch (error) {
     app.paymentImportRows = [];
@@ -7465,7 +7570,7 @@ function updatePaymentSettlementRowMatch(workflow, row) {
   if (row.confirmed && String(row.selectedBatchId) !== String(previousBatchId)) row.confirmed = false;
 }
 
-async function hydratePaymentSettlementTransferRow(workflow, row) {
+async function hydratePaymentSettlementTransferRow(workflow, row, studentIndex = null, searchCache = new Map()) {
   if (workflow.kind !== 'transfer' || row.reviewMode !== 'new-transfer') return;
   if (!canAccessPayment()) {
     row.candidates = [];
@@ -7488,7 +7593,12 @@ async function hydratePaymentSettlementTransferRow(workflow, row) {
   row.studentLookupQuery = row.searchQuery;
   row.billingError = '';
   try {
-    row.candidates = await searchPaymentStudents(row.searchQuery);
+    const preloadedCandidates = row.sourceNoSpp
+      ? studentIndex?.byNoSpp.get(paymentImportStudentLookupKey('nospp', row.sourceNoSpp))
+      : null;
+    row.candidates = preloadedCandidates?.length
+      ? preloadedCandidates
+      : await cachedPaymentStudentSearch(row.searchQuery, searchCache);
     const normalizedQuery = normalizeImportHeader(row.searchQuery);
     const exact = row.candidates.find((student) => (
       normalizeImportHeader(student.nospp) === normalizedQuery
@@ -7497,14 +7607,14 @@ async function hydratePaymentSettlementTransferRow(workflow, row) {
     const selectedStudent = exact || null;
     row.selectedId = selectedStudent?.id || '';
     row.selectedStudent = selectedStudent || null;
-    if (selectedStudent) {
+    if (selectedStudent && (row.component === 'spp' || row.component === 'komp')) {
       await loadPaymentImportBilling(row);
-      if (row.component === 'spp' || row.component === 'komp') {
+      if (row.billing && row.period !== row.importedPeriod) {
         const periods = paymentSchedule(row.billing);
         const importedPeriodExists = periods.some((period) => period.periode === row.importedPeriod);
-        row.period = importedPeriodExists
-          ? row.importedPeriod
-          : (oldestDuePeriod(row.billing, row.component) || row.period || '');
+        if (!importedPeriodExists) {
+          row.period = oldestDuePeriod(row.billing, row.component) || row.period || '';
+        }
       }
     }
   } catch (error) {
@@ -7516,7 +7626,19 @@ async function hydratePaymentSettlementTransferRow(workflow, row) {
 }
 
 async function hydratePaymentSettlementTransferRows(workflow) {
-  await mapWithConcurrency(workflow.state.rows, 4, (row) => hydratePaymentSettlementTransferRow(workflow, row));
+  const rows = workflow.state.rows;
+  const studentIndex = app.server && !PAYMENT_MOCKUP_MODE
+    ? {
+      byNoSpp: await loadPaymentStudentsByColumn('nospp', rows
+        .filter((row) => row.reviewMode === 'new-transfer')
+        .map((row) => row.sourceNoSpp)),
+      byId: new Map()
+    }
+    : null;
+  const searchCache = new Map();
+  await mapWithConcurrency(rows, 4, (row) => (
+    hydratePaymentSettlementTransferRow(workflow, row, studentIndex, searchCache)
+  ));
 }
 
 async function loadPaymentSettlementReferenceCandidates(workflow) {
@@ -7657,7 +7779,9 @@ function paymentSettlementPeriodGuidance(row) {
     return 'Pembayaran ini tidak memerlukan alokasi periode bulanan.';
   }
   if (!row.component) return 'Pilih tujuan pembayaran untuk melihat saran alokasi.';
-  if (!row.billing) return row.billingError || 'Pilih siswa untuk melihat saran tagihan.';
+  if (!row.billing) return row.billingError || (row.billingLoading
+    ? 'Memuat saran tagihan...'
+    : 'Pilih siswa untuk melihat saran tagihan.');
   if (Number(row.billing.belum_dialokasikan || 0) > 0) return 'Ada pembayaran lama yang belum dialokasikan; selesaikan rekonsiliasi sebelum memakai saran otomatis.';
   const schedule = paymentSchedule(row.billing);
   const oldest = oldestDuePeriod(row.billing, row.component);
@@ -8025,6 +8149,9 @@ async function handlePaymentSettlementRowChange(workflow, event) {
       row.selectedId = '';
       row.selectedStudent = null;
       row.billing = null;
+      row.billingStudentKey = '';
+      row.billingRequestId = (row.billingRequestId || 0) + 1;
+      row.billingLoading = false;
       row.billingError = '';
     }
     updatePaymentSettlementValidation(workflow, row);
@@ -8052,6 +8179,9 @@ async function handlePaymentSettlementRowChange(workflow, event) {
     row.selectedId = '';
     row.selectedStudent = null;
     row.billing = null;
+    row.billingStudentKey = '';
+    row.billingRequestId = (row.billingRequestId || 0) + 1;
+    row.billingLoading = false;
     row.billingError = '';
     row.confirmed = false;
     row.skipped = false;
@@ -8060,11 +8190,20 @@ async function handlePaymentSettlementRowChange(workflow, event) {
   } else if (control.matches('[data-settlement-student]')) {
     row.selectedId = control.value;
     row.selectedStudent = row.candidates.find((student) => String(student.id) === String(row.selectedId)) || null;
+    row.billing = null;
+    row.billingStudentKey = '';
+    row.billingRequestId = (row.billingRequestId || 0) + 1;
+    row.billingLoading = false;
+    row.billingError = '';
     row.confirmed = false;
     row.skipped = false;
     row.skipTouched = false;
-    await loadPaymentImportBilling(row);
     if (row.component === 'spp' || row.component === 'komp') {
+      row.billingLoading = true;
+      renderPaymentSettlementRows(workflow);
+      await loadPaymentImportBilling(row);
+    }
+    if ((row.component === 'spp' || row.component === 'komp') && row.billing) {
       row.period = oldestDuePeriod(row.billing, row.component) || row.period || '';
     }
   } else if (control.matches('[data-settlement-batch]')) {
@@ -8076,8 +8215,15 @@ async function handlePaymentSettlementRowChange(workflow, event) {
     row.confirmed = false;
     row.skipped = false;
     row.skipTouched = false;
-    if ((row.component === 'spp' || row.component === 'komp') && row.billing) {
-      row.period = oldestDuePeriod(row.billing, row.component) || row.period || '';
+    if ((row.component === 'spp' || row.component === 'komp') && row.selectedStudent) {
+      if (!row.billing || row.billingStudentKey !== `${row.selectedStudent.id}|${row.selectedStudent.tahunAjaran || ''}`) {
+        row.billingLoading = true;
+      }
+      renderPaymentSettlementRows(workflow);
+      await loadPaymentImportBilling(row);
+      if (row.billing) {
+        row.period = oldestDuePeriod(row.billing, row.component) || row.period || '';
+      }
     }
   } else if (control.matches('[data-settlement-period]')) {
     row.period = control.value;
@@ -8323,6 +8469,10 @@ async function handlePaymentImportChange(event) {
   if (control.matches('[data-import-search]')) {
     row.searchQuery = control.value.trim();
     row.billingError = '';
+    row.billing = null;
+    row.billingStudentKey = '';
+    row.billingRequestId = (row.billingRequestId || 0) + 1;
+    row.billingLoading = false;
     try {
       row.candidates = await searchPaymentStudents(row.searchQuery);
       if (row.sourceFormat === 'standard') {
@@ -8350,7 +8500,11 @@ async function handlePaymentImportChange(event) {
       row.skipped = false;
       row.skipTouched = false;
       refreshDuplicates = true;
-      if (matched && row.sourceFormat !== 'desktop') await loadPaymentImportBilling(row);
+      if (matched && (row.component === 'spp' || row.component === 'komp')) {
+        row.billingLoading = true;
+        renderPaymentImportRows();
+        await loadPaymentImportBilling(row);
+      }
     } catch (error) {
       row.candidates = [];
       row.selectedId = '';
@@ -8364,19 +8518,37 @@ async function handlePaymentImportChange(event) {
   } else if (control.matches('[data-import-student]')) {
     row.selectedId = control.value;
     row.selectedStudent = row.candidates.find((student) => String(student.id) === String(row.selectedId)) || null;
+    row.billing = null;
+    row.billingStudentKey = '';
+    row.billingRequestId = (row.billingRequestId || 0) + 1;
+    row.billingLoading = false;
+    row.billingError = '';
     row.confirmed = false;
     row.skipped = false;
     row.skipTouched = false;
     row.period = row.importedPeriod;
-    if (row.sourceFormat !== 'desktop') await loadPaymentImportBilling(row);
+    if (row.component === 'spp' || row.component === 'komp') {
+      row.billingLoading = true;
+      renderPaymentImportRows();
+      await loadPaymentImportBilling(row);
+    }
     refreshDuplicates = true;
   } else if (control.matches('[data-import-component]')) {
     row.component = control.value;
     row.confirmed = false;
     row.skipped = false;
     row.skipTouched = false;
-    if ((row.component === 'spp' || row.component === 'komp') && row.billing && !row.period) {
-      row.period = oldestDuePeriod(row.billing, row.component) || oldestAnyDuePeriod(row.billing);
+    if ((row.component === 'spp' || row.component === 'komp') && row.selectedStudent) {
+      if (!row.billing || row.billingStudentKey !== `${row.selectedStudent.id}|${row.selectedStudent.tahunAjaran || ''}`) {
+        row.billingLoading = true;
+      }
+      renderPaymentImportRows();
+      await loadPaymentImportBilling(row);
+      if (row.billing && row.period !== row.importedPeriod) {
+        row.period = oldestDuePeriod(row.billing, row.component)
+          || row.period
+          || oldestAnyDuePeriod(row.billing);
+      }
     }
   } else if (control.matches('[data-import-period]')) {
     row.period = control.value;
@@ -9277,55 +9449,67 @@ async function getPaymentBilling(student, includeFuturePeriods = false) {
   const period = toPeriode(cutoff);
   const cacheKey = `${student.id}|${year}|${period}|${includeFuturePeriods ? 'future' : 'current'}`;
   if (app.paymentBillingCache.has(cacheKey)) return app.paymentBillingCache.get(cacheKey);
+  if (app.paymentBillingRequests.has(cacheKey)) return app.paymentBillingRequests.get(cacheKey);
 
-  let billing;
-  if (app.server) {
-    const isFutureYear = Number(year.slice(0, 4)) > Number(currentAcademicYear().slice(0, 4));
-    const { data, error } = isFutureYear
-      ? await app.supabase.rpc('spp_app_student_prepaid_billing_v1', {
-        p_id_siswa: String(student.id),
-        p_tahun: year
-      })
-      : await app.supabase.rpc('spp_app_student_billing_annual_v1', {
-        p_id_siswa: String(student.id),
-        p_tahun: year,
-        p_periode: period
-      });
-    if (error) throw error;
-    if (!data) throw new Error(`Tagihan tahun ajaran ${year} tidak ditemukan untuk siswa ini.`);
-    billing = data;
-    if (!isFutureYear) {
-      const { data: activity, error: activityError } = await app.supabase.rpc('spp_app_activity_ledger_v1', {
-        p_id_siswa: String(student.id),
-        p_tahun: year
-      });
-      if (activityError) throw activityError;
-      const previous = billing.komponen_satu_kali?.giat || {};
-      const next = {
-        ...previous,
-        tagihan: Number(activity?.tagihan || 0),
-        dibayar: Number(activity?.dibayar || 0),
-        sisa: Number(activity?.sisa || 0),
-        rincian: activity?.rincian || []
-      };
-      billing.komponen_satu_kali = { ...(billing.komponen_satu_kali || {}), giat: next };
-      billing.sisa_satu_kali = Math.max(
-        Number(billing.sisa_satu_kali || 0) - Number(previous.sisa || 0) + next.sisa,
-        0
-      );
-      billing.sisa_total = Math.max(
-        Number(billing.sisa_total || 0) - Number(previous.sisa || 0) + next.sisa,
-        0
-      );
+  const request = (async () => {
+    let billing;
+    if (app.server) {
+      const isFutureYear = Number(year.slice(0, 4)) > Number(currentAcademicYear().slice(0, 4));
+      const { data, error } = isFutureYear
+        ? await app.supabase.rpc('spp_app_student_prepaid_billing_v1', {
+          p_id_siswa: String(student.id),
+          p_tahun: year
+        })
+        : await app.supabase.rpc('spp_app_student_billing_annual_v1', {
+          p_id_siswa: String(student.id),
+          p_tahun: year,
+          p_periode: period
+        });
+      if (error) throw error;
+      if (!data) throw new Error(`Tagihan tahun ajaran ${year} tidak ditemukan untuk siswa ini.`);
+      billing = data;
+      if (!isFutureYear) {
+        const { data: activity, error: activityError } = await app.supabase.rpc('spp_app_activity_ledger_v1', {
+          p_id_siswa: String(student.id),
+          p_tahun: year
+        });
+        if (activityError) throw activityError;
+        const previous = billing.komponen_satu_kali?.giat || {};
+        const next = {
+          ...previous,
+          tagihan: Number(activity?.tagihan || 0),
+          dibayar: Number(activity?.dibayar || 0),
+          sisa: Number(activity?.sisa || 0),
+          rincian: activity?.rincian || []
+        };
+        billing.komponen_satu_kali = { ...(billing.komponen_satu_kali || {}), giat: next };
+        billing.sisa_satu_kali = Math.max(
+          Number(billing.sisa_satu_kali || 0) - Number(previous.sisa || 0) + next.sisa,
+          0
+        );
+        billing.sisa_total = Math.max(
+          Number(billing.sisa_total || 0) - Number(previous.sisa || 0) + next.sisa,
+          0
+        );
+      }
+    } else {
+      billing = buildLocalPaymentBilling(student, year, cutoff);
     }
-  } else {
-    billing = buildLocalPaymentBilling(student, year, cutoff);
+    billing.tahun_ajaran = billing.tahun_ajaran || year;
+    if (includeFuturePeriods) await appendFuturePaymentPeriods(student, billing);
+    else billing.payment_periods = billing.periode_bulanan || [];
+    return billing;
+  })();
+  app.paymentBillingRequests.set(cacheKey, request);
+  try {
+    const billing = await request;
+    app.paymentBillingCache.set(cacheKey, billing);
+    return billing;
+  } finally {
+    if (app.paymentBillingRequests.get(cacheKey) === request) {
+      app.paymentBillingRequests.delete(cacheKey);
+    }
   }
-  billing.tahun_ajaran = billing.tahun_ajaran || year;
-  if (includeFuturePeriods) await appendFuturePaymentPeriods(student, billing);
-  else billing.payment_periods = billing.periode_bulanan || [];
-  app.paymentBillingCache.set(cacheKey, billing);
-  return billing;
 }
 
 function paymentHistoryStatusMarkup(status) {
