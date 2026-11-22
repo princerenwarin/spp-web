@@ -40,74 +40,103 @@ BEGIN
       AND (p_kdkls IS NULL OR e.kdkls = p_kdkls)
       AND NOT (s.is_staff_child AND NOT s.show_in_billing)
   ),
-  first_month_spp AS (
+  entry_month_balance AS (
     SELECT candidates.*,
       COALESCE((
-        SELECT (period.item->'spp'->>'sisa')::numeric
+        SELECT (monthly_item.item->'spp'->>'sisa')::numeric
         FROM jsonb_array_elements(
           COALESCE(candidates.billing->'periode_bulanan', '[]'::jsonb)
         ) AS monthly_item(item)
         WHERE monthly_item.item->>'periode' = candidates.periode_masuk
         LIMIT 1
-      ), 0) AS excluded_spp
+      ), 0) AS excluded_spp,
+      COALESCE((
+        SELECT (monthly_item.item->'komp'->>'sisa')::numeric
+        FROM jsonb_array_elements(
+          COALESCE(candidates.billing->'periode_bulanan', '[]'::jsonb)
+        ) AS monthly_item(item)
+        WHERE monthly_item.item->>'periode' = candidates.periode_masuk
+        LIMIT 1
+      ), 0) AS excluded_komp
     FROM candidates
   ),
   adjusted AS (
-    SELECT first_month_spp.id_siswa, first_month_spp.nospp, first_month_spp.nama,
-      first_month_spp.kdsek, first_month_spp.kdkls, first_month_spp.no_wa,
+    SELECT entry_month_balance.id_siswa, entry_month_balance.nospp, entry_month_balance.nama,
+      entry_month_balance.kdsek, entry_month_balance.kdkls, entry_month_balance.no_wa,
       CASE
-        WHEN first_month_spp.entry_type = 'baru'
-          AND first_month_spp.periode_masuk IS NOT NULL
+        WHEN entry_month_balance.entry_type = 'baru'
+          AND entry_month_balance.periode_masuk IS NOT NULL
         THEN jsonb_set(
           jsonb_set(
             jsonb_set(
-              first_month_spp.billing,
-              '{sisa_spp}',
+              jsonb_set(
+                entry_month_balance.billing,
+                '{sisa_spp}',
+                to_jsonb(greatest(
+                  COALESCE((entry_month_balance.billing->>'sisa_spp')::numeric, 0)
+                    - entry_month_balance.excluded_spp,
+                  0
+                )),
+                true
+              ),
+              '{sisa_komp}',
               to_jsonb(greatest(
-                COALESCE((first_month_spp.billing->>'sisa_spp')::numeric, 0)
-                  - first_month_spp.excluded_spp,
+                COALESCE((entry_month_balance.billing->>'sisa_komp')::numeric, 0)
+                  - entry_month_balance.excluded_komp,
                 0
               )),
               true
             ),
-            '{sisa_total}',
-            to_jsonb(greatest(
-              COALESCE((first_month_spp.billing->>'sisa_total')::numeric, 0)
-                - first_month_spp.excluded_spp,
-              0
-            )),
+              '{sisa_total}',
+              to_jsonb(greatest(
+                COALESCE((entry_month_balance.billing->>'sisa_total')::numeric, 0)
+                  - entry_month_balance.excluded_spp
+                  - entry_month_balance.excluded_komp,
+                0
+              )),
+              true
+            ),
+            '{periode_bulanan}',
+            (
+              SELECT COALESCE(jsonb_agg(
+                CASE
+                  WHEN monthly_item.item->>'periode' = entry_month_balance.periode_masuk
+                  THEN jsonb_set(
+                    jsonb_set(
+                      monthly_item.item,
+                      '{spp}',
+                      jsonb_build_object(
+                        'tagihan', 0,
+                        'dibayar', 0,
+                        'saldo_dibawa', 0,
+                        'sisa', 0,
+                        'status', '-'
+                      ),
+                      true
+                    ),
+                    '{komp}',
+                    jsonb_build_object(
+                      'tagihan', 0,
+                      'dibayar', 0,
+                      'saldo_dibawa', 0,
+                      'sisa', 0,
+                      'status', '-'
+                    ),
+                    true
+                  )
+                  ELSE monthly_item.item
+                END
+                ORDER BY monthly_item.ordinality
+              ), '[]'::jsonb)
+              FROM jsonb_array_elements(
+                COALESCE(entry_month_balance.billing->'periode_bulanan', '[]'::jsonb)
+              ) WITH ORDINALITY AS monthly_item(item, ordinality)
+            ),
             true
-          ),
-          '{periode_bulanan}',
-          (
-            SELECT COALESCE(jsonb_agg(
-              CASE
-                WHEN monthly_item.item->>'periode' = first_month_spp.periode_masuk
-                THEN jsonb_set(
-                  monthly_item.item,
-                  '{spp}',
-                  jsonb_build_object(
-                    'tagihan', 0,
-                    'dibayar', 0,
-                    'saldo_dibawa', 0,
-                    'sisa', 0,
-                    'status', '-'
-                  ),
-                  true
-                )
-                ELSE monthly_item.item
-              END
-              ORDER BY monthly_item.ordinality
-            ), '[]'::jsonb)
-            FROM jsonb_array_elements(
-              COALESCE(first_month_spp.billing->'periode_bulanan', '[]'::jsonb)
-            ) WITH ORDINALITY AS monthly_item(item, ordinality)
-          ),
-          true
         )
-        ELSE first_month_spp.billing
+        ELSE entry_month_balance.billing
       END AS billing
-    FROM first_month_spp
+    FROM entry_month_balance
   ),
   owing AS (
     SELECT adjusted.*
