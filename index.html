@@ -1089,6 +1089,54 @@
         </div>
       </form>
     </dialog>
+    <dialog id="studentImportReviewDialog" class="student-import-review-dialog" aria-labelledby="studentImportReviewTitle">
+      <div class="student-import-review-shell">
+        <header class="student-import-review-header">
+          <div>
+            <h2 id="studentImportReviewTitle">Periksa impor siswa</h2>
+            <p>Perbaiki baris bermasalah, lalu pilih baris yang akan diproses. Baris yang dilewati tidak mengubah data.</p>
+          </div>
+          <button type="button" class="modal-close" id="studentImportReviewClose" aria-label="Tutup pemeriksaan impor">&times;</button>
+        </header>
+        <div class="student-import-review-body">
+          <p id="studentImportReviewStatus" class="student-import-review-status" role="status" aria-live="polite"></p>
+          <p id="studentImportReviewSummary" class="student-import-review-summary" hidden></p>
+          <div class="table-wrap student-import-review-table-wrap" id="studentImportReviewTable" hidden>
+            <table>
+              <thead>
+                <tr>
+                  <th>Proses</th>
+                  <th>Baris</th>
+                  <th>Masalah</th>
+                  <th>Jenis</th>
+                  <th>ID</th>
+                  <th>Sekolah</th>
+                  <th>Kelas</th>
+                  <th>Nama siswa</th>
+                  <th>Tahun ajaran</th>
+                  <th>Periode masuk</th>
+                  <th>No. WhatsApp</th>
+                  <th>SPP</th>
+                  <th>Komputer</th>
+                  <th>Kegiatan</th>
+                  <th>DPP</th>
+                  <th>DPS</th>
+                  <th>Seragam</th>
+                </tr>
+              </thead>
+              <tbody id="studentImportReviewRows"></tbody>
+            </table>
+          </div>
+        </div>
+        <footer class="student-import-review-footer">
+          <button type="button" class="secondary-button" id="studentImportReviewRetry" hidden>Periksa duplikat lagi</button>
+          <div>
+            <button type="button" class="secondary-button" id="studentImportReviewCancel">Tutup</button>
+            <button type="button" class="primary-button" id="studentImportReviewSubmit" disabled>Impor baris terpilih</button>
+          </div>
+        </footer>
+      </div>
+    </dialog>
     <dialog id="studentCardPrintDialog" class="student-card-print-dialog">
       <form method="dialog">
         <div class="card-print-dialog-heading">
@@ -1345,7 +1393,7 @@
         <header class="payment-settlement-header">
           <div>
             <h2 id="paymentImportTitle">Impor Pembayaran</h2>
-            <p>Unggah pembayaran baru, lalu tinjau siswa, tagihan, periode, dan tanggal sebelum menyimpan.</p>
+            <p>Tinjau dan koreksi data setiap baris sebelum menyimpan; baris duplikat ditandai untuk dipilih atau dilewati.</p>
           </div>
           <button type="button" class="modal-close" id="paymentImportClose" aria-label="Tutup impor pembayaran">&times;</button>
         </header>
@@ -1375,6 +1423,7 @@
                 <tbody id="paymentImportRows"></tbody>
               </table>
             </div>
+            <button type="button" class="secondary-button" id="paymentImportRetryDuplicates" hidden>Periksa ulang duplikat</button>
             <button type="button" class="primary-button" id="importPaymentsBtn" disabled>Impor pembayaran terkonfirmasi</button>
           </section>
         </div>
@@ -1446,7 +1495,7 @@
             <div class="payment-settlement-section-heading">
               <div>
                 <h3 id="paymentDigitalReviewTitle">Tinjau baris file</h3>
-                <p>Baris hanya dapat dikonfirmasi jika metode, referensi, nominal, dan tanggal pembayarannya cocok.</p>
+                <p>Koreksi baris yang tidak cocok atau duplikat, lalu konfirmasi transaksi yang benar dan lewati sisanya.</p>
               </div>
               <span id="paymentDigitalReviewCount" class="payment-settlement-count">0 baris</span>
             </div>
@@ -1467,7 +1516,7 @@
         <header class="payment-settlement-header">
           <div>
             <h2 id="paymentTransferImportTitle">Impor Transfer</h2>
-            <p>Tinjau transfer yang belum tercatat. Pilih siswa dan periksa saran alokasi sebelum membuat pembayaran.</p>
+            <p>Koreksi data yang tidak cocok atau duplikat. Pilih siswa dan periksa saran alokasi sebelum membuat pembayaran.</p>
           </div>
           <button type="button" class="modal-close" id="paymentTransferImportClose" aria-label="Tutup impor transfer">&times;</button>
         </header>
