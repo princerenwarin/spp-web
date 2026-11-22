@@ -6480,23 +6480,59 @@ function parseDesktopPaymentRecords(table, header, firstSourceRow = 2) {
   return records;
 }
 
+function paymentImportFormatFromHeader(header) {
+  const findColumn = (...names) => header.findIndex((item) => names.includes(item));
+  if (findColumn('tgl') >= 0 && findColumn('nmsek') >= 0
+      && findColumn('kas') >= 0 && findColumn('srgm') >= 0) {
+    return 'desktop';
+  }
+  if (findColumn('nominal') >= 0
+      && (findColumn('nama', 'namasiswa', 'siswa') >= 0
+        || findColumn('nosp', 'nomorspp') >= 0)) {
+    return 'standard';
+  }
+  return '';
+}
+
 async function parsePaymentImportFile(file) {
   const extension = file.name.split('.').pop().toLowerCase();
   let table;
+  let detectedFormat = '';
   if (extension === 'csv') {
     table = parseCsv(await file.text());
   } else {
     if (!window.XLSX) throw new Error('Pembaca Excel tidak tersedia. Muat ulang aplikasi lalu coba lagi.');
     const workbook = window.XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
-    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-    if (!firstSheet) throw new Error('File Excel tidak memiliki lembar kerja.');
-    table = window.XLSX.utils.sheet_to_json(firstSheet, { header: 1, raw: true, defval: '' });
+    const isExampleSheet = (name) => /^(contoh|panduan|example|sample)/.test(normalizeImportHeader(name));
+    const candidates = workbook.SheetNames
+      .filter((name) => !isExampleSheet(name))
+      .map((name) => {
+        const sheet = workbook.Sheets[name];
+        const rows = window.XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
+        const header = (rows[0] || []).map(normalizeImportHeader);
+        const format = paymentImportFormatFromHeader(header);
+        const hasData = rows.slice(1).some((row) => row.some((cell) => String(cell ?? '').trim()));
+        return { name, rows, format, hasData };
+      })
+      .filter((sheet) => sheet.format && sheet.hasData);
+    if (candidates.length > 1) {
+      throw new Error(`File berisi transaksi di beberapa lembar (${candidates.map((sheet) => sheet.name).join(', ')}). Sisakan satu lembar data lalu unggah ulang.`);
+    }
+    if (candidates.length === 1) {
+      table = candidates[0].rows;
+      detectedFormat = candidates[0].format;
+    } else {
+      const firstDataSheetName = workbook.SheetNames.find((name) => !isExampleSheet(name))
+        || workbook.SheetNames[0];
+      const firstDataSheet = workbook.Sheets[firstDataSheetName];
+      if (!firstDataSheet) throw new Error('File Excel tidak memiliki lembar kerja.');
+      table = window.XLSX.utils.sheet_to_json(firstDataSheet, { header: 1, raw: true, defval: '' });
+    }
   }
   const header = (table.shift() || []).map(normalizeImportHeader);
   const findColumn = (...names) => header.findIndex((item) => names.includes(item));
-  const isDesktopFormat = findColumn('tgl') >= 0 && findColumn('nmsek') >= 0
-    && findColumn('kas') >= 0 && findColumn('srgm') >= 0;
-  if (isDesktopFormat) {
+  detectedFormat = detectedFormat || paymentImportFormatFromHeader(header);
+  if (detectedFormat === 'desktop') {
     return { format: 'desktop', records: parseDesktopPaymentRecords(table, header) };
   }
   const columns = {
