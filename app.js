@@ -238,6 +238,7 @@ const ui = {
   studentSortSelect: document.getElementById('studentSortSelect'),
   selectAllStudents: document.getElementById('selectAllStudents'),
   bulkGiat: document.getElementById('bulkGiat'),
+  bulkEntryType: document.getElementById('bulkEntryType'),
   bulkStaffMode: document.getElementById('bulkStaffMode'),
   importFile: document.getElementById('importFile'),
   studentImportReviewDialog: document.getElementById('studentImportReviewDialog'),
@@ -1619,7 +1620,6 @@ function drawStudentTable() {
       <tr class="${selected ? 'is-selected' : ''}">
         <td class="admin-only col-check" ${admin ? '' : 'hidden'}>${selectable ? `<input type="checkbox" data-select-id="${escapeHtml(row.id)}" ${selected ? 'checked' : ''} aria-label="Pilih ${escapeHtml(row.nama)}" />` : ''}</td>
         <td data-label="Siswa"><div class="student-name">${escapeHtml(row.nama)}</div><div class="student-sub">${row.nospp ? escapeHtml(row.nospp) : 'Menunggu kelas untuk No. SPP'}${row.tahunAjaran ? ` &middot; ${escapeHtml(row.tahunAjaran)}` : ''}${row.isStaffChild ? ' &middot; <span class="badge-staff">Anak guru</span>' : ''}</div>
-          ${admin && row.tahunAjaran ? `<button type="button" class="action-btn edit student-status-action" data-action="student-status" data-id="${escapeHtml(row.id)}" data-year="${escapeHtml(row.tahunAjaran)}">Ubah status siswa</button>` : ''}
         </td>
         <td data-label="Sekolah / Kelas"><div>${escapeHtml(getSchoolName(row.kdsek))}</div><div class="student-sub">${row.kdkls ? `Kelas ${escapeHtml(row.kdkls)}` : 'Kelas belum ditentukan'}</div></td>
         <td data-label="Virtual Account">${virtualAccountMarkup}</td>
@@ -6146,26 +6146,50 @@ async function applyBulkActivity() {
   }
 }
 
-async function applyBulkStaff() {
+async function applyBulkStudentStatus() {
   const ids = getSelectedStudentIds();
   if (!ids.length) {
     alert('Centang siswa di tabel terlebih dahulu.');
     return;
   }
-  const mode = ui.bulkStaffMode.value;
-  if (!window.confirm(`Terapkan ke ${ids.length} siswa terpilih?`)) return;
+  const entryType = ui.bulkEntryType.value || null;
+  const staffMode = ui.bulkStaffMode.value || null;
+  if (!entryType && !staffMode) {
+    alert('Pilih setidaknya satu status yang akan diubah.');
+    return;
+  }
+  const year = entryType ? currentYearScope() : null;
+  if (entryType && !year) {
+    alert('Pilih satu Tahun Ajaran pada filter di atas sebelum mengubah status pendaftaran.');
+    return;
+  }
+  const changes = [];
+  if (entryType) changes.push(`status pendaftaran menjadi ${entryType === 'baru' ? 'Siswa baru' : 'Naik/pindah kelas'} untuk ${year}`);
+  if (staffMode) {
+    changes.push(`status anak guru/karyawan menjadi ${
+      staffMode === 'regular' ? 'siswa biasa'
+        : staffMode === 'staff-hide' ? 'disembunyikan dari tagihan'
+          : 'tetap tampil di tagihan'
+    }`);
+  }
+  if (!window.confirm(`Terapkan ${changes.join(' dan ')} ke ${ids.length} siswa terpilih?`)) return;
   try {
     const credentials = requireStudentRules();
-    const { error } = await app.supabase.rpc('bulk_set_staff_child_v1', {
+    const { data, error } = await app.supabase.rpc('bulk_save_student_status_v1', {
       ...credentials,
       p_ids: ids,
-      p_is_staff_child: mode !== 'regular',
-      p_show_in_billing: mode !== 'staff-hide'
+      p_tahun_ajaran: year,
+      p_entry_type: entryType,
+      p_is_staff_child: staffMode ? staffMode !== 'regular' : null,
+      p_show_in_billing: staffMode ? staffMode === 'staff-show' : null
     });
     if (error) throw error;
+    ui.bulkEntryType.value = '';
+    ui.bulkStaffMode.value = '';
     await reloadStudentData();
+    alert(`${data || ids.length} siswa terpilih berhasil diproses.`);
   } catch (error) {
-    alert(error.message || 'Status anak guru gagal diubah.');
+    alert(error.message || 'Status siswa gagal diubah. Pastikan migration 041 sudah dijalankan.');
   }
 }
 
@@ -10999,14 +11023,14 @@ function setupEvents() {
   document.getElementById('openStudentFormBtn').addEventListener('click', () => openStudentDialog('baru'));
   ui.studentType.addEventListener('change', updateStudentFormMode);
   document.getElementById('bulkGiatBtn').addEventListener('click', applyBulkActivity);
-  document.getElementById('bulkStaffBtn').addEventListener('click', applyBulkStaff);
+  document.getElementById('bulkStatusBtn').addEventListener('click', applyBulkStudentStatus);
   document.getElementById('bulkDeleteBtn').addEventListener('click', applyBulkDelete);
   document.querySelector('[data-open-student-status-guide]').addEventListener('click', () => {
     const opened = ui.selectionBar.classList.toggle('is-status-mode');
     if (opened) {
       ui.selectionBar.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setTimeout(() => {
-        (app.selectedStudents.size ? ui.bulkStaffMode : ui.selectAllStudents).focus();
+        (app.selectedStudents.size ? ui.bulkEntryType : ui.selectAllStudents).focus();
       }, 200);
     }
   });
@@ -11522,16 +11546,6 @@ function setupEvents() {
     }
     if (action === 'edit-student') {
       changeStudentSpp(nospp);
-    }
-    if (action === 'student-status') {
-      const student = app.state.siswa.find((row) => (
-        String(row.id) === String(id) && String(row.tahunAjaran || '') === String(target.dataset.year || '')
-      ));
-      if (!student) {
-        alert('Data siswa sudah berubah. Muat ulang daftar siswa lalu coba kembali.');
-        return;
-      }
-      openStudentStatusDialog(student);
     }
     if (action === 'place-student') {
       const student = app.state.siswa.find((row) => String(row.id) === String(id));

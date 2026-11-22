@@ -1320,8 +1320,8 @@ label {
 
 .chip button:hover { background: var(--danger); color: #fff; }
 
-.selection-actions { display: grid; gap: 8px; flex: 0 1 460px; }
-.selection-action { display: flex; gap: 8px; }
+.selection-actions { display: grid; gap: 8px; flex: 0 1 460px; min-width: 0; }
+.selection-action { display: flex; gap: 8px; min-width: 0; }
 .selection-action input,
 .selection-action select {
   flex: 1;
@@ -1358,7 +1358,6 @@ label {
 
 .student-name { font-weight: 700; color: var(--text); }
 .student-sub { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
-.student-status-action { display: inline-block; margin-top: 7px; }
 .badge-staff {
   background: rgba(241, 174, 54, 0.16);
   color: #9a6e06;
@@ -1473,8 +1472,8 @@ label {
   .toolbar-actions { margin-left: 0; width: 100%; }
   .toolbar-actions .small-button { flex: 1 1 auto; }
   .selection-bar { margin: 10px 12px 0; }
-  .selection-actions { flex-basis: 100%; }
-  .selection-action { flex-direction: column; }
+  .selection-actions { flex-basis: 100%; width: 100%; }
+  .selection-action { flex-direction: column; width: 100%; }
   .fold { margin: 12px 12px 0; }
   .students-scroll { max-height: none; min-height: 0; }
 

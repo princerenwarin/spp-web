@@ -286,7 +286,7 @@
               </div>
               <div class="toolbar-actions admin-only" hidden>
                 <button type="button" class="primary-button small-button" id="openStudentFormBtn">+ Siswa / Naik Kelas</button>
-                <button type="button" class="secondary-button small-button" data-open-student-status-guide>Status anak guru/karyawan</button>
+                <button type="button" class="secondary-button small-button" data-open-student-status-guide>Ubah status siswa</button>
                 <button type="button" class="secondary-button small-button" data-open="arrearsTools">Tagihan Tahun Lalu</button>
                 <button type="button" class="secondary-button small-button" data-open="studentTools">Impor &amp; Log</button>
               </div>
@@ -298,7 +298,7 @@
                   <strong><span id="selectedCount">0</span> siswa dipilih</strong>
                   <button type="button" class="link-button" id="clearSelectionBtn">Kosongkan</button>
                 </div>
-                <p class="selection-help">Centang siswa di kolom kiri, lalu pilih status anak guru/karyawan untuk mengatur apakah mereka ditagih.</p>
+                <p class="selection-help">Centang siswa di kolom kiri. Ubah satu atau kedua status sekaligus; status pendaftaran mengikuti Tahun Ajaran pada filter di atas, dan periode masuk tetap.</p>
                 <div class="chip-list" id="selectedChips"></div>
               </div>
               <div class="selection-actions">
@@ -307,12 +307,18 @@
                   <button type="button" class="secondary-button small-button" id="bulkGiatBtn">Terapkan Kegiatan</button>
                 </div>
                 <div class="selection-action">
+                  <select id="bulkEntryType" aria-label="Status pendaftaran">
+                    <option value="">Status pendaftaran - tidak diubah</option>
+                    <option value="baru">Siswa baru</option>
+                    <option value="naik">Naik/pindah kelas</option>
+                  </select>
                   <select id="bulkStaffMode" aria-label="Status anak guru/karyawan">
+                    <option value="">Status anak guru/karyawan - tidak diubah</option>
                     <option value="staff-hide">Anak guru/karyawan - sembunyikan dari tagihan</option>
                     <option value="staff-show">Anak guru/karyawan - tetap tampil di tagihan</option>
                     <option value="regular">Kembalikan ke siswa biasa</option>
                   </select>
-                  <button type="button" class="secondary-button small-button" id="bulkStaffBtn">Terapkan Status</button>
+                  <button type="button" class="secondary-button small-button" id="bulkStatusBtn">Terapkan status</button>
                   <button type="button" class="secondary-button small-button danger-button" id="bulkDeleteBtn">Hapus Terpilih</button>
                 </div>
               </div>
