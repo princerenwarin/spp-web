@@ -9386,6 +9386,7 @@ function validateStudentImportDraft(row) {
     spp,
     komp
   });
+  if (row.mappedFromId) row.record.source_id = row.mappedFromId;
 }
 
 function studentImportNameKey(value) {
@@ -9524,6 +9525,9 @@ function renderStudentImportReview() {
     const problemMarkup = issues.length
       ? issues.map((item) => `<small class="${item.error ? 'is-error' : ''}">${escapeHtml(item.message)}</small>`).join('')
       : '<small>Siap diproses.</small>';
+    const mappedIdMarkup = row.mappedFromId
+      ? `<small>ID lama ${escapeHtml(row.mappedFromId)} dipetakan ke ID aplikasi ${escapeHtml(row.fields.id)}.</small>`
+      : '';
     const rowClass = row.selected
       ? ''
       : (row.validationErrors.length || row.serverError || row.blockingDuplicate
@@ -9544,7 +9548,7 @@ function renderStudentImportReview() {
         Proses
       </label></td>
       <td>${row.sourceRow}</td>
-      <td>${problemMarkup}</td>
+      <td>${mappedIdMarkup}${problemMarkup}</td>
       <td>${typeMarkup}</td>
       <td>${studentImportFieldInput(row, index, 'id', 'ID siswa')}</td>
       <td>${studentImportFieldInput(row, index, 'school', 'Sekolah')}</td>
@@ -9555,12 +9559,56 @@ function renderStudentImportReview() {
       <td>${studentImportFieldInput(row, index, 'wa', 'No. WhatsApp', 'tel')}</td>
       <td>${amountInput('spp', 'SPP')}</td>
       <td>${amountInput('komp', 'Komputer')}</td>
-      <td>${amountInput('giat', 'Kegiatan')}</td>
+      <td>${amountInput('giat', 'Tagihan Kegiatan')}</td>
       <td>${amountInput('dpp', 'DPP')}</td>
       <td>${amountInput('dsp', 'DPS')}</td>
       <td>${amountInput('seragam', 'Seragam')}</td>
     </tr>`;
   }).join('');
+}
+
+async function resolveStudentImportMappedIds(rows) {
+  if (!app.server) return;
+  const legacyIds = [...new Set(rows
+    .map((row) => String(row.sourceId || row.fields.id || '').trim())
+    .filter(Boolean))];
+  if (!legacyIds.length) return;
+
+  const credentials = requireStudentRules();
+  const mappings = new Map();
+  for (let offset = 0; offset < legacyIds.length; offset += 100) {
+    const { data, error } = await app.supabase.rpc('spp_app_desktop_student_id_map_v1', {
+      ...credentials,
+      p_legacy_ids: legacyIds.slice(offset, offset + 100)
+    });
+    if (error) {
+      if (error.code === 'PGRST202') {
+        throw new Error('Pencocokan ID lama untuk impor siswa memerlukan migration 046 setelah 045.');
+      }
+      throw error;
+    }
+    if (!Array.isArray(data)) {
+      throw new Error('Pemetaan ID lama siswa tidak dapat dibaca.');
+    }
+    data.forEach((mapping) => {
+      const legacyId = String(mapping.legacy_id || '').trim();
+      const studentId = String(mapping.id_siswa || '').trim();
+      if (legacyId && studentId) mappings.set(legacyId, studentId);
+    });
+  }
+
+  rows.forEach((row) => {
+    const sourceId = String(row.sourceId || '').trim();
+    const mappedId = mappings.get(sourceId);
+    if (mappedId) {
+      row.fields.id = mappedId;
+      row.fields.entryType = 'naik';
+      row.mappedFromId = mappedId !== sourceId ? sourceId : '';
+    } else if (row.mappedFromId && !mappedId) {
+      row.fields.id = sourceId;
+      row.mappedFromId = '';
+    }
+  });
 }
 
 async function refreshStudentImportDuplicates() {
@@ -9572,9 +9620,10 @@ async function refreshStudentImportDuplicates() {
   state.messageTone = '';
   renderStudentImportReview();
   try {
+    await resolveStudentImportMappedIds(state.rows);
     state.existingRows = await fetchStudentImportExistingRows(state.rows);
     analyzeStudentImportDuplicates(state.rows, state.existingRows);
-    state.message = 'ID dari file dipertahankan: ID yang sudah dikenal diproses sebagai naik kelas; ID yang belum dikenal dibuat sebagai siswa baru. Periksa ID dengan teliti.';
+    state.message = 'ID lama dari impor pembayaran dipetakan ke ID aplikasi sebelum pemeriksaan duplikat. Kolom Kegiatan adalah tagihan tahunan, bukan pembayaran.';
   } catch (error) {
     state.loadError = error.message || 'Pemeriksaan duplikat gagal.';
     state.message = `Tidak dapat memeriksa duplikat di database. ${state.loadError}`;
@@ -9598,6 +9647,10 @@ function handleStudentImportReviewChange(event) {
 
   if (control.matches('[data-student-import-field]')) {
     row.fields[control.dataset.studentImportField] = control.value;
+    if (control.dataset.studentImportField === 'id') {
+      row.sourceId = String(control.value || '').trim();
+      row.mappedFromId = '';
+    }
     row.serverError = '';
     row.selectionTouched = false;
     analyzeStudentImportDuplicates(app.studentImportReview.rows, app.studentImportReview.existingRows);
@@ -9630,6 +9683,7 @@ async function submitStudentImportReview() {
   renderStudentImportReview();
   let submittedRows = [];
   try {
+    await resolveStudentImportMappedIds(state.rows);
     const latestRows = await fetchStudentImportExistingRows(state.rows);
     state.existingRows = latestRows;
     analyzeStudentImportDuplicates(state.rows, latestRows);
@@ -9735,6 +9789,8 @@ async function importStudentsFile(file) {
       table.forEach((cells, index) => rows.push({
         sourceRow: index + 2,
         sourceFormat: 'legacy',
+        sourceId: String(value(cells, column.id) || '').trim(),
+        mappedFromId: '',
         fields: {
           entryType: String(value(cells, column.jenis) || 'baru').trim().toLowerCase(),
           year: String(value(cells, column.year) || currentAcademicYear()).trim(),
@@ -9782,6 +9838,8 @@ async function importStudentsFile(file) {
         rows.push({
           sourceRow: index + 2,
           sourceFormat: 'standard',
+          sourceId: id,
+          mappedFromId: '',
           fields: {
             entryType: id ? 'naik' : 'baru',
             year: String(value(cells, column.tahun) || currentYearScope() || currentAcademicYear()).trim(),
