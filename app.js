@@ -5381,6 +5381,8 @@ function renderArrearsReport() {
   const shown = Math.min(app.arrearsRows.length, app.arrearsTotal);
   ui.arrearsPageInfo.textContent = `${shown.toLocaleString('id-ID')} dari ${app.arrearsTotal.toLocaleString('id-ID')} siswa`;
   ui.loadMoreArrears.hidden = shown >= app.arrearsTotal;
+  ui.loadMoreArrears.disabled = false;
+  ui.loadMoreArrears.textContent = 'Muat siswa berikutnya';
   const hasLegacy = rows.some((row) => Number(row.billing?.belum_dialokasikan || 0) > 0);
   ui.legacyPaymentNote.hidden = !hasLegacy;
   ui.reportPeriod.textContent = formatPeriodLabel(ui.reportPeriodFilter.value);
@@ -5544,6 +5546,7 @@ async function fetchArrearsReport(append = false) {
   }
   ui.reportPeriod.textContent = formatPeriodLabel(ui.reportPeriodFilter.value);
   if (!app.server) {
+    ui.arrearsReportTable.setAttribute('aria-busy', 'false');
     ui.arrearsReportCount.textContent = 'Laporan per tagihan membutuhkan backend Supabase dan migration 016.';
     ui.arrearsReportTable.innerHTML = '<tr><td colspan="6" class="empty-state">Hubungkan Supabase dan jalankan migration 016 untuk menghitung cicilan dan sisa per periode secara akurat.</td></tr>';
     ui.loadMoreArrears.hidden = true;
@@ -5556,6 +5559,7 @@ async function fetchArrearsReport(append = false) {
   const year = ui.reportYearFilter.value || currentAcademicYear();
   const period = ui.reportPeriodFilter.value;
   if (!period) {
+    ui.arrearsReportTable.setAttribute('aria-busy', 'false');
     ui.arrearsReportTable.innerHTML = '<tr><td colspan="6" class="empty-state">Belum ada periode tagihan yang dapat dipilih.</td></tr>';
     ui.arrearsReportCount.textContent = 'Periode laporan tersedia sampai dua bulan setelah bulan aktif.';
     ui.loadMoreArrears.hidden = true;
@@ -5566,24 +5570,51 @@ async function fetchArrearsReport(append = false) {
   if (!append) {
     app.arrearsOffset = 0;
     app.arrearsRows = [];
+    ui.arrearsReportCount.textContent = 'Sedang mengambil data laporan dari database. Tampilan akan diperbarui setelah selesai.';
+    ui.arrearsReportTable.setAttribute('aria-busy', 'true');
+    ui.loadMoreArrears.hidden = true;
+    ui.loadMoreArrears.disabled = false;
+    ui.loadMoreArrears.textContent = 'Muat siswa berikutnya';
     ui.arrearsReportTable.innerHTML = skeletonRows(6);
+  } else {
+    ui.arrearsReportTable.setAttribute('aria-busy', 'true');
+    ui.arrearsPageInfo.textContent = 'Sedang mengambil data siswa berikutnya...';
+    ui.loadMoreArrears.disabled = true;
+    ui.loadMoreArrears.textContent = 'Sedang memuat...';
   }
 
-  const { data, error } = await app.supabase.rpc('spp_app_class_billing_v1', {
-    p_tahun: year,
-    p_periode: period,
-    p_kdsek: ui.reportSchoolFilter.value || null,
-    p_kdkls: ui.reportClassFilter.value || null,
-    p_limit: ARREARS_PAGE_SIZE,
-    p_offset: app.arrearsOffset
-  });
+  let data;
+  let error;
+  try {
+    ({ data, error } = await app.supabase.rpc('spp_app_class_billing_v1', {
+      p_tahun: year,
+      p_periode: period,
+      p_kdsek: ui.reportSchoolFilter.value || null,
+      p_kdkls: ui.reportClassFilter.value || null,
+      p_limit: ARREARS_PAGE_SIZE,
+      p_offset: app.arrearsOffset
+    }));
+  } catch (requestError) {
+    error = requestError;
+  }
   if (seq !== arrearsFetchSeq) return;
+  ui.arrearsReportTable.setAttribute('aria-busy', 'false');
   if (error) {
-    ui.arrearsReportTable.innerHTML = `<tr><td colspan="6" class="empty-state report-error" role="alert">Laporan gagal dimuat: ${escapeHtml(error.message)}. Periksa migration 016, 019, 042, dan 044.</td></tr>`;
-    ui.arrearsReportCount.textContent = 'Laporan tidak dapat dimuat.';
+    const errorMessage = error.message || 'Koneksi ke database gagal.';
+    const timedOut = /statement timeout|canceling statement/i.test(errorMessage);
+    const recoveryMessage = timedOut
+      ? 'Database membatalkan query karena melewati batas waktu. Coba persempit filter sekolah atau kelas, lalu muat ulang.'
+      : 'Periksa koneksi dan migration 016, 019, 042, dan 044.';
+    ui.arrearsReportTable.innerHTML = `<tr><td colspan="6" class="empty-state report-error" role="alert">Laporan gagal dimuat: ${escapeHtml(errorMessage)}. ${escapeHtml(recoveryMessage)}</td></tr>`;
+    ui.arrearsReportCount.textContent = timedOut
+      ? 'Pengambilan data melewati batas waktu; laporan belum dimuat.'
+      : 'Laporan tidak dapat dimuat.';
     ui.loadMoreArrears.hidden = true;
+    ui.loadMoreArrears.disabled = false;
+    ui.loadMoreArrears.textContent = 'Muat siswa berikutnya';
+    if (append) ui.arrearsPageInfo.textContent = 'Pengambilan data gagal.';
     if (!append) {
-      app.arrearsSummary = { status: 'error', message: error.message };
+      app.arrearsSummary = { status: 'error', message: errorMessage };
       renderArrearsSummary();
     }
     return;
@@ -8947,7 +8978,7 @@ async function submitPaymentImport() {
     return;
   }
   const confirmMessage = isDesktopImport
-    ? `Impor ${confirmed.length} transaksi desktop yang dikonfirmasi? Tahun ajaran, periode, dan No. SPP yang belum tersedia akan dibuat otomatis. ID baru akan dibuat untuk setiap ID lama yang belum dikenal.`
+    ? `Impor ${confirmed.length} transaksi desktop yang dikonfirmasi? Tahun ajaran, periode, dan No. SPP yang belum tersedia akan dibuat otomatis. ID baru akan dibuat untuk setiap ID lama yang belum dikenal. Jika enrollment baru tidak memiliki tarif contoh, komponen yang tidak ada di file akan bernilai Rp0.`
     : `Impor ${confirmed.length} transaksi yang sudah dikonfirmasi?`;
   if (!window.confirm(confirmMessage)) return;
   ui.importPaymentsBtn.disabled = true;
