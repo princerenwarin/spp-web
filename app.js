@@ -5571,7 +5571,7 @@ async function fetchArrearsReport(append = false) {
   });
   if (seq !== arrearsFetchSeq) return;
   if (error) {
-    ui.arrearsReportTable.innerHTML = `<tr><td colspan="6" class="empty-state report-error" role="alert">Laporan gagal dimuat: ${escapeHtml(error.message)}. Periksa migration 016 dan 019.</td></tr>`;
+    ui.arrearsReportTable.innerHTML = `<tr><td colspan="6" class="empty-state report-error" role="alert">Laporan gagal dimuat: ${escapeHtml(error.message)}. Periksa migration 016, 019, 042, dan 044.</td></tr>`;
     ui.arrearsReportCount.textContent = 'Laporan tidak dapat dimuat.';
     ui.loadMoreArrears.hidden = true;
     if (!append) {
