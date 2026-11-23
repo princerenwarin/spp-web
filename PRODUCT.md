@@ -8,7 +8,7 @@ web
 
 ## Users
 
-Pengguna internal meliputi Admin, Yayasan, kepala sekolah, dan guru. Orang tua bukan pengguna aplikasi. Pengguna mencatat data dan pembayaran SPP serta membuat dan melihat laporan. Antarmuka saat ini menunjukkan akun Admin, Yayasan, dan akun dengan cakupan unit; pemetaan hak akses khusus kepala sekolah dan guru belum dipastikan.
+Pengguna utama adalah Admin KKMS, yang mengelola data siswa, pembayaran, konfigurasi, dan laporan internal. Pengguna lain mencakup Yayasan untuk pemantauan lintas sekolah serta akun Unit dengan cakupan sekolah. Kepala sekolah dan guru termasuk pengguna internal dan memiliki role terpisah; rincian cakupan dan hak aksesnya belum ditentukan. Orang tua bukan pengguna aplikasi.
 
 ## Product Purpose
 
@@ -28,6 +28,7 @@ Aplikasi digunakan dalam konteks sekolah yang mengelola siswa berdasarkan sekola
 - Pengaturan siswa mencakup DPP, DPS, seragam, kegiatan, SPP, komputer, dan tunggakan tahun lalu. SPP dan komputer dapat diberlakukan mulai bulan tertentu agar bulan sebelumnya tidak berubah.
 - Aplikasi menyediakan impor CSV dan template CSV, pengaturan massal untuk uang kegiatan dan status anak guru, serta log perubahan.
 - Pengaturan Admin mencakup sekolah, kelas, dan virtual account. Nomor VA dibentuk dari prefix bank, ID VA sekolah, dan ID siswa; hingga dua prefix bank dapat aktif.
+- Kode saat ini mengenali role Admin, Yayasan, dan Unit. Role terpisah untuk kepala sekolah dan guru telah dikonfirmasi, tetapi rincian izin dan implementasinya belum dipastikan.
 - Aplikasi web menggunakan Supabase untuk data operasional. Operasi data siswa dan pembayaran bergantung pada konfigurasi serta migration Supabase yang dijelaskan di README proyek.
 - Akses orang tua tidak termasuk dalam cakupan pengguna yang dikonfirmasi.
 

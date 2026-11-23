@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sistem SPP - Supabase</title>
+    <title>Laporan SPP</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -1088,11 +1088,11 @@
         <form id="loginForm">
           <label>
             <span>Username</span>
-            <input type="text" id="loginUser" placeholder="Masukkan username" required />
+            <input type="text" id="loginUser" placeholder="Masukkan username" autocomplete="username" required />
           </label>
           <label>
             <span>Password</span>
-            <input type="password" id="loginPassword" placeholder="Masukkan password" required />
+            <input type="password" id="loginPassword" placeholder="Masukkan password" autocomplete="current-password" required />
           </label>
           <button type="submit" class="primary-button wide">Masuk</button>
         </form>
@@ -1423,7 +1423,7 @@
         <header class="payment-settlement-header">
           <div>
             <h2 id="paymentImportTitle">Impor Pembayaran</h2>
-            <p>Tinjau dan koreksi data setiap baris sebelum menyimpan; baris duplikat ditandai untuk dipilih atau dilewati.</p>
+            <p>Tinjau setiap transaksi per ID siswa. Nama yang berbeda pada ID sama ditandai; keputusan tetap dibuat per transaksi.</p>
           </div>
           <button type="button" class="modal-close" id="paymentImportClose" aria-label="Tutup impor pembayaran">&times;</button>
         </header>
@@ -1436,35 +1436,56 @@
             </label>
           </div>
           <section id="paymentImportReview" class="payment-import-review" hidden aria-label="Pratinjau impor pembayaran">
-            <p id="paymentImportStatus" class="muted-copy" role="status" aria-live="polite"></p>
-            <div class="form-actions">
-              <button type="button" class="secondary-button small-button" id="paymentImportCheckAll">Konfirmasi semua</button>
-              <button type="button" class="secondary-button small-button" id="paymentImportUncheckAll">Lewati semua</button>
+            <p id="paymentImportStatus" class="muted-copy payment-import-status" role="status" aria-live="polite"></p>
+            <div class="payment-import-list-toolbar">
+              <label class="payment-import-search-control">
+                <span>Cari</span>
+                <input id="paymentImportSearch" type="search" aria-label="Cari berdasarkan nama, nomor SPP, ID, atau nomor baris" placeholder="Nama, No. SPP, ID, atau nomor baris" />
+              </label>
+              <label class="payment-import-filter-control">
+                <span>Status</span>
+                <select id="paymentImportFilter" aria-label="Filter baris impor">
+                  <option value="all">Semua status</option>
+                  <option value="attention">Perlu pemeriksaan</option>
+                  <option value="pending">Belum diputuskan</option>
+                  <option value="confirmed">Dikonfirmasi</option>
+                  <option value="skipped">Dilewati</option>
+                </select>
+              </label>
+              <div class="payment-import-pagination">
+                <span id="paymentImportPageInfo">Menampilkan 0 grup</span>
+                <div class="payment-import-pagination-controls">
+                  <button type="button" class="secondary-button small-button" id="paymentImportPreviousPage">Sebelumnya</button>
+                  <button type="button" class="secondary-button small-button" id="paymentImportNextPage">Berikutnya</button>
+                </div>
+              </div>
             </div>
+            <div class="form-actions payment-import-actions">
+              <button type="button" class="secondary-button" id="paymentImportCheckAll">Konfirmasi semua yang valid</button>
+              <button type="button" class="secondary-button" id="paymentImportUncheckAll">Lewati semua</button>
+              <button type="button" class="secondary-button" id="paymentImportRetryDuplicates" hidden>Periksa ulang duplikat</button>
+            </div>
+            <p class="payment-import-bulk-note">Transaksi dengan ID sama dikelompokkan, tetapi keputusan tetap per transaksi. Filter menampilkan grup jika ada transaksi yang cocok; aksi massal berlaku untuk seluruh file.</p>
             <div class="table-wrap payment-import-table-wrap">
-              <table>
+              <table class="payment-import-table">
                 <thead>
                   <tr>
-                    <th>Nama dari file</th>
-                    <th>Siswa</th>
-                    <th>Tagihan</th>
-                    <th>Periode mulai</th>
-                    <th>Tanggal pembayaran</th>
-                    <th>Nominal</th>
-                    <th>Konfirmasi</th>
+                    <th>Data dari file &amp; siswa</th>
+                    <th>Tagihan &amp; periode</th>
+                    <th>Tanggal &amp; nominal</th>
+                    <th>Keputusan</th>
                   </tr>
                 </thead>
                 <tbody id="paymentImportRows"></tbody>
               </table>
             </div>
-            <button type="button" class="secondary-button" id="paymentImportRetryDuplicates" hidden>Periksa ulang duplikat</button>
-            <button type="button" class="primary-button" id="importPaymentsBtn" disabled>Impor pembayaran terkonfirmasi</button>
           </section>
         </div>
-        <footer class="payment-settlement-footer">
+        <footer class="payment-settlement-footer payment-import-footer">
           <p>Pastikan tanggal pembayaran mengikuti bukti transaksi, bukan tanggal unggah.</p>
           <div>
             <button type="button" class="secondary-button" id="paymentImportCancel">Tutup</button>
+            <button type="button" class="primary-button" id="importPaymentsBtn" hidden disabled>Impor pembayaran terkonfirmasi</button>
           </div>
         </footer>
       </div>

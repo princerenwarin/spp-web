@@ -81,6 +81,8 @@ const app = {
   paymentBillingRequests: new Map(),
   paymentImportRows: [],
   paymentImportFormat: 'standard',
+  paymentImportPage: 0,
+  paymentImportGroupExpansion: new Map(),
   paymentImportCheckingDuplicates: false,
   paymentImportDuplicateCheckError: '',
   paymentImportDuplicateRequest: 0,
@@ -114,6 +116,7 @@ const app = {
 };
 
 const PAGE_SIZE = 25;
+const PAYMENT_IMPORT_PAGE_SIZE = 25;
 const PAYMENT_HISTORY_PAGE_SIZE = 10;
 const ARREARS_PAGE_SIZE = 100;
 const PAYMENT_COMPONENTS = [
@@ -428,6 +431,11 @@ const ui = {
   paymentImportFile: document.getElementById('paymentImportFile'),
   paymentImportReview: document.getElementById('paymentImportReview'),
   paymentImportStatus: document.getElementById('paymentImportStatus'),
+  paymentImportSearch: document.getElementById('paymentImportSearch'),
+  paymentImportFilter: document.getElementById('paymentImportFilter'),
+  paymentImportPageInfo: document.getElementById('paymentImportPageInfo'),
+  paymentImportPreviousPage: document.getElementById('paymentImportPreviousPage'),
+  paymentImportNextPage: document.getElementById('paymentImportNextPage'),
   paymentImportRows: document.getElementById('paymentImportRows'),
   paymentImportRetryDuplicates: document.getElementById('paymentImportRetryDuplicates'),
   importPaymentsBtn: document.getElementById('importPaymentsBtn'),
@@ -7184,12 +7192,137 @@ function setPaymentSettlementBulkSelection(workflow, mode) {
   renderPaymentSettlementRows(workflow);
 }
 
+function paymentImportRowNeedsAttention(row) {
+  const isDesktop = row.sourceFormat === 'desktop';
+  const hasPaymentDate = Boolean(row.tglbyr && row.tglbyr <= localDateInputValue());
+  const hasPaymentData = isDesktop
+    ? row.importItems?.length > 0
+    : Boolean(row.component && row.nominal > 0);
+  const needsMonthlyBilling = !isDesktop && ['spp', 'komp'].includes(row.component)
+    && (!row.billing || row.billingLoading || row.billingError
+      || Number(row.billing.belum_dialokasikan || 0) > 0);
+  return Boolean(!row.selectedStudent || !hasPaymentDate || !hasPaymentData
+    || needsMonthlyBilling || (isDesktop && !row.tahunAjaran)
+    || (row.validationErrors || []).length || (row.fileDuplicateReasons || []).length
+    || row.databaseDuplicate || row.periodError || row.billingError);
+}
+
+function getPaymentImportGroupIdentity(row) {
+  const sourceId = String(
+    row.sourceFormat === 'desktop' ? row.sourceId || '' : row.sourceNoSpp || ''
+  ).trim();
+  const fallbackNoSpp = String(row.selectedStudent?.nospp || '').trim();
+  const importedId = sourceId || fallbackNoSpp;
+  if (importedId) {
+    return {
+      key: `id:${importedId.toLocaleUpperCase('id-ID')}`,
+      label: row.sourceFormat === 'desktop' && sourceId ? 'ID' : 'No. SPP',
+      value: importedId
+    };
+  }
+
+  const studentId = String(row.selectedStudent?.id || '').trim();
+  if (studentId) {
+    return { key: `student:${studentId}`, label: 'ID siswa', value: studentId };
+  }
+  return {
+    key: `row:${row.sourceFormat}:${row.sourceRow}`,
+    label: 'ID',
+    value: 'ID tidak tersedia'
+  };
+}
+
+function normalizePaymentImportGroupName(value) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .trim().replace(/\s+/g, ' ').toLocaleLowerCase('id-ID');
+}
+
+function buildPaymentImportGroups(rows) {
+  const groups = new Map();
+  rows.forEach((row, index) => {
+    const identity = getPaymentImportGroupIdentity(row);
+    if (!groups.has(identity.key)) groups.set(identity.key, { ...identity, key: identity.key, rows: [] });
+    groups.get(identity.key).rows.push({ row, index });
+  });
+
+  return [...groups.values()].map((group) => {
+    const fileNames = new Set(group.rows
+      .map(({ row }) => normalizePaymentImportGroupName(row.sourceName))
+      .filter(Boolean));
+    const matchedNames = new Set(group.rows
+      .map(({ row }) => normalizePaymentImportGroupName(row.selectedStudent?.nama))
+      .filter(Boolean));
+    const matchedStudentIds = new Set(group.rows
+      .map(({ row }) => String(row.selectedStudent?.id || '').trim())
+      .filter(Boolean));
+    const sourceNameMismatch = group.rows.some(({ row }) => {
+      const fileName = normalizePaymentImportGroupName(row.sourceName);
+      const matchedName = normalizePaymentImportGroupName(row.selectedStudent?.nama);
+      return fileName && matchedName && fileName !== matchedName;
+    });
+    group.displayName = group.rows.find(({ row }) => row.selectedStudent?.nama)?.row.selectedStudent.nama
+      || group.rows.find(({ row }) => row.sourceName)?.row.sourceName
+      || 'Nama belum tersedia';
+    group.multipleStudents = matchedStudentIds.size > 1;
+    group.nameMismatch = fileNames.size > 1 || matchedNames.size > 1 || sourceNameMismatch;
+    group.warning = group.multipleStudents
+      ? 'ID ini cocok ke lebih dari satu siswa. Periksa baris sebelum konfirmasi.'
+      : (group.nameMismatch ? 'Nama berbeda untuk ID ini. Periksa kecocokan sebelum konfirmasi.' : '');
+    group.searchableText = [
+      group.value,
+      group.displayName,
+      ...group.rows.flatMap(({ row }) => [
+        row.sourceName,
+        row.sourceNoSpp,
+        row.sourceId,
+        row.sourceSchool,
+        row.sourceClass,
+        row.sourceRow,
+        row.selectedStudent?.nama,
+        row.selectedStudent?.nospp,
+        ...(row.validationErrors || []),
+        ...(row.fileDuplicateReasons || []),
+        row.databaseDuplicate?.receipt_no
+      ])
+    ].filter(Boolean).join(' ').toLocaleLowerCase('id-ID');
+    return group;
+  });
+}
+
+function paymentImportGroupIsExpanded(group) {
+  const expansion = app.paymentImportGroupExpansion.get(group.key);
+  return typeof expansion === 'boolean' ? expansion : group.rows.length === 1;
+}
+
 function renderPaymentImportRows() {
   const rows = app.paymentImportRows;
+  const searchQuery = ui.paymentImportSearch.value.trim().toLocaleLowerCase('id-ID');
+  const filter = ui.paymentImportFilter.value;
+  const filteredGroups = buildPaymentImportGroups(rows).filter((group) => {
+    const matchesFilter = group.rows.some(({ row }) => {
+      if (filter === 'attention') return paymentImportRowNeedsAttention(row);
+      if (filter === 'pending') return !row.confirmed && !row.skipped;
+      if (filter === 'confirmed') return row.confirmed;
+      if (filter === 'skipped') return row.skipped;
+      return true;
+    });
+    return matchesFilter && (!searchQuery || group.searchableText.includes(searchQuery));
+  });
+  const filteredTransactionCount = filteredGroups.reduce((total, group) => total + group.rows.length, 0);
+  const pageCount = Math.max(1, Math.ceil(filteredGroups.length / PAYMENT_IMPORT_PAGE_SIZE));
+  app.paymentImportPage = Math.min(Math.max(0, Number(app.paymentImportPage) || 0), pageCount - 1);
+  const pageStart = app.paymentImportPage * PAYMENT_IMPORT_PAGE_SIZE;
+  const visibleGroups = filteredGroups.slice(pageStart, pageStart + PAYMENT_IMPORT_PAGE_SIZE);
+  const pageEnd = Math.min(pageStart + PAYMENT_IMPORT_PAGE_SIZE, filteredGroups.length);
+  ui.paymentImportPageInfo.textContent = filteredGroups.length
+    ? `Menampilkan ${pageStart + 1}–${pageEnd} dari ${filteredGroups.length} grup · ${filteredTransactionCount} transaksi`
+    : 'Tidak ada grup yang cocok';
+  ui.paymentImportPreviousPage.disabled = !filteredGroups.length || app.paymentImportPage === 0;
+  ui.paymentImportNextPage.disabled = !filteredGroups.length || app.paymentImportPage >= pageCount - 1;
   const componentOptions = PAYMENT_COMPONENTS.map(([key, label]) => (
     `<option value="${key}">${escapeHtml(label)}</option>`
   )).join('');
-  ui.paymentImportRows.innerHTML = rows.map((row, index) => {
+  const renderRow = ({ row, index }) => {
     const isDesktop = row.sourceFormat === 'desktop';
     const year = row.billing?.tahun_ajaran || currentAcademicYear();
     const schedule = row.billing?.payment_periods || row.billing?.periode_bulanan || [];
@@ -7232,7 +7365,7 @@ function renderPaymentImportRows() {
         <small>${row.billing && Number(row.billing.belum_dialokasikan || 0) > 0 ? 'Rekonsiliasi pembayaran lama dahulu.' : periodLabel}</small>`;
     const sourceDetails = isDesktop
       ? `ID lama ${row.sourceId || '—'} · ${row.sourceSchool || 'Sekolah tidak tercantum'} · Kelas ${row.sourceClass || '—'}`
-      : `Baris ${row.sourceRow}`;
+      : '';
     const studentStatus = row.selectedStudent
       ? `${getSchoolName(row.selectedStudent.kdsek)} · Kelas ${row.selectedStudent.kdkls} · ${row.selectedStudent.nospp}`
       : (row.billingError || (isDesktop && !row.candidates.length
@@ -7259,22 +7392,89 @@ function renderPaymentImportRows() {
       issues.length ? 'has-import-issues' : ''
     ].filter(Boolean).join(' ');
     return `<tr data-import-index="${index}" class="${rowClass}">
-      <td>${escapeHtml(row.sourceName || row.sourceNoSpp || 'Baris tanpa identitas')}${issueMarkup}<small>${escapeHtml(sourceDetails)}</small><small>Baris ${row.sourceRow}</small>${correctionMarkup}</td>
-      <td><input type="search" data-import-search value="${escapeHtml(row.searchQuery)}" placeholder="Cari nama atau No. SPP" aria-label="Cari siswa pada baris ${row.sourceRow}" />
-        <select data-import-student aria-label="Pilih siswa pada baris ${row.sourceRow}"><option value="">Pilih siswa</option>${studentOptions}</select>
-        <small>${escapeHtml(studentStatus)}</small></td>
-      <td>${componentControl}</td>
-      <td>${periodControl}</td>
-      <td><input type="date" class="payment-import-date ${validPaymentDate ? '' : 'is-missing'}" data-import-date
-        value="${escapeHtml(row.tglbyr)}" max="${localDateInputValue()}" required
-        aria-label="Tanggal pembayaran pada baris ${row.sourceRow}" />
-        <small>${validPaymentDate ? 'Sesuai tanggal pada bukti.' : 'Wajib diisi; jangan gunakan tanggal unggah.'}</small></td>
-      <td>${nominalControl}</td>
-      <td><label class="import-confirm"><input type="checkbox" data-import-confirm ${row.confirmed ? 'checked' : ''} ${canConfirm && !row.skipped && !app.paymentImportCheckingDuplicates ? '' : 'disabled'}>Konfirmasi</label>
-        <label class="import-skip"><input type="checkbox" data-import-skip ${row.skipped ? 'checked' : ''}>Lewati</label></td>
+      <td class="payment-import-identity-cell">
+        <div class="payment-import-file-record">
+          <span class="payment-import-field-label">Data dari file · Baris ${row.sourceRow}</span>
+          <strong class="payment-import-file-name">${escapeHtml(row.sourceName || row.sourceNoSpp || 'Baris tanpa identitas')}</strong>
+          ${sourceDetails ? `<small>${escapeHtml(sourceDetails)}</small>` : ''}
+          ${issueMarkup}${correctionMarkup}
+        </div>
+        <div class="payment-import-student-field">
+          <span class="payment-import-field-label">Siswa di aplikasi</span>
+          <input type="search" data-import-search value="${escapeHtml(row.searchQuery)}" placeholder="Cari nama atau No. SPP" aria-label="Cari siswa pada baris ${row.sourceRow}" />
+          <select data-import-student aria-label="Pilih siswa pada baris ${row.sourceRow}"><option value="">Pilih siswa</option>${studentOptions}</select>
+          <small>${escapeHtml(studentStatus)}</small>
+        </div>
+      </td>
+      <td class="payment-import-billing-cell">
+        <div class="payment-import-field">
+          <span class="payment-import-field-label">Tagihan</span>
+          <div>${componentControl}</div>
+        </div>
+        <div class="payment-import-field">
+          <span class="payment-import-field-label">Periode</span>
+          <div>${periodControl}</div>
+        </div>
+      </td>
+      <td class="payment-import-payment-cell">
+        <label class="payment-import-field">
+          <span class="payment-import-field-label">Tanggal pembayaran</span>
+          <input type="date" class="payment-import-date ${validPaymentDate ? '' : 'is-missing'}" data-import-date
+            value="${escapeHtml(row.tglbyr)}" max="${localDateInputValue()}" required
+            aria-label="Tanggal pembayaran pada baris ${row.sourceRow}" />
+          <small>${validPaymentDate ? 'Sesuai tanggal pada bukti.' : 'Wajib diisi; jangan gunakan tanggal unggah.'}</small>
+        </label>
+        <div class="payment-import-field">
+          <span class="payment-import-field-label">Nominal</span>
+          <div>${nominalControl}</div>
+        </div>
+      </td>
+      <td class="payment-import-decision-cell">
+        <div class="payment-import-decision-actions">
+          <label class="import-confirm"><input type="checkbox" data-import-confirm ${row.confirmed ? 'checked' : ''} ${canConfirm && !row.skipped && !app.paymentImportCheckingDuplicates ? '' : 'disabled'}><span>Konfirmasi</span></label>
+          <label class="import-skip"><input type="checkbox" data-import-skip ${row.skipped ? 'checked' : ''}><span>Lewati</span></label>
+        </div>
+      </td>
     </tr>`;
-  }).join('');
-  rows.forEach((row, index) => {
+  };
+  ui.paymentImportRows.innerHTML = visibleGroups.length ? visibleGroups.map((group) => {
+    const isExpanded = paymentImportGroupIsExpanded(group);
+    const confirmedCount = group.rows.filter(({ row }) => row.confirmed).length;
+    const skippedCount = group.rows.filter(({ row }) => row.skipped).length;
+    const attentionCount = group.rows.filter(({ row }) => paymentImportRowNeedsAttention(row)).length;
+    const summary = [
+      `${group.rows.length} transaksi`,
+      attentionCount ? `${attentionCount} perlu pemeriksaan` : '',
+      confirmedCount ? `${confirmedCount} dikonfirmasi` : '',
+      skippedCount ? `${skippedCount} dilewati` : ''
+    ].filter(Boolean).join(' · ');
+    const warningMarkup = group.warning
+      ? `<small class="payment-import-group-warning">${escapeHtml(group.warning)}</small>`
+      : '';
+    const rowsMarkup = isExpanded ? group.rows.map(renderRow).join('') : '';
+    return `<tr class="payment-import-group-row${group.warning ? ' has-group-warning' : ''}">
+      <td colspan="4">
+        <div class="payment-import-group-summary">
+          <div class="payment-import-group-identity">
+            <span class="payment-import-group-id">${escapeHtml(group.label)} · ${escapeHtml(group.value)}</span>
+            <strong>${escapeHtml(group.displayName)}</strong>
+            ${warningMarkup}
+          </div>
+          <span class="payment-import-group-meta">${escapeHtml(summary)}</span>
+          <button type="button" class="secondary-button small-button payment-import-group-toggle"
+            data-import-group-toggle="${escapeHtml(group.key)}" aria-expanded="${isExpanded}">
+            ${isExpanded ? 'Sembunyikan transaksi' : `Lihat ${group.rows.length} transaksi`}
+          </button>
+        </div>
+      </td>
+    </tr>${rowsMarkup}`;
+  }).join('') : `<tr><td class="payment-import-empty" colspan="4">${rows.length
+    ? 'Tidak ada grup yang cocok. Ubah pencarian atau filter.'
+    : 'File ini tidak berisi baris pembayaran.'}</td></tr>`;
+  const visibleRows = visibleGroups
+    .filter(paymentImportGroupIsExpanded)
+    .flatMap((group) => group.rows);
+  visibleRows.forEach(({ row, index }) => {
     const tr = ui.paymentImportRows.querySelector(`[data-import-index="${index}"]`);
     const component = tr.querySelector('[data-import-component]');
     const period = tr.querySelector('[data-import-period]');
@@ -7283,13 +7483,17 @@ function renderPaymentImportRows() {
   });
   const confirmed = rows.filter((row) => row.confirmed).length;
   const skipped = rows.filter((row) => row.skipped).length;
+  ui.importPaymentsBtn.hidden = !rows.length;
+  ui.importPaymentsBtn.textContent = confirmed
+    ? `Impor ${confirmed.toLocaleString('id-ID')} transaksi`
+    : 'Tidak ada transaksi terkonfirmasi';
   ui.importPaymentsBtn.disabled = !app.server || !canAccessPayment() || app.paymentImportCheckingDuplicates
     || Boolean(app.paymentImportDuplicateCheckError)
     || rows.some((row) => row.confirmed && (row.validationErrors || []).length)
     || !confirmed || confirmed + skipped !== rows.length;
   ui.paymentImportRetryDuplicates.hidden = !app.paymentImportDuplicateCheckError;
   ui.paymentImportRetryDuplicates.disabled = app.paymentImportCheckingDuplicates;
-  ui.paymentImportStatus.textContent = `${rows.length} baris · ${confirmed} dikonfirmasi · ${skipped} dilewati.`
+  ui.paymentImportStatus.textContent = `${rows.length} transaksi · ${confirmed} dikonfirmasi · ${skipped} dilewati.`
     + (!app.server
       ? ` Impor memerlukan Supabase dan migration ${app.paymentImportFormat === 'desktop' ? '032' : '017'}.`
       : '')
@@ -7302,9 +7506,14 @@ async function importPaymentFile(file) {
   app.paymentImportDuplicateRequest += 1;
   app.paymentImportDuplicateCheckError = '';
   app.paymentImportCheckingDuplicates = false;
+  app.paymentImportPage = 0;
+  app.paymentImportGroupExpansion = new Map();
+  ui.paymentImportSearch.value = '';
+  ui.paymentImportFilter.value = 'all';
   ui.paymentImportReview.hidden = false;
   ui.paymentImportStatus.textContent = 'Membaca file pembayaran...';
   ui.importPaymentsBtn.disabled = true;
+  ui.importPaymentsBtn.hidden = true;
   try {
     if (!canAccessPayment()) throw new Error('Hanya Admin KKMS yang dapat mengimpor pembayaran.');
     const parsed = await parsePaymentImportFile(file);
@@ -7322,7 +7531,8 @@ async function importPaymentFile(file) {
     app.paymentImportDuplicateCheckError = '';
     app.paymentImportCheckingDuplicates = false;
     ui.paymentImportRetryDuplicates.hidden = true;
-    ui.paymentImportRows.replaceChildren();
+    ui.importPaymentsBtn.hidden = true;
+    renderPaymentImportRows();
     ui.paymentImportStatus.textContent = `File tidak dapat diproses: ${error.message || 'Kesalahan tidak diketahui.'} Periksa header atau unduh template, lalu unggah ulang.`;
   } finally {
     ui.paymentImportFile.value = '';
@@ -8606,11 +8816,17 @@ async function submitPaymentImport() {
     importedIds = Array.isArray(data) ? data.map(String) : [];
     if (isDesktopImport && skippedRows.length) {
       app.paymentImportRows = skippedRows.map((row) => ({ ...row, confirmed: false, skipped: false }));
+      app.paymentImportPage = 0;
+      app.paymentImportGroupExpansion = new Map();
+      ui.paymentImportSearch.value = '';
+      ui.paymentImportFilter.value = 'all';
       renderPaymentImportRows();
       ui.paymentImportStatus.textContent = `${importedIds.length} baris diproses. ${skippedRows.length} baris masih perlu ditinjau atau diperbaiki.`;
     } else {
       app.paymentImportRows = [];
+      app.paymentImportGroupExpansion = new Map();
       ui.paymentImportReview.hidden = true;
+      ui.importPaymentsBtn.hidden = true;
     }
   } catch (error) {
     ui.paymentImportStatus.textContent = `Impor gagal: ${error.message || 'Kesalahan tidak diketahui.'}`;
@@ -11241,6 +11457,31 @@ function setupEvents() {
   });
   ui.paymentImportFile.addEventListener('change', () => {
     if (ui.paymentImportFile.files[0]) importPaymentFile(ui.paymentImportFile.files[0]);
+  });
+  ui.paymentImportRows.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-import-group-toggle]');
+    if (!button) return;
+    app.paymentImportGroupExpansion.set(
+      button.dataset.importGroupToggle,
+      button.getAttribute('aria-expanded') !== 'true'
+    );
+    renderPaymentImportRows();
+  });
+  ui.paymentImportSearch.addEventListener('input', () => {
+    app.paymentImportPage = 0;
+    renderPaymentImportRows();
+  });
+  ui.paymentImportFilter.addEventListener('change', () => {
+    app.paymentImportPage = 0;
+    renderPaymentImportRows();
+  });
+  ui.paymentImportPreviousPage.addEventListener('click', () => {
+    app.paymentImportPage = Math.max(0, app.paymentImportPage - 1);
+    renderPaymentImportRows();
+  });
+  ui.paymentImportNextPage.addEventListener('click', () => {
+    app.paymentImportPage += 1;
+    renderPaymentImportRows();
   });
   ui.paymentImportRows.addEventListener('change', handlePaymentImportChange);
   ui.downloadPaymentTemplate.addEventListener('click', downloadPaymentTemplate);
