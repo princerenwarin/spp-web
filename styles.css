@@ -5661,6 +5661,12 @@ input[type='radio'] {
   min-width: 0;
 }
 
+.payment-import-activity-year {
+  border-top: 1px solid var(--border);
+  margin-top: 14px;
+  padding-top: 12px;
+}
+
 .payment-import-billing-cell .payment-import-field + .payment-import-field,
 .payment-import-payment-cell .payment-import-field + .payment-import-field {
   margin-top: 13px;

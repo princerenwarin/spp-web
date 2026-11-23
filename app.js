@@ -6498,6 +6498,11 @@ function academicYearFromImportPeriod(period) {
   return `${start}-${start + 1}`;
 }
 
+function isValidImportAcademicYear(year) {
+  const match = /^(\d{4})-(\d{4})$/.exec(String(year || ''));
+  return Boolean(match && Number(match[2]) === Number(match[1]) + 1);
+}
+
 function parseDesktopPaymentRecords(table, header, firstSourceRow = 2) {
   const findColumn = (...names) => header.findIndex((item) => names.includes(item));
   const columns = {
@@ -6599,6 +6604,8 @@ function parseDesktopPaymentRecords(table, header, firstSourceRow = 2) {
       tglbyr,
       importedPeriod: period,
       tahunAjaran: academicYearFromImportPeriod(period),
+      activityTahunAjaran: academicYearFromImportPeriod(period),
+      activityYearTouched: false,
       nominal: amounts.cash,
       expectedCash,
       cashDifference,
@@ -7194,6 +7201,7 @@ function setPaymentSettlementBulkSelection(workflow, mode) {
 
 function paymentImportRowNeedsAttention(row) {
   const isDesktop = row.sourceFormat === 'desktop';
+  const hasActivity = isDesktop && row.importItems?.some((item) => item.component === 'giat');
   const hasPaymentDate = Boolean(row.tglbyr && row.tglbyr <= localDateInputValue());
   const hasPaymentData = isDesktop
     ? row.importItems?.length > 0
@@ -7203,8 +7211,25 @@ function paymentImportRowNeedsAttention(row) {
       || Number(row.billing.belum_dialokasikan || 0) > 0);
   return Boolean(!row.selectedStudent || !hasPaymentDate || !hasPaymentData
     || needsMonthlyBilling || (isDesktop && !row.tahunAjaran)
+    || (hasActivity && !isValidImportAcademicYear(row.activityTahunAjaran))
     || (row.validationErrors || []).length || (row.fileDuplicateReasons || []).length
     || row.databaseDuplicate || row.periodError || row.billingError);
+}
+
+function paymentImportHasActivity(row) {
+  return row.sourceFormat === 'desktop'
+    && row.importItems?.some((item) => item.component === 'giat');
+}
+
+function paymentImportHasMonthlyComponent(row) {
+  return row.sourceFormat === 'desktop'
+    && row.importItems?.some((item) => ['spp', 'spp_bos', 'komp'].includes(item.component));
+}
+
+function paymentImportEnrollmentYear(row) {
+  return paymentImportHasActivity(row) && !paymentImportHasMonthlyComponent(row)
+    ? row.activityTahunAjaran || row.tahunAjaran
+    : row.tahunAjaran;
 }
 
 function getPaymentImportGroupIdentity(row) {
@@ -7334,6 +7359,8 @@ function renderPaymentImportRows() {
     )).join('');
     const validPeriod = allowedPeriods.includes(row.period);
     const validPaymentDate = Boolean(row.tglbyr && row.tglbyr <= localDateInputValue());
+    const hasActivity = paymentImportHasActivity(row);
+    const hasMonthlyComponent = paymentImportHasMonthlyComponent(row);
     const hasItems = isDesktop
       ? row.importItems?.length > 0 && !(row.validationErrors || []).length
       : Boolean(row.component && row.nominal > 0
@@ -7342,7 +7369,26 @@ function renderPaymentImportRows() {
             && Number(row.billing.belum_dialokasikan || 0) === 0)));
     const canConfirm = Boolean(validPaymentDate && row.selectedStudent?.nospp && hasItems
       && !(row.validationErrors || []).length
-      && (!isDesktop || row.tahunAjaran));
+      && (!isDesktop || row.tahunAjaran)
+      && (!hasActivity || isValidImportAcademicYear(row.activityTahunAjaran)));
+    const activityYearOptions = [...new Set([
+      ...(app.years || []),
+      row.tahunAjaran,
+      row.activityTahunAjaran
+    ])]
+      .filter(isValidImportAcademicYear)
+      .sort((yearA, yearB) => Number(yearB.slice(0, 4)) - Number(yearA.slice(0, 4)));
+    const activityYearControl = hasActivity
+      ? `<label class="payment-import-field payment-import-activity-year">
+          <span class="payment-import-field-label">Tahun ajaran Kegiatan</span>
+          <select data-import-activity-year aria-label="Tahun ajaran alokasi Kegiatan pada baris ${row.sourceRow}">
+            ${activityYearOptions.map((year) => `<option value="${escapeHtml(year)}" ${year === row.activityTahunAjaran ? 'selected' : ''}>${escapeHtml(year)}</option>`).join('')}
+          </select>
+          <small>${hasMonthlyComponent
+            ? 'Alokasi melunasi tunggakan Kegiatan tertua sampai tahun ini.'
+            : 'Alokasi melunasi tunggakan tertua sampai tahun ini; tahun ini juga dipakai untuk memilih pendaftaran transaksi.'}</small>
+        </label>`
+      : '';
     const studentOptions = row.candidates.map((student) => (
       `<option value="${escapeHtml(student.id)}" ${student.id === row.selectedId ? 'selected' : ''}>${escapeHtml(student.nama)} · ${escapeHtml(getSchoolName(student.kdsek))} · Kelas ${escapeHtml(student.kdkls)} · ${escapeHtml(student.nospp)}</option>`
     )).join('');
@@ -7377,9 +7423,14 @@ function renderPaymentImportRows() {
       ...(row.databaseDuplicate
         ? [row.sourceFormat === 'desktop'
           ? (row.databaseDuplicate.import_key
-            ? `Baris ini sudah pernah diimpor sebagai ${row.databaseDuplicate.receipt_no} (${row.databaseDuplicate.tglbyr}).`
+            ? (hasActivity
+              ? `Baris ini sudah pernah diimpor sebagai ${row.databaseDuplicate.receipt_no} (${row.databaseDuplicate.tglbyr}). Konfirmasi ulang akan menyesuaikan alokasi Kegiatan tanpa menggandakan pembayaran.`
+              : `Baris ini sudah pernah diimpor sebagai ${row.databaseDuplicate.receipt_no} (${row.databaseDuplicate.tglbyr}).`)
             : `Mungkin ada pembayaran untuk siswa, tanggal, dan kas yang sama: ${row.databaseDuplicate.receipt_no} (${row.databaseDuplicate.tglbyr}).`)
           : `Mungkin sudah tercatat: ${row.databaseDuplicate.receipt_no} · ${row.databaseDuplicate.tglbyr} · ${formatRupiah(row.databaseDuplicate.nominal)}.`]
+        : []),
+      ...(hasActivity && !isValidImportAcademicYear(row.activityTahunAjaran)
+        ? ['Pilih tahun ajaran Kegiatan yang valid.']
         : [])
     ];
     const issueMarkup = issues.map((message) => `<small class="payment-import-row-error">${escapeHtml(message)}</small>`).join('');
@@ -7415,6 +7466,7 @@ function renderPaymentImportRows() {
           <span class="payment-import-field-label">Periode</span>
           <div>${periodControl}</div>
         </div>
+        ${activityYearControl}
       </td>
       <td class="payment-import-payment-cell">
         <label class="payment-import-field">
@@ -8786,14 +8838,19 @@ async function submitPaymentImport() {
     const payload = isDesktopImport
       ? confirmed.map((row) => ({
         id_siswa: row.selectedStudent.id,
-        tahun_ajaran: row.tahunAjaran,
+        tahun_ajaran: paymentImportEnrollmentYear(row),
         tglbyr: row.tglbyr,
         kas: row.nominal,
         spp_gross: row.desktopAmounts.spp,
         bos: row.desktopAmounts.bos,
         source_key: `desktop:${row.sourceFingerprint}:${row.selectedStudent.id}`,
         notes: row.notes,
-        items: row.importItems.map(({ component, periode, nominal }) => ({ component, periode, nominal }))
+        items: row.importItems.map(({ component, periode, nominal }) => ({
+          component,
+          periode,
+          nominal,
+          ...(component === 'giat' ? { activity_tahun_ajaran: row.activityTahunAjaran } : {})
+        }))
       }))
       : confirmed.map((row) => {
         let items;
@@ -8806,7 +8863,7 @@ async function submitPaymentImport() {
         return { nospp: row.selectedStudent.nospp, tglbyr: row.tglbyr, items };
       });
     const { data, error } = await app.supabase.rpc(
-      isDesktopImport ? 'import_legacy_payment_batches_v1' : 'import_payment_batches_v1',
+      isDesktopImport ? 'import_legacy_payment_batches_v2' : 'import_payment_batches_v1',
       {
       ...credentials,
       p_rows: payload
@@ -8859,6 +8916,8 @@ async function submitPaymentImport() {
 }
 
 function reparseDesktopPaymentImportRow(row) {
+  const previousActivityYear = row.activityTahunAjaran;
+  const previousActivityYearTouched = row.activityYearTouched;
   const updated = parseDesktopPaymentRecords([row.desktopCells], row.desktopHeader, row.sourceRow)[0];
   if (!updated) {
     row.sourceName = '';
@@ -8869,6 +8928,8 @@ function reparseDesktopPaymentImportRow(row) {
     row.importedPeriod = '';
     row.period = '';
     row.tahunAjaran = '';
+    row.activityTahunAjaran = '';
+    row.activityYearTouched = false;
     row.nominal = 0;
     row.expectedCash = 0;
     row.cashDifference = 0;
@@ -8880,6 +8941,10 @@ function reparseDesktopPaymentImportRow(row) {
     return;
   }
   Object.assign(row, updated);
+  row.activityYearTouched = previousActivityYearTouched;
+  row.activityTahunAjaran = previousActivityYearTouched
+    ? previousActivityYear
+    : updated.tahunAjaran;
   row.period = updated.importedPeriod;
 }
 
@@ -8984,6 +9049,12 @@ async function handlePaymentImportChange(event) {
     row.skipped = false;
     row.skipTouched = false;
     refreshDuplicates = true;
+  } else if (control.matches('[data-import-activity-year]')) {
+    row.activityTahunAjaran = control.value;
+    row.activityYearTouched = true;
+    row.confirmed = false;
+    row.skipped = false;
+    row.skipTouched = false;
   } else if (control.matches('[data-import-amount]')) {
     row.nominalInput = control.value;
     revalidateStandardPaymentImportRow(row);
