@@ -6503,7 +6503,13 @@ function isValidImportAcademicYear(year) {
   return Boolean(match && Number(match[2]) === Number(match[1]) + 1);
 }
 
-function parseDesktopPaymentRecords(table, header, firstSourceRow = 2) {
+function parseDesktopPaymentRecords(
+  table,
+  header,
+  firstSourceRow = 2,
+  sourceSheet = '',
+  firstSourceSheetRow = 2
+) {
   const findColumn = (...names) => header.findIndex((item) => names.includes(item));
   const columns = {
     date: findColumn('tgl', 'tanggal', 'tanggalbayar'),
@@ -6542,6 +6548,10 @@ function parseDesktopPaymentRecords(table, header, firstSourceRow = 2) {
   table.forEach((cells, index) => {
     if (!cells.some((cell) => String(cell ?? '').trim())) return;
     const sourceRow = firstSourceRow + index;
+    const sourceSheetRow = firstSourceSheetRow + index;
+    const sourceLocation = sourceSheet
+      ? `Lembar ${sourceSheet}, baris ${sourceSheetRow}`
+      : `Baris ${sourceRow}`;
     const value = (column) => column < 0 ? '' : cells[column];
     const errors = [];
     const amounts = {};
@@ -6550,28 +6560,28 @@ function parseDesktopPaymentRecords(table, header, firstSourceRow = 2) {
         amounts[key] = parseDesktopAmount(value(columns[key]), label);
       } catch (error) {
         amounts[key] = 0;
-        errors.push(`Baris ${sourceRow}: ${error.message}`);
+        errors.push(`${sourceLocation}: ${error.message}`);
       }
     });
 
     const period = importPeriodValue(value(columns.period));
-    if (!period) errors.push(`Baris ${sourceRow}: periode tidak valid; gunakan MMYYYY.`);
+    if (!period) errors.push(`${sourceLocation}: periode tidak valid; gunakan MMYYYY.`);
     let dateError = '';
     const tglbyr = (() => {
       try {
         return importDateValue(value(columns.date));
       } catch (error) {
-        dateError = `Baris ${sourceRow}: ${error.message}`;
+        dateError = `${sourceLocation}: ${error.message}`;
         return '';
       }
     })();
-    if (!tglbyr && !dateError) dateError = `Baris ${sourceRow}: tanggal pembayaran kosong.`;
+    if (!tglbyr && !dateError) dateError = `${sourceLocation}: tanggal pembayaran kosong.`;
     if (dateError) errors.push(dateError);
     const sourceName = String(value(columns.name) || '').trim();
     const sourceId = String(value(columns.id) ?? '').trim();
-    if (!sourceName) errors.push(`Baris ${sourceRow}: nama siswa kosong.`);
+    if (!sourceName) errors.push(`${sourceLocation}: nama siswa kosong.`);
     if (amounts.bos > amounts.spp) {
-      errors.push(`Baris ${sourceRow}: BOS melebihi nilai SPP bruto.`);
+      errors.push(`${sourceLocation}: BOS melebihi nilai SPP bruto.`);
     }
 
     const parentSpp = Math.max(0, amounts.spp - amounts.bos);
@@ -6585,18 +6595,20 @@ function parseDesktopPaymentRecords(table, header, firstSourceRow = 2) {
       { component: 'seragam', periode: '', nominal: amounts.uniform, sourceLabel: 'Seragam' },
       { component: 'lainnya', periode: '', nominal: amounts.fine, sourceLabel: 'Denda' }
     ].filter((item) => item.nominal > 0);
-    if (!importItems.length) errors.push(`Baris ${sourceRow}: tidak ada nominal tagihan untuk diimpor.`);
+    if (!importItems.length) errors.push(`${sourceLocation}: tidak ada nominal tagihan untuk diimpor.`);
 
     const expectedCash = amounts.dpp + amounts.dps + parentSpp + amounts.computer
       + amounts.activity + amounts.uniform + amounts.fine;
     const cashDifference = amounts.cash - expectedCash;
     if (cashDifference !== 0) {
-      errors.push(`Baris ${sourceRow}: Kas ${formatRupiah(amounts.cash)} berbeda dari rincian pembayaran ${formatRupiah(expectedCash)}.`);
+      errors.push(`${sourceLocation}: Kas ${formatRupiah(amounts.cash)} berbeda dari rincian pembayaran ${formatRupiah(expectedCash)}.`);
     }
 
     records.push({
       sourceFormat: 'desktop',
       sourceRow,
+      sourceSheet,
+      sourceSheetRow,
       sourceName,
       sourceId,
       sourceSchool: String(value(columns.school) || '').trim(),
@@ -6604,8 +6616,6 @@ function parseDesktopPaymentRecords(table, header, firstSourceRow = 2) {
       tglbyr,
       importedPeriod: period,
       tahunAjaran: academicYearFromImportPeriod(period),
-      activityTahunAjaran: academicYearFromImportPeriod(period),
-      activityYearTouched: false,
       nominal: amounts.cash,
       expectedCash,
       cashDifference,
@@ -6618,11 +6628,9 @@ function parseDesktopPaymentRecords(table, header, firstSourceRow = 2) {
       desktopCells: cells.slice(),
       desktopHeader: header.slice(),
       desktopColumns: columns,
-      notes: `Desktop row ${sourceRow}; ID=${sourceId || '-'}; ${String(value(columns.school) || '').trim()}; SPP=${amounts.spp}; BOS=${amounts.bos}; Kas=${amounts.cash}; DENDA=${amounts.fine}`
+      notes: `Desktop ${sourceSheet ? `sheet ${sourceSheet}, ` : ''}row ${sourceSheetRow}; ID=${sourceId || '-'}; ${String(value(columns.school) || '').trim()}; SPP=${amounts.spp}; BOS=${amounts.bos}; Kas=${amounts.cash}; DENDA=${amounts.fine}`
     });
   });
-  if (!records.length) throw new Error('File desktop tidak berisi baris pembayaran.');
-  if (records.length > 500) throw new Error('Maksimal 500 baris per file.');
   return records;
 }
 
@@ -6640,47 +6648,8 @@ function paymentImportFormatFromHeader(header) {
   return '';
 }
 
-async function parsePaymentImportFile(file) {
-  const extension = file.name.split('.').pop().toLowerCase();
-  let table;
-  let detectedFormat = '';
-  if (extension === 'csv') {
-    table = parseCsv(await file.text());
-  } else {
-    if (!window.XLSX) throw new Error('Pembaca Excel tidak tersedia. Muat ulang aplikasi lalu coba lagi.');
-    const workbook = window.XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
-    const isExampleSheet = (name) => /^(contoh|panduan|example|sample)/.test(normalizeImportHeader(name));
-    const candidates = workbook.SheetNames
-      .filter((name) => !isExampleSheet(name))
-      .map((name) => {
-        const sheet = workbook.Sheets[name];
-        const rows = window.XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
-        const header = (rows[0] || []).map(normalizeImportHeader);
-        const format = paymentImportFormatFromHeader(header);
-        const hasData = rows.slice(1).some((row) => row.some((cell) => String(cell ?? '').trim()));
-        return { name, rows, format, hasData };
-      })
-      .filter((sheet) => sheet.format && sheet.hasData);
-    if (candidates.length > 1) {
-      throw new Error(`File berisi transaksi di beberapa lembar (${candidates.map((sheet) => sheet.name).join(', ')}). Sisakan satu lembar data lalu unggah ulang.`);
-    }
-    if (candidates.length === 1) {
-      table = candidates[0].rows;
-      detectedFormat = candidates[0].format;
-    } else {
-      const firstDataSheetName = workbook.SheetNames.find((name) => !isExampleSheet(name))
-        || workbook.SheetNames[0];
-      const firstDataSheet = workbook.Sheets[firstDataSheetName];
-      if (!firstDataSheet) throw new Error('File Excel tidak memiliki lembar kerja.');
-      table = window.XLSX.utils.sheet_to_json(firstDataSheet, { header: 1, raw: true, defval: '' });
-    }
-  }
-  const header = (table.shift() || []).map(normalizeImportHeader);
+function parseStandardPaymentRecords(table, header, firstSourceRow = 2, sourceSheet = '') {
   const findColumn = (...names) => header.findIndex((item) => names.includes(item));
-  detectedFormat = detectedFormat || paymentImportFormatFromHeader(header);
-  if (detectedFormat === 'desktop') {
-    return { format: 'desktop', records: parseDesktopPaymentRecords(table, header) };
-  }
   const columns = {
     nospp: findColumn('nosp', 'nomorspp'),
     nama: findColumn('nama', 'namasiswa', 'siswa'),
@@ -6699,7 +6668,9 @@ async function parsePaymentImportFile(file) {
     const rawAmount = value(columns.nominal);
     if (!nama && !nospp && !String(rawAmount || '').trim() && !String(rawDate || '').trim()) return null;
     const row = {
-      sourceRow: index + 2,
+      sourceRow: firstSourceRow + index,
+      sourceSheet,
+      sourceSheetRow: index + 2,
       sourceFormat: 'standard',
       sourceName: nama,
       sourceNoSpp: nospp,
@@ -6714,36 +6685,126 @@ async function parsePaymentImportFile(file) {
     revalidateStandardPaymentImportRow(row);
     return row;
   }).filter(Boolean);
-  if (!records.length) throw new Error('File tidak berisi baris pembayaran.');
-  if (records.length > 500) throw new Error('Maksimal 500 baris per file.');
-  return { format: 'standard', records };
+  return records;
+}
+
+async function parsePaymentImportFile(file) {
+  const extension = file.name.split('.').pop().toLowerCase();
+  const isExampleSheet = (name) => /^(contoh|panduan|example|sample)/.test(normalizeImportHeader(name));
+  const hasExampleMarker = (row) => row.some((cell) => (
+    /(?:^|[^a-z0-9])(?:contoh|dummy|sample|example)(?:[^a-z0-9]|$)/i.test(String(cell ?? ''))
+  ));
+  let candidates = [];
+  let ignoredExampleRows = 0;
+
+  if (extension === 'csv') {
+    const rows = parseCsv(await file.text());
+    const header = (rows[0] || []).map(normalizeImportHeader);
+    candidates = [{
+      name: '',
+      rows,
+      format: paymentImportFormatFromHeader(header)
+    }];
+  } else {
+    if (!window.XLSX) throw new Error('Pembaca Excel tidak tersedia. Muat ulang aplikasi lalu coba lagi.');
+    const workbook = window.XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+    candidates = workbook.SheetNames.map((name) => {
+      const sheet = workbook.Sheets[name];
+      const rows = window.XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
+      const header = (rows[0] || []).map(normalizeImportHeader);
+      const format = paymentImportFormatFromHeader(header);
+      const cleanedRows = rows.slice(1).map((row) => {
+        const hasData = row.some((cell) => String(cell ?? '').trim());
+        if (hasData && isExampleSheet(name) && hasExampleMarker(row)) {
+          ignoredExampleRows += 1;
+          return [];
+        }
+        return row;
+      });
+      return { name, rows: [rows[0] || [], ...cleanedRows], format };
+    }).filter((sheet) => (
+      sheet.format
+      && sheet.rows.slice(1).some((row) => row.some((cell) => String(cell ?? '').trim()))
+    ));
+  }
+
+  if (!candidates.length || !candidates[0].format) {
+    if (ignoredExampleRows) {
+      throw new Error('File hanya berisi baris contoh. Isi lembar data dengan transaksi sebenarnya, lalu unggah ulang.');
+    }
+    throw new Error('File tidak memiliki lembar dengan header pembayaran yang didukung.');
+  }
+  const formats = new Set(candidates.map((sheet) => sheet.format));
+  if (formats.size > 1) {
+    throw new Error('File berisi format pembayaran berbeda di beberapa lembar. Pisahkan format standar dan desktop sebelum mengunggah.');
+  }
+
+  const format = candidates[0].format;
+  const records = [];
+  const firstSheetByDesktopRow = new Map();
+  let exactDuplicateRowsRemoved = 0;
+  let firstSourceRow = 2;
+  candidates.forEach((candidate) => {
+    const header = (candidate.rows[0] || []).map(normalizeImportHeader);
+    const table = candidate.rows.slice(1);
+    const sheetRecords = format === 'desktop'
+      ? parseDesktopPaymentRecords(table, header, firstSourceRow, candidate.name)
+      : parseStandardPaymentRecords(table, header, firstSourceRow, candidate.name);
+    sheetRecords.forEach((record) => {
+      if (format === 'desktop' && candidates.length > 1) {
+        const signature = JSON.stringify((record.desktopCells || []).map((cell) => (
+          cell instanceof Date
+            ? cell.toISOString().slice(0, 10)
+            : String(cell ?? '').trim()
+        )));
+        const firstSheet = firstSheetByDesktopRow.get(signature);
+        if (firstSheet && firstSheet !== candidate.name) {
+          exactDuplicateRowsRemoved += 1;
+          return;
+        }
+        if (!firstSheet) firstSheetByDesktopRow.set(signature, candidate.name);
+      }
+      records.push(record);
+    });
+    firstSourceRow += candidate.rows.length - 1;
+  });
+
+  if (!records.length) throw new Error('File tidak berisi baris pembayaran setelah baris contoh diabaikan.');
+  if (records.length > 500) throw new Error('Maksimal 500 baris pembayaran setelah penggabungan lembar dan penghapusan baris identik.');
+  return {
+    format,
+    records,
+    exactDuplicateRowsRemoved,
+    ignoredExampleRows
+  };
 }
 
 function revalidateStandardPaymentImportRow(row) {
   const errors = [];
-  if (!row.sourceName && !row.sourceNoSpp) errors.push(`Baris ${row.sourceRow}: nama atau No. SPP wajib diisi.`);
+  const location = paymentImportRowLocation(row);
+  if (!row.sourceName && !row.sourceNoSpp) errors.push(`${location}: nama atau No. SPP wajib diisi.`);
 
   try {
     row.nominal = parseSettlementAmount(row.nominalInput);
-    if (row.nominal <= 0) errors.push(`Baris ${row.sourceRow}: nominal harus lebih dari 0.`);
+    if (row.nominal <= 0) errors.push(`${location}: nominal harus lebih dari 0.`);
   } catch (error) {
     row.nominal = 0;
-    errors.push(`Baris ${row.sourceRow}: ${error.message}`);
+    errors.push(`${location}: ${error.message}`);
   }
 
   try {
     row.tglbyr = importDateValue(row.dateInput);
   } catch (error) {
     row.tglbyr = '';
-    errors.push(`Baris ${row.sourceRow}: ${error.message}`);
+    errors.push(`${location}: ${error.message}`);
   }
   if (!row.tglbyr && !errors.some((message) => message.toLowerCase().includes('tanggal'))) {
-    errors.push(`Baris ${row.sourceRow}: tanggal pembayaran wajib diisi.`);
+    errors.push(`${location}: tanggal pembayaran wajib diisi.`);
   }
 
   row.importedPeriod = importPeriodValue(row.periodInput);
   row.periodError = Boolean(String(row.periodInput || '').trim() && !row.importedPeriod);
-  if (row.periodError) errors.push(`Baris ${row.sourceRow}: periode tidak valid; gunakan MMYYYY.`);
+  if (row.periodError) errors.push(`${location}: periode tidak valid; gunakan MMYYYY.`);
   row.validationErrors = errors;
   row.validationError = errors.join(' ');
 }
@@ -6827,7 +6888,40 @@ async function loadPaymentImportStudentIndex(records) {
     loadPaymentStudentsByColumn('nospp', noSppValues),
     loadPaymentStudentsByColumn('id_siswa', studentIds)
   ]);
-  return { byNoSpp, byId };
+  const legacyIds = [...new Set(studentIds.map((value) => String(value || '').trim()).filter(Boolean))];
+  const legacyMappings = [];
+  const credentials = legacyIds.length ? requireStudentRules() : {};
+  for (let offset = 0; offset < legacyIds.length; offset += 100) {
+    const { data, error } = await app.supabase.rpc('spp_app_desktop_student_id_map_v1', {
+      ...credentials,
+      p_legacy_ids: legacyIds.slice(offset, offset + 100)
+    });
+    if (error) {
+      if (error.code === 'PGRST202') {
+        throw new Error('Impor desktop otomatis memerlukan migration 046 setelah 045.');
+      }
+      throw error;
+    }
+    if (!Array.isArray(data)) {
+      throw new Error('Pemetaan ID lama siswa tidak dapat dibaca untuk impor desktop.');
+    }
+    legacyMappings.push(...data);
+  }
+  const mappedStudents = await loadPaymentStudentsByColumn(
+    'id_siswa',
+    legacyMappings.map((item) => item.id_siswa)
+  );
+  const byLegacyId = new Map();
+  legacyMappings.forEach((mapping) => {
+    const students = mappedStudents.get(paymentImportStudentLookupKey('id_siswa', mapping.id_siswa)) || [];
+    if (students.length) {
+      byLegacyId.set(
+        paymentImportStudentLookupKey('id_siswa', mapping.legacy_id),
+        students
+      );
+    }
+  });
+  return { byNoSpp, byId, byLegacyId };
 }
 
 function cachedPaymentStudentSearch(query, searchCache) {
@@ -6884,11 +6978,14 @@ async function resolvePaymentImportRecord(record, { studentIndex, searchCache } 
       try {
         const idCandidates = studentIndex?.byId.get(paymentImportStudentLookupKey('id_siswa', record.sourceId))
           || await cachedPaymentStudentSearch(record.sourceId, searchCache || new Map());
-        selectedStudent = idCandidates.find((student) => (
+        const mappedCandidates = studentIndex?.byLegacyId.get(
+          paymentImportStudentLookupKey('id_siswa', record.sourceId)
+        ) || [];
+        selectedStudent = mappedCandidates[0] || idCandidates.find((student) => (
           normalizeImportHeader(student.id) === normalizeImportHeader(record.sourceId)
           && importSchoolMatches(student, record.sourceSchool)
         )) || null;
-        if (selectedStudent) candidates = idCandidates;
+        if (selectedStudent) candidates = mappedCandidates.length ? mappedCandidates : idCandidates;
       } catch (error) {
         searchError = error.message || 'Pencarian ID siswa gagal.';
       }
@@ -6925,6 +7022,7 @@ async function resolvePaymentImportRecord(record, { studentIndex, searchCache } 
       : (record.sourceNoSpp || record.sourceName),
     selectedId: selectedStudent?.id || '',
     selectedStudent,
+    autoCreateStudent: record.sourceFormat === 'desktop' && !selectedStudent && Boolean(record.sourceId),
     component: '',
     period: record.importedPeriod,
     billing: null,
@@ -7033,7 +7131,9 @@ function applyPaymentImportDuplicateWarnings({ batches = [], desktopDuplicates =
   groups.forEach((group) => {
     if (group.length < 2) return;
     group.forEach((row, index) => {
-      row.fileDuplicateReasons.push(`Data ini sama dengan ${group.length - 1} baris lain dalam file.`);
+      row.fileDuplicateReasons.push(
+        `ID, sekolah, tanggal, periode, dan rincian nominal sama dengan ${group.length - 1} baris lain dalam file.`
+      );
       if (!row.skipTouched) row.skipped = index > 0;
       if (row.skipped) row.confirmed = false;
     });
@@ -7148,7 +7248,7 @@ function desktopPaymentCorrectionFields(row) {
     const column = row.desktopColumns?.[key];
     if (column === undefined || column < 0) return '';
     const value = row.desktopCells[column] ?? '';
-    return `<label><span>${label}</span><input type="text" data-desktop-field="${key}" data-desktop-column="${column}" value="${escapeHtml(String(value))}" aria-label="${label} pada baris ${row.sourceRow}" /></label>`;
+    return `<label><span>${label}</span><input type="text" data-desktop-field="${key}" data-desktop-column="${column}" value="${escapeHtml(String(value))}" aria-label="${label} pada ${escapeHtml(paymentImportRowLocation(row))}" /></label>`;
   }).join('');
   const shouldOpen = (row.validationErrors || []).length || (row.fileDuplicateReasons || []).length;
   return `<details class="payment-import-correction" ${shouldOpen ? 'open' : ''}>
@@ -7165,11 +7265,15 @@ function setPaymentImportBulkSelection(mode) {
       const hasItems = isDesktop
         ? row.importItems?.length > 0 && !(row.validationErrors || []).length
         : Boolean(row.component && row.nominal > 0);
-      const canConfirm = Boolean(validPaymentDate && row.selectedStudent?.nospp && hasItems
+      const canConfirm = Boolean(validPaymentDate && paymentImportHasStudent(row) && hasItems
         && !(row.validationErrors || []).length
-        && (!isDesktop || row.tahunAjaran));
-      row.confirmed = canConfirm && !row.databaseDuplicate;
-      row.skipped = !row.confirmed;
+        && (!isDesktop || isValidImportAcademicYear(row.tahunAjaran)));
+      const hasFileDuplicate = Boolean((row.fileDuplicateReasons || []).length);
+      const wasSkipped = row.skipped;
+      row.confirmed = canConfirm && !row.databaseDuplicate && (!hasFileDuplicate || !wasSkipped);
+      row.skipped = hasFileDuplicate
+        ? (wasSkipped || !canConfirm || Boolean(row.databaseDuplicate))
+        : !row.confirmed;
       row.skipTouched = true;
     } else if (mode === 'uncheck') {
       row.confirmed = false;
@@ -7201,7 +7305,6 @@ function setPaymentSettlementBulkSelection(workflow, mode) {
 
 function paymentImportRowNeedsAttention(row) {
   const isDesktop = row.sourceFormat === 'desktop';
-  const hasActivity = isDesktop && row.importItems?.some((item) => item.component === 'giat');
   const hasPaymentDate = Boolean(row.tglbyr && row.tglbyr <= localDateInputValue());
   const hasPaymentData = isDesktop
     ? row.importItems?.length > 0
@@ -7209,11 +7312,23 @@ function paymentImportRowNeedsAttention(row) {
   const needsMonthlyBilling = !isDesktop && ['spp', 'komp'].includes(row.component)
     && (!row.billing || row.billingLoading || row.billingError
       || Number(row.billing.belum_dialokasikan || 0) > 0);
-  return Boolean(!row.selectedStudent || !hasPaymentDate || !hasPaymentData
+  return Boolean((!row.selectedStudent && !paymentImportCanAutoCreateStudent(row))
+    || !hasPaymentDate || !hasPaymentData
     || needsMonthlyBilling || (isDesktop && !row.tahunAjaran)
-    || (hasActivity && !isValidImportAcademicYear(row.activityTahunAjaran))
     || (row.validationErrors || []).length || (row.fileDuplicateReasons || []).length
     || row.databaseDuplicate || row.periodError || row.billingError);
+}
+
+function paymentImportCanAutoCreateStudent(row) {
+  return row.sourceFormat === 'desktop' && row.autoCreateStudent
+    && Boolean(String(row.sourceId || '').trim())
+    && Boolean(String(row.sourceName || '').trim())
+    && Boolean(String(row.sourceSchool || '').trim())
+    && Boolean(String(row.sourceClass || '').trim());
+}
+
+function paymentImportHasStudent(row) {
+  return Boolean(row.selectedStudent?.nospp) || paymentImportCanAutoCreateStudent(row);
 }
 
 function paymentImportHasActivity(row) {
@@ -7221,15 +7336,11 @@ function paymentImportHasActivity(row) {
     && row.importItems?.some((item) => item.component === 'giat');
 }
 
-function paymentImportHasMonthlyComponent(row) {
-  return row.sourceFormat === 'desktop'
-    && row.importItems?.some((item) => ['spp', 'spp_bos', 'komp'].includes(item.component));
-}
-
-function paymentImportEnrollmentYear(row) {
-  return paymentImportHasActivity(row) && !paymentImportHasMonthlyComponent(row)
-    ? row.activityTahunAjaran || row.tahunAjaran
-    : row.tahunAjaran;
+function paymentImportRowLocation(row) {
+  const sourceRow = row.sourceSheetRow || row.sourceRow;
+  return row.sourceSheet
+    ? `Lembar ${row.sourceSheet}, baris ${sourceRow}`
+    : `Baris ${sourceRow}`;
 }
 
 function getPaymentImportGroupIdentity(row) {
@@ -7251,7 +7362,7 @@ function getPaymentImportGroupIdentity(row) {
     return { key: `student:${studentId}`, label: 'ID siswa', value: studentId };
   }
   return {
-    key: `row:${row.sourceFormat}:${row.sourceRow}`,
+    key: `row:${row.sourceFormat}:${row.sourceSheet || ''}:${row.sourceRow}`,
     label: 'ID',
     value: 'ID tidak tersedia'
   };
@@ -7302,6 +7413,7 @@ function buildPaymentImportGroups(rows) {
         row.sourceId,
         row.sourceSchool,
         row.sourceClass,
+        row.sourceSheet,
         row.sourceRow,
         row.selectedStudent?.nama,
         row.selectedStudent?.nospp,
@@ -7360,34 +7472,20 @@ function renderPaymentImportRows() {
     const validPeriod = allowedPeriods.includes(row.period);
     const validPaymentDate = Boolean(row.tglbyr && row.tglbyr <= localDateInputValue());
     const hasActivity = paymentImportHasActivity(row);
-    const hasMonthlyComponent = paymentImportHasMonthlyComponent(row);
     const hasItems = isDesktop
       ? row.importItems?.length > 0 && !(row.validationErrors || []).length
       : Boolean(row.component && row.nominal > 0
         && ((row.component !== 'spp' && row.component !== 'komp')
           || (row.billing && !row.billingLoading && !row.billingError && validPeriod
             && Number(row.billing.belum_dialokasikan || 0) === 0)));
-    const canConfirm = Boolean(validPaymentDate && row.selectedStudent?.nospp && hasItems
+    const canConfirm = Boolean(validPaymentDate && paymentImportHasStudent(row) && hasItems
       && !(row.validationErrors || []).length
-      && (!isDesktop || row.tahunAjaran)
-      && (!hasActivity || isValidImportAcademicYear(row.activityTahunAjaran)));
-    const activityYearOptions = [...new Set([
-      ...(app.years || []),
-      row.tahunAjaran,
-      row.activityTahunAjaran
-    ])]
-      .filter(isValidImportAcademicYear)
-      .sort((yearA, yearB) => Number(yearB.slice(0, 4)) - Number(yearA.slice(0, 4)));
-    const activityYearControl = hasActivity
-      ? `<label class="payment-import-field payment-import-activity-year">
-          <span class="payment-import-field-label">Tahun ajaran Kegiatan</span>
-          <select data-import-activity-year aria-label="Tahun ajaran alokasi Kegiatan pada baris ${row.sourceRow}">
-            ${activityYearOptions.map((year) => `<option value="${escapeHtml(year)}" ${year === row.activityTahunAjaran ? 'selected' : ''}>${escapeHtml(year)}</option>`).join('')}
-          </select>
-          <small>${hasMonthlyComponent
-            ? 'Alokasi melunasi tunggakan Kegiatan tertua sampai tahun ini.'
-            : 'Alokasi melunasi tunggakan tertua sampai tahun ini; tahun ini juga dipakai untuk memilih pendaftaran transaksi.'}</small>
-        </label>`
+      && (!isDesktop || isValidImportAcademicYear(row.tahunAjaran)));
+    const activityAllocationNote = hasActivity
+      ? `<div class="payment-import-field payment-import-activity-year">
+          <span class="payment-import-field-label">Alokasi Kegiatan</span>
+          <small>FIFO ke tunggakan Kegiatan tertua, lalu ke tahun ajaran berikutnya. Jika enrollment berikutnya belum ada, sisanya disimpan sebagai kredit.</small>
+        </div>`
       : '';
     const studentOptions = row.candidates.map((student) => (
       `<option value="${escapeHtml(student.id)}" ${student.id === row.selectedId ? 'selected' : ''}>${escapeHtml(student.nama)} · ${escapeHtml(getSchoolName(student.kdsek))} · Kelas ${escapeHtml(student.kdkls)} · ${escapeHtml(student.nospp)}</option>`
@@ -7414,12 +7512,19 @@ function renderPaymentImportRows() {
       : '';
     const studentStatus = row.selectedStudent
       ? `${getSchoolName(row.selectedStudent.kdsek)} · Kelas ${row.selectedStudent.kdkls} · ${row.selectedStudent.nospp}`
-      : (row.billingError || (isDesktop && !row.candidates.length
-        ? 'Siswa belum ditemukan. Pastikan data siswa sudah diimpor.'
-        : 'Pilih siswa yang cocok dengan data pada file.'));
+      : (paymentImportCanAutoCreateStudent(row)
+        ? (row.candidates.length
+          ? 'ID lama tidak ditemukan; ID baru akan dibuat meski ada kandidat nama. Pilih kandidat jika siswa ini sebenarnya sudah ada.'
+          : 'ID lama tidak ditemukan; siswa baru dan No. SPP akan dibuat otomatis saat disimpan.')
+        : (row.billingError || (isDesktop && !row.candidates.length
+          ? 'Siswa belum ditemukan. Pastikan data siswa sudah diimpor.'
+          : 'Pilih siswa yang cocok dengan data pada file.')));
     const issues = [
       ...(row.validationErrors || []),
       ...(row.fileDuplicateReasons || []),
+      ...(row.autoCreateStudent && !paymentImportCanAutoCreateStudent(row)
+        ? ['Untuk membuat siswa otomatis, ID, nama, sekolah, dan kelas pada file harus terisi.']
+        : []),
       ...(row.databaseDuplicate
         ? [row.sourceFormat === 'desktop'
           ? (row.databaseDuplicate.import_key
@@ -7428,16 +7533,13 @@ function renderPaymentImportRows() {
               : `Baris ini sudah pernah diimpor sebagai ${row.databaseDuplicate.receipt_no} (${row.databaseDuplicate.tglbyr}).`)
             : `Mungkin ada pembayaran untuk siswa, tanggal, dan kas yang sama: ${row.databaseDuplicate.receipt_no} (${row.databaseDuplicate.tglbyr}).`)
           : `Mungkin sudah tercatat: ${row.databaseDuplicate.receipt_no} · ${row.databaseDuplicate.tglbyr} · ${formatRupiah(row.databaseDuplicate.nominal)}.`]
-        : []),
-      ...(hasActivity && !isValidImportAcademicYear(row.activityTahunAjaran)
-        ? ['Pilih tahun ajaran Kegiatan yang valid.']
         : [])
     ];
     const issueMarkup = issues.map((message) => `<small class="payment-import-row-error">${escapeHtml(message)}</small>`).join('');
     const correctionMarkup = isDesktop ? desktopPaymentCorrectionFields(row) : '';
     const nominalControl = isDesktop
       ? `${formatRupiah(row.nominal)}<small>Kas dibayar</small>`
-      : `<input type="text" inputmode="numeric" data-import-amount value="${escapeHtml(row.nominalInput)}" aria-label="Nominal pembayaran pada baris ${row.sourceRow}" />`;
+      : `<input type="text" inputmode="numeric" data-import-amount value="${escapeHtml(row.nominalInput)}" aria-label="Nominal pembayaran pada ${escapeHtml(paymentImportRowLocation(row))}" />`;
     const rowClass = [
       row.skipped ? 'is-skipped' : '',
       issues.length ? 'has-import-issues' : ''
@@ -7445,15 +7547,15 @@ function renderPaymentImportRows() {
     return `<tr data-import-index="${index}" class="${rowClass}">
       <td class="payment-import-identity-cell">
         <div class="payment-import-file-record">
-          <span class="payment-import-field-label">Data dari file · Baris ${row.sourceRow}</span>
+          <span class="payment-import-field-label">Data dari file · ${escapeHtml(paymentImportRowLocation(row))}</span>
           <strong class="payment-import-file-name">${escapeHtml(row.sourceName || row.sourceNoSpp || 'Baris tanpa identitas')}</strong>
           ${sourceDetails ? `<small>${escapeHtml(sourceDetails)}</small>` : ''}
           ${issueMarkup}${correctionMarkup}
         </div>
         <div class="payment-import-student-field">
           <span class="payment-import-field-label">Siswa di aplikasi</span>
-          <input type="search" data-import-search value="${escapeHtml(row.searchQuery)}" placeholder="Cari nama atau No. SPP" aria-label="Cari siswa pada baris ${row.sourceRow}" />
-          <select data-import-student aria-label="Pilih siswa pada baris ${row.sourceRow}"><option value="">Pilih siswa</option>${studentOptions}</select>
+          <input type="search" data-import-search value="${escapeHtml(row.searchQuery)}" placeholder="Cari nama atau No. SPP" aria-label="Cari siswa pada ${escapeHtml(paymentImportRowLocation(row))}" />
+          <select data-import-student aria-label="Pilih siswa pada ${escapeHtml(paymentImportRowLocation(row))}"><option value="">Pilih siswa</option>${studentOptions}</select>
           <small>${escapeHtml(studentStatus)}</small>
         </div>
       </td>
@@ -7466,14 +7568,14 @@ function renderPaymentImportRows() {
           <span class="payment-import-field-label">Periode</span>
           <div>${periodControl}</div>
         </div>
-        ${activityYearControl}
+        ${activityAllocationNote}
       </td>
       <td class="payment-import-payment-cell">
         <label class="payment-import-field">
           <span class="payment-import-field-label">Tanggal pembayaran</span>
           <input type="date" class="payment-import-date ${validPaymentDate ? '' : 'is-missing'}" data-import-date
             value="${escapeHtml(row.tglbyr)}" max="${localDateInputValue()}" required
-            aria-label="Tanggal pembayaran pada baris ${row.sourceRow}" />
+            aria-label="Tanggal pembayaran pada ${escapeHtml(paymentImportRowLocation(row))}" />
           <small>${validPaymentDate ? 'Sesuai tanggal pada bukti.' : 'Wajib diisi; jangan gunakan tanggal unggah.'}</small>
         </label>
         <div class="payment-import-field">
@@ -7547,7 +7649,7 @@ function renderPaymentImportRows() {
   ui.paymentImportRetryDuplicates.disabled = app.paymentImportCheckingDuplicates;
   ui.paymentImportStatus.textContent = `${rows.length} transaksi · ${confirmed} dikonfirmasi · ${skipped} dilewati.`
     + (!app.server
-      ? ` Impor memerlukan Supabase dan migration ${app.paymentImportFormat === 'desktop' ? '032' : '017'}.`
+      ? ` Impor memerlukan Supabase dan migration ${app.paymentImportFormat === 'desktop' ? '046' : '017'}.`
       : '')
     + (app.paymentImportCheckingDuplicates ? ' Memeriksa transaksi duplikat...' : '')
     + (app.paymentImportDuplicateCheckError ? ` ${app.paymentImportDuplicateCheckError} Periksa ulang sebelum mengimpor.` : '')
@@ -7570,6 +7672,13 @@ async function importPaymentFile(file) {
     if (!canAccessPayment()) throw new Error('Hanya Admin KKMS yang dapat mengimpor pembayaran.');
     const parsed = await parsePaymentImportFile(file);
     app.paymentImportFormat = parsed.format;
+    const importNotices = [];
+    if (parsed.exactDuplicateRowsRemoved) {
+      importNotices.push(`${parsed.exactDuplicateRowsRemoved} baris identik lintas lembar digabung.`);
+    }
+    if (parsed.ignoredExampleRows) {
+      importNotices.push(`${parsed.ignoredExampleRows} baris contoh bertanda DUMMY/CONTOH diabaikan.`);
+    }
     const records = await Promise.all(parsed.records.map(async (record) => ({
       ...record,
       sourceFingerprint: parsed.format === 'desktop'
@@ -7578,6 +7687,9 @@ async function importPaymentFile(file) {
     })));
     app.paymentImportRows = await resolvePaymentImportRecords(records);
     await refreshPaymentImportDuplicateWarnings();
+    if (importNotices.length) {
+      ui.paymentImportStatus.textContent += ` ${importNotices.join(' ')}`;
+    }
   } catch (error) {
     app.paymentImportRows = [];
     app.paymentImportDuplicateCheckError = '';
@@ -7632,7 +7744,9 @@ function downloadPaymentTemplate() {
     ['Ekspor desktop: pertahankan tanggal pada sumber (tanggal Excel atau DD/MM/YYYY); jangan ganti dengan tanggal unggah.'],
     ['Ekspor desktop: SPP adalah total sebelum BOS; BOS dipisahkan; Kas adalah pembayaran wali.'],
     ['Ekspor desktop: Kas harus sama dengan jumlah tagihan yang dibayar wali. Selisih perlu diperbaiki sebelum dikonfirmasi.'],
-    ['Ekspor desktop: ID lama dicocokkan otomatis bila cocok; selain itu pilih siswa dari kandidat. Siswa yang belum terdaftar tidak dapat diimpor.'],
+    ['Ekspor desktop: jika ID lama tidak ditemukan, sistem membuat ID siswa dan No. SPP baru. Nama, sekolah, dan kelas pada file wajib tersedia.'],
+    ['Ekspor desktop: tahun ajaran dan periode Juli–Juni dibuat dari periode MMYYYY; tarif diambil dari pembayaran terbesar dan data enrollment terdekat.'],
+    ['Ekspor desktop: pembayaran Kegiatan dialokasikan FIFO ke tunggakan lama dan tahun berikutnya; sisa tanpa enrollment disimpan sebagai kredit.'],
     ['Ekspor desktop: DENDA disimpan sebagai Lainnya dan dicatat pada keterangan transaksi.'],
     ['Setiap siswa dan rincian transaksi dikonfirmasi setelah file dibaca.'],
     ['Simpan satu transaksi per baris. Maksimal 500 baris. Contoh dummy hanya untuk panduan, jangan unggah sebagai transaksi nyata.']
@@ -8827,7 +8941,7 @@ async function submitPaymentImport() {
     return;
   }
   const confirmMessage = isDesktopImport
-    ? `Impor ${confirmed.length} transaksi desktop yang dikonfirmasi? Mengunggah ulang baris di posisi yang sama dengan siswa dan rincian yang sama tidak akan membuat transaksi ganda.`
+    ? `Impor ${confirmed.length} transaksi desktop yang dikonfirmasi? Tahun ajaran, periode, dan No. SPP yang belum tersedia akan dibuat otomatis. ID baru akan dibuat untuk setiap ID lama yang belum dikenal.`
     : `Impor ${confirmed.length} transaksi yang sudah dikonfirmasi?`;
   if (!window.confirm(confirmMessage)) return;
   ui.importPaymentsBtn.disabled = true;
@@ -8837,19 +8951,25 @@ async function submitPaymentImport() {
     const credentials = requireStudentRules();
     const payload = isDesktopImport
       ? confirmed.map((row) => ({
-        id_siswa: row.selectedStudent.id,
-        tahun_ajaran: paymentImportEnrollmentYear(row),
+        id_siswa: row.selectedStudent?.id || '',
+        auto_create_student: Boolean(row.autoCreateStudent && !row.selectedStudent),
+        source_id: row.sourceId,
+        source_name: row.sourceName,
+        source_school: row.sourceSchool,
+        source_class: row.sourceClass,
+        source_location: paymentImportRowLocation(row),
+        source_fingerprint: row.sourceFingerprint,
+        tahun_ajaran: row.tahunAjaran,
         tglbyr: row.tglbyr,
         kas: row.nominal,
         spp_gross: row.desktopAmounts.spp,
         bos: row.desktopAmounts.bos,
-        source_key: `desktop:${row.sourceFingerprint}:${row.selectedStudent.id}`,
         notes: row.notes,
         items: row.importItems.map(({ component, periode, nominal }) => ({
           component,
           periode,
           nominal,
-          ...(component === 'giat' ? { activity_tahun_ajaran: row.activityTahunAjaran } : {})
+          ...(component === 'giat' ? { activity_tahun_ajaran: row.tahunAjaran } : {})
         }))
       }))
       : confirmed.map((row) => {
@@ -8863,7 +8983,7 @@ async function submitPaymentImport() {
         return { nospp: row.selectedStudent.nospp, tglbyr: row.tglbyr, items };
       });
     const { data, error } = await app.supabase.rpc(
-      isDesktopImport ? 'import_legacy_payment_batches_v2' : 'import_payment_batches_v1',
+      isDesktopImport ? 'import_legacy_payment_batches_v3' : 'import_payment_batches_v1',
       {
       ...credentials,
       p_rows: payload
@@ -8886,7 +9006,13 @@ async function submitPaymentImport() {
       ui.importPaymentsBtn.hidden = true;
     }
   } catch (error) {
-    ui.paymentImportStatus.textContent = `Impor gagal: ${error.message || 'Kesalahan tidak diketahui.'}`;
+    const errorMessage = error.message || 'Kesalahan tidak diketahui.';
+    if (isDesktopImport && /import_legacy_payment_batches_v3|PGRST202/i.test(errorMessage)) {
+      ui.paymentImportStatus.textContent = `Impor desktop memerlukan migration 046 setelah 045. ${errorMessage}`;
+      ui.importPaymentsBtn.disabled = false;
+      return;
+    }
+    ui.paymentImportStatus.textContent = `Impor gagal: ${errorMessage}`;
     ui.importPaymentsBtn.disabled = false;
     return;
   }
@@ -8916,9 +9042,13 @@ async function submitPaymentImport() {
 }
 
 function reparseDesktopPaymentImportRow(row) {
-  const previousActivityYear = row.activityTahunAjaran;
-  const previousActivityYearTouched = row.activityYearTouched;
-  const updated = parseDesktopPaymentRecords([row.desktopCells], row.desktopHeader, row.sourceRow)[0];
+  const updated = parseDesktopPaymentRecords(
+    [row.desktopCells],
+    row.desktopHeader,
+    row.sourceRow,
+    row.sourceSheet,
+    row.sourceSheetRow || row.sourceRow
+  )[0];
   if (!updated) {
     row.sourceName = '';
     row.sourceId = '';
@@ -8928,23 +9058,17 @@ function reparseDesktopPaymentImportRow(row) {
     row.importedPeriod = '';
     row.period = '';
     row.tahunAjaran = '';
-    row.activityTahunAjaran = '';
-    row.activityYearTouched = false;
     row.nominal = 0;
     row.expectedCash = 0;
     row.cashDifference = 0;
     row.desktopAmounts = {};
     row.importItems = [];
     row.itemsSummary = '';
-    row.validationError = `Baris ${row.sourceRow}: baris pembayaran kosong.`;
+    row.validationError = `${paymentImportRowLocation(row)}: baris pembayaran kosong.`;
     row.validationErrors = [row.validationError];
     return;
   }
   Object.assign(row, updated);
-  row.activityYearTouched = previousActivityYearTouched;
-  row.activityTahunAjaran = previousActivityYearTouched
-    ? previousActivityYear
-    : updated.tahunAjaran;
   row.period = updated.importedPeriod;
 }
 
@@ -9008,6 +9132,8 @@ async function handlePaymentImportChange(event) {
   } else if (control.matches('[data-import-student]')) {
     row.selectedId = control.value;
     row.selectedStudent = row.candidates.find((student) => String(student.id) === String(row.selectedId)) || null;
+    row.autoCreateStudent = !row.selectedStudent
+      && row.sourceFormat === 'desktop' && Boolean(row.sourceId);
     row.billing = null;
     row.billingStudentKey = '';
     row.billingRequestId = (row.billingRequestId || 0) + 1;
@@ -9049,12 +9175,6 @@ async function handlePaymentImportChange(event) {
     row.skipped = false;
     row.skipTouched = false;
     refreshDuplicates = true;
-  } else if (control.matches('[data-import-activity-year]')) {
-    row.activityTahunAjaran = control.value;
-    row.activityYearTouched = true;
-    row.confirmed = false;
-    row.skipped = false;
-    row.skipTouched = false;
   } else if (control.matches('[data-import-amount]')) {
     row.nominalInput = control.value;
     revalidateStandardPaymentImportRow(row);
@@ -9096,7 +9216,9 @@ async function handlePaymentImportChange(event) {
     refreshDuplicates = true;
   } else if (control.matches('[data-import-confirm]')) {
     row.confirmed = control.checked;
-    if (control.checked) row.skipped = false;
+    if (control.checked) {
+      row.skipped = false;
+    }
   } else if (control.matches('[data-import-skip]')) {
     row.skipped = control.checked;
     row.skipTouched = true;
