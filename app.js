@@ -6713,9 +6713,15 @@ async function parsePaymentImportFile(file) {
       const rows = window.XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
       const header = (rows[0] || []).map(normalizeImportHeader);
       const format = paymentImportFormatFromHeader(header);
+      if (isExampleSheet(name)) {
+        ignoredExampleRows += rows.slice(1).filter((row) => (
+          row.some((cell) => String(cell ?? '').trim())
+        )).length;
+        return { name, rows: [rows[0] || []], format };
+      }
       const cleanedRows = rows.slice(1).map((row) => {
         const hasData = row.some((cell) => String(cell ?? '').trim());
-        if (hasData && isExampleSheet(name) && hasExampleMarker(row)) {
+        if (hasData && hasExampleMarker(row)) {
           ignoredExampleRows += 1;
           return [];
         }
@@ -7677,7 +7683,7 @@ async function importPaymentFile(file) {
       importNotices.push(`${parsed.exactDuplicateRowsRemoved} baris identik lintas lembar digabung.`);
     }
     if (parsed.ignoredExampleRows) {
-      importNotices.push(`${parsed.ignoredExampleRows} baris contoh bertanda DUMMY/CONTOH diabaikan.`);
+      importNotices.push(`${parsed.ignoredExampleRows} baris pada lembar contoh atau bertanda DUMMY/CONTOH diabaikan.`);
     }
     const records = await Promise.all(parsed.records.map(async (record) => ({
       ...record,
